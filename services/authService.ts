@@ -461,6 +461,16 @@ class AuthService {
 
     await this.handleResponse(response);
   }
+
+  // 重置所有資料（管理員專用）
+  async resetAllData(): Promise<{ message: string; resetTime: string; resetBy: string }> {
+    const response = await fetch(`${this.API_BASE}/users/reset-all-data`, {
+      method: 'POST',
+      headers: this.getAuthHeaders()
+    });
+
+    return this.handleResponse(response);
+  }
 }
 
 export const authService = new AuthService();
