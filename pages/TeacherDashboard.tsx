@@ -17,6 +17,7 @@ const TeacherDashboard: React.FC = () => {
     title: '',
     subject: Subject.CHINESE,
     targetClasses: [] as string[],
+    targetGroups: [] as string[],
     content: ''
   });
 
@@ -27,6 +28,7 @@ const TeacherDashboard: React.FC = () => {
     description: '',
     subject: Subject.CHINESE,
     targetClasses: [] as string[],
+    targetGroups: [] as string[],
     questions: [] as Array<{
       question: string;
       options: string[];
@@ -51,6 +53,7 @@ const TeacherDashboard: React.FC = () => {
   const [filterClass, setFilterClass] = useState('');
   const [availableSubjects, setAvailableSubjects] = useState<string[]>([]);
   const [availableClasses, setAvailableClasses] = useState<string[]>([]);
+  const [availableGroups, setAvailableGroups] = useState<string[]>([]);
   const [isEditingContent, setIsEditingContent] = useState(false);
   const [editedContent, setEditedContent] = useState('');
 
@@ -82,7 +85,7 @@ const TeacherDashboard: React.FC = () => {
     return '無內容';
   };
 
-  const defaultClasses = ['4A', '4B', '5A', '5B', '1C', '2A', '2B', '3A', '3B'];
+  // 移除固定班級列表，改用動態載入的 availableClasses
 
   // 執行富文本格式化命令
   const execCommand = (command: string, value?: string) => {
@@ -202,6 +205,17 @@ const TeacherDashboard: React.FC = () => {
     }
   };
 
+  // 載入班級和分組選項（用於創建討論串/測驗）
+  const loadClassesAndGroups = async (subject?: string) => {
+    try {
+      const data = await authService.getAvailableClasses(subject);
+      setAvailableClasses(data.classes || []);
+      setAvailableGroups(data.groups || []);
+    } catch (error) {
+      console.error('載入班級和分組失敗:', error);
+    }
+  };
+
   // 查看作業詳情和學生回應
   const viewAssignmentDetails = async (assignment: any) => {
     try {
@@ -307,6 +321,20 @@ const TeacherDashboard: React.FC = () => {
     }
   }, [filterSubject, filterClass, showAssignmentModal]);
 
+  // 監聽討論串模態框開啟
+  useEffect(() => {
+    if (showDiscussionModal) {
+      loadClassesAndGroups(discussionForm.subject);
+    }
+  }, [showDiscussionModal]);
+
+  // 監聽小測驗模態框開啟
+  useEffect(() => {
+    if (showQuizModal) {
+      loadClassesAndGroups(quizForm.subject);
+    }
+  }, [showQuizModal]);
+
   // === 小測驗功能 ===
 
   // 新增問題
@@ -390,6 +418,7 @@ const TeacherDashboard: React.FC = () => {
         description: '',
         subject: Subject.CHINESE,
         targetClasses: [],
+        targetGroups: [],
         questions: [],
         timeLimit: 0
       });
@@ -419,7 +448,8 @@ const TeacherDashboard: React.FC = () => {
         title: discussionForm.title,
         content: contentBlocks,
         subject: discussionForm.subject,
-        targetClasses: discussionForm.targetClasses
+        targetClasses: discussionForm.targetClasses,
+        targetGroups: discussionForm.targetGroups
       });
 
       alert('討論串派發成功！');
@@ -428,6 +458,7 @@ const TeacherDashboard: React.FC = () => {
         title: '',
         subject: Subject.CHINESE,
         targetClasses: [],
+        targetGroups: [],
         content: ''
       });
 
@@ -594,7 +625,11 @@ const TeacherDashboard: React.FC = () => {
                   <select
                     className="w-full px-4 py-2 border-4 border-brand-brown rounded-2xl bg-white font-bold"
                     value={discussionForm.subject}
-                    onChange={(e) => setDiscussionForm(prev => ({ ...prev, subject: e.target.value as Subject }))}
+                    onChange={(e) => {
+                      const newSubject = e.target.value as Subject;
+                      setDiscussionForm(prev => ({ ...prev, subject: newSubject, targetClasses: [], targetGroups: [] }));
+                      loadClassesAndGroups(newSubject);
+                    }}
                   >
                     {Object.values(Subject).map(subject => (
                       <option key={subject} value={subject}>{subject}</option>
@@ -607,7 +642,7 @@ const TeacherDashboard: React.FC = () => {
               <div>
                 <label className="block text-sm font-bold text-brand-brown mb-2">派發至班級</label>
                 <div className="flex flex-wrap gap-2">
-                  {defaultClasses.map(className => (
+                  {availableClasses.map(className => (
                     <button
                       key={className}
                       type="button"
@@ -630,6 +665,41 @@ const TeacherDashboard: React.FC = () => {
                   ))}
                 </div>
               </div>
+
+              {/* Target Groups (only show if groups are available) */}
+              {availableGroups.length > 0 && (
+                <div>
+                  <label className="block text-sm font-bold text-brand-brown mb-2">
+                    選擇分組 ({discussionForm.subject} - 可選)
+                  </label>
+                  <div className="flex flex-wrap gap-2">
+                    {availableGroups.map(groupName => (
+                      <button
+                        key={groupName}
+                        type="button"
+                        onClick={() => {
+                          setDiscussionForm(prev => ({
+                            ...prev,
+                            targetGroups: prev.targetGroups.includes(groupName)
+                              ? prev.targetGroups.filter(g => g !== groupName)
+                              : [...prev.targetGroups, groupName]
+                          }));
+                        }}
+                        className={`px-4 py-2 rounded-2xl border-2 font-bold transition-colors ${
+                          discussionForm.targetGroups.includes(groupName)
+                            ? 'bg-[#E8F4FD] border-blue-500 text-blue-600'
+                            : 'bg-white border-gray-300 text-gray-600 hover:border-blue-500'
+                        }`}
+                      >
+                        {groupName}
+                      </button>
+                    ))}
+                  </div>
+                  <p className="text-xs text-gray-500 mt-1">
+                    不選擇分組則派發給所選班級的所有學生
+                  </p>
+                </div>
+              )}
 
               {/* Rich Text Editor */}
               <div>
@@ -1169,7 +1239,11 @@ const TeacherDashboard: React.FC = () => {
                   <select
                     className="w-full px-4 py-2 border-4 border-brand-brown rounded-2xl bg-white font-bold"
                     value={quizForm.subject}
-                    onChange={(e) => setQuizForm(prev => ({ ...prev, subject: e.target.value as Subject }))}
+                    onChange={(e) => {
+                      const newSubject = e.target.value as Subject;
+                      setQuizForm(prev => ({ ...prev, subject: newSubject, targetClasses: [], targetGroups: [] }));
+                      loadClassesAndGroups(newSubject);
+                    }}
                   >
                     {Object.values(Subject).map(subject => (
                       <option key={subject} value={subject}>{subject}</option>
@@ -1206,7 +1280,7 @@ const TeacherDashboard: React.FC = () => {
               <div>
                 <label className="block text-sm font-bold text-brand-brown mb-2">派發至班級</label>
                 <div className="flex flex-wrap gap-2">
-                  {defaultClasses.map(className => (
+                  {availableClasses.map(className => (
                     <button
                       key={className}
                       type="button"
@@ -1229,6 +1303,41 @@ const TeacherDashboard: React.FC = () => {
                   ))}
                 </div>
               </div>
+
+              {/* Target Groups (only show if groups are available) */}
+              {availableGroups.length > 0 && (
+                <div>
+                  <label className="block text-sm font-bold text-brand-brown mb-2">
+                    選擇分組 ({quizForm.subject} - 可選)
+                  </label>
+                  <div className="flex flex-wrap gap-2">
+                    {availableGroups.map(groupName => (
+                      <button
+                        key={groupName}
+                        type="button"
+                        onClick={() => {
+                          setQuizForm(prev => ({
+                            ...prev,
+                            targetGroups: prev.targetGroups.includes(groupName)
+                              ? prev.targetGroups.filter(g => g !== groupName)
+                              : [...prev.targetGroups, groupName]
+                          }));
+                        }}
+                        className={`px-4 py-2 rounded-2xl border-2 font-bold transition-colors ${
+                          quizForm.targetGroups.includes(groupName)
+                            ? 'bg-[#FFF4E6] border-orange-500 text-orange-600'
+                            : 'bg-white border-gray-300 text-gray-600 hover:border-orange-500'
+                        }`}
+                      >
+                        {groupName}
+                      </button>
+                    ))}
+                  </div>
+                  <p className="text-xs text-gray-500 mt-1">
+                    不選擇分組則派發給所選班級的所有學生
+                  </p>
+                </div>
+              )}
 
               {/* Questions Section */}
               <div className="border-t-4 border-gray-200 pt-6">
