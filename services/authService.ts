@@ -27,7 +27,9 @@ interface AuthResponse {
 }
 
 class AuthService {
-  private readonly API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5001/api';
+  // 預設使用生產後端，避免未設定環境變數時仍指向 localhost
+  private readonly API_BASE = import.meta.env.VITE_API_BASE_URL
+    || 'https://lpedianew-backend-production.up.railway.app/api';
   private readonly TOKEN_KEY = 'lpedia_auth_token';
   private readonly USER_KEY = 'lpedia_user';
 
