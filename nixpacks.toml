@@ -1,0 +1,15 @@
+[phases.setup]
+nixPkgs = ['nodejs_20', 'npm-10_x']
+
+[phases.install]
+cmds = ['npm install']
+
+[phases.build]
+cmds = [
+  'npm run build',
+  'echo "Frontend build completed"'
+]
+
+[start]
+cmd = 'serve -s dist -l $PORT'
+

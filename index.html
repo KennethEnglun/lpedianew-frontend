@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Lpedia - 小學生的學習樂園</title>
+  
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  
+  <!-- Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700;900&family=M+PLUS+Rounded+1c:wght@400;500;700;800;900&display=swap" rel="stylesheet" />
+
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['"Noto Sans TC"', 'sans-serif'],
+            rounded: ['"M PLUS Rounded 1c"', 'sans-serif'],
+          },
+          colors: {
+            brand: {
+              brown: '#5E4C40',
+              cream: '#FEF7EC',
+              green: {
+                light: '#D4EDDA',
+                DEFAULT: '#A1D9AE',
+                dark: '#4A6C55',
+              },
+              yellow: {
+                light: '#FDEFCB',
+                DEFAULT: '#F8E2B5',
+              },
+              blue: '#B5D8F8',
+              pink: '#F8B5E0',
+              purple: '#D2B5F8',
+              lime: '#B5F8CE',
+            }
+          },
+          boxShadow: {
+            'comic': '0 4px 0 #5E4C40',
+            'comic-lg': '0 6px 0 #5E4C40',
+            'comic-xl': '0 8px 0 #5E4C40',
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    /* Custom Scrollbar for a cleaner look */
+    ::-webkit-scrollbar {
+      width: 10px;
+    }
+    ::-webkit-scrollbar-track {
+      background: #FEF7EC; 
+    }
+    ::-webkit-scrollbar-thumb {
+      background: #C7A27C; 
+      border-radius: 5px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: #5E4C40; 
+    }
+  </style>
+<script type="importmap">
+{
+  "imports": {
+    "react-router-dom": "https://aistudiocdn.com/react-router-dom@^7.10.1",
+    "react/": "https://aistudiocdn.com/react@^19.2.1/",
+    "react": "https://aistudiocdn.com/react@^19.2.1",
+    "react-dom/": "https://aistudiocdn.com/react-dom@^19.2.1/",
+    "lucide-react": "https://aistudiocdn.com/lucide-react@^0.556.0"
+  }
+}
+</script>
+<link rel="stylesheet" href="/index.css">
+</head>
+<body>
+  <div id="root"></div>
+<script type="module" src="/index.tsx"></script>
+</body>
+</html>
