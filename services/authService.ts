@@ -256,6 +256,7 @@ class AuthService {
     content: { type: 'text' | 'image' | 'link' | 'html'; value: string }[];
     subject: string;
     targetClasses: string[];
+    targetGroups?: string[];
   }): Promise<any> {
     const response = await fetch(`${this.API_BASE}/discussions`, {
       method: 'POST',
@@ -338,9 +339,15 @@ class AuthService {
     return this.handleResponse(response);
   }
 
-  // 獲取可用的班級列表
-  async getAvailableClasses(): Promise<{ classes: string[] }> {
-    const response = await fetch(`${this.API_BASE}/assignments/filters/classes`, {
+  // 獲取可用的班級列表和分組
+  async getAvailableClasses(subject?: string): Promise<{ classes: string[], groups: string[], subject?: string }> {
+    const params = new URLSearchParams();
+    if (subject) {
+      params.append('subject', subject);
+    }
+
+    const queryString = params.toString() ? `?${params.toString()}` : '';
+    const response = await fetch(`${this.API_BASE}/assignments/filters/classes${queryString}`, {
       headers: this.getAuthHeaders()
     });
 
