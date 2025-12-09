@@ -87,7 +87,7 @@ pages/
 ### 環境變數設定
 ```
 NODE_ENV=production
-VITE_API_BASE_URL=https://your-backend-url/api
+VITE_API_BASE_URL=https://lpedianew-backend-production.up.railway.app/api
 ```
 
 ## 開發指南
