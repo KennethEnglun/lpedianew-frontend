@@ -384,8 +384,18 @@ const TeacherDashboard: React.FC = () => {
 
   // 提交小測驗
   const handleSubmitQuiz = async () => {
-    if (!quizForm.title || quizForm.targetClasses.length === 0 || quizForm.questions.length === 0) {
-      alert('請填寫標題、選擇班級並至少新增一個問題');
+    if (!quizForm.title) {
+      alert('請填寫標題');
+      return;
+    }
+
+    if (quizForm.targetClasses.length === 0 && quizForm.targetGroups.length === 0) {
+      alert('請選擇班級或分組');
+      return;
+    }
+
+    if (quizForm.questions.length === 0) {
+      alert('請至少新增一個問題');
       return;
     }
 
@@ -430,8 +440,13 @@ const TeacherDashboard: React.FC = () => {
   };
 
   const handleSubmitDiscussion = async () => {
-    if (!discussionForm.title || discussionForm.targetClasses.length === 0) {
-      alert('請填寫標題並選擇班級');
+    if (!discussionForm.title) {
+      alert('請填寫標題');
+      return;
+    }
+
+    if (discussionForm.targetClasses.length === 0 && discussionForm.targetGroups.length === 0) {
+      alert('請選擇班級或分組');
       return;
     }
 
@@ -666,11 +681,11 @@ const TeacherDashboard: React.FC = () => {
                 </div>
               </div>
 
-              {/* Target Groups (only show if groups are available) */}
+              {/* Target Groups (show if groups are available for the subject) */}
               {availableGroups.length > 0 && (
                 <div>
                   <label className="block text-sm font-bold text-brand-brown mb-2">
-                    選擇分組 ({discussionForm.subject} - 可選)
+                    選擇分組 ({discussionForm.subject})
                   </label>
                   <div className="flex flex-wrap gap-2">
                     {availableGroups.map(groupName => (
@@ -696,7 +711,7 @@ const TeacherDashboard: React.FC = () => {
                     ))}
                   </div>
                   <p className="text-xs text-gray-500 mt-1">
-                    不選擇分組則派發給所選班級的所有學生
+                    選擇分組會精確派發給該分組的學生
                   </p>
                 </div>
               )}
@@ -1304,11 +1319,11 @@ const TeacherDashboard: React.FC = () => {
                 </div>
               </div>
 
-              {/* Target Groups (only show if groups are available) */}
+              {/* Target Groups (show if groups are available for the subject) */}
               {availableGroups.length > 0 && (
                 <div>
                   <label className="block text-sm font-bold text-brand-brown mb-2">
-                    選擇分組 ({quizForm.subject} - 可選)
+                    選擇分組 ({quizForm.subject})
                   </label>
                   <div className="flex flex-wrap gap-2">
                     {availableGroups.map(groupName => (
@@ -1334,7 +1349,7 @@ const TeacherDashboard: React.FC = () => {
                     ))}
                   </div>
                   <p className="text-xs text-gray-500 mt-1">
-                    不選擇分組則派發給所選班級的所有學生
+                    選擇分組會精確派發給該分組的學生
                   </p>
                 </div>
               )}
