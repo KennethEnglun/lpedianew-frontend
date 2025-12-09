@@ -97,7 +97,7 @@ const LoginPage: React.FC = () => {
     setShowAdminModal(false);
 
     try {
-      await login('admin', 'admin123456', 'admin');
+      await login('admin', 'Lpit512524', 'admin');
     } catch (error) {
       setError('管理員登入失敗，請聯絡系統管理員');
     } finally {
