@@ -480,6 +480,99 @@ class AuthService {
 
     return this.handleResponse(response);
   }
+
+  // === 遊戲相關 API ===
+
+  // 創建遊戲（教師專用）
+  async createGame(gameData: {
+    title: string;
+    description?: string;
+    gameType: 'maze' | 'matching';
+    subject: string;
+    targetClasses: string[];
+    targetGroups?: string[];
+    questions: Array<{
+      question: string;
+      answer: string;
+      wrongOptions?: string[];
+    }>;
+    difficulty?: 'easy' | 'medium' | 'hard';
+  }): Promise<{ message: string; game: any }> {
+    const response = await fetch(`${this.API_BASE}/games`, {
+      method: 'POST',
+      headers: this.getAuthHeaders(),
+      body: JSON.stringify(gameData)
+    });
+
+    return this.handleResponse(response);
+  }
+
+  // 獲取教師的遊戲列表
+  async getTeacherGames(subject?: string, targetClass?: string, gameType?: string): Promise<{ games: any[]; total: number }> {
+    const params = new URLSearchParams();
+    if (subject) params.append('subject', subject);
+    if (targetClass) params.append('targetClass', targetClass);
+    if (gameType) params.append('gameType', gameType);
+
+    const response = await fetch(`${this.API_BASE}/games/teacher?${params.toString()}`, {
+      headers: this.getAuthHeaders()
+    });
+
+    return this.handleResponse(response);
+  }
+
+  // 獲取學生的遊戲列表
+  async getStudentGames(): Promise<{ games: any[] }> {
+    const response = await fetch(`${this.API_BASE}/games/student`, {
+      headers: this.getAuthHeaders()
+    });
+
+    return this.handleResponse(response);
+  }
+
+  // 獲取遊戲詳情（學生遊玩用）
+  async getGameForStudent(gameId: string): Promise<{ game: any; completed: boolean; bestScore: number | null; attempts: number }> {
+    const response = await fetch(`${this.API_BASE}/games/${gameId}/play`, {
+      headers: this.getAuthHeaders()
+    });
+
+    return this.handleResponse(response);
+  }
+
+  // 提交遊戲成績
+  async submitGameScore(gameId: string, scoreData: {
+    score: number;
+    correctAnswers: number;
+    totalQuestions: number;
+    timeSpent: number;
+  }): Promise<{ message: string; result: any }> {
+    const response = await fetch(`${this.API_BASE}/games/${gameId}/score`, {
+      method: 'POST',
+      headers: this.getAuthHeaders(),
+      body: JSON.stringify(scoreData)
+    });
+
+    return this.handleResponse(response);
+  }
+
+  // 獲取遊戲結果（教師查看）
+  async getGameResults(gameId: string): Promise<{ game: any; scores: any[] }> {
+    const response = await fetch(`${this.API_BASE}/games/${gameId}/results`, {
+      headers: this.getAuthHeaders()
+    });
+
+    return this.handleResponse(response);
+  }
+
+  // 刪除遊戲
+  async deleteGame(gameId: string): Promise<void> {
+    const response = await fetch(`${this.API_BASE}/games/${gameId}`, {
+      method: 'DELETE',
+      headers: this.getAuthHeaders()
+    });
+
+    await this.handleResponse(response);
+  }
 }
 
 export const authService = new AuthService();

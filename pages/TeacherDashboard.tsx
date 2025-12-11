@@ -445,6 +445,13 @@ const TeacherDashboard: React.FC = () => {
     }
   }, [showQuizModal]);
 
+  // 監聽遊戲模態框開啟
+  useEffect(() => {
+    if (showGameModal) {
+      loadClassesAndGroups(gameForm.subject);
+    }
+  }, [showGameModal]);
+
   // === 小測驗功能 ===
 
   // 新增問題
@@ -779,17 +786,92 @@ const TeacherDashboard: React.FC = () => {
                   onChange={(e) => setGameForm(prev => ({ ...prev, title: e.target.value }))}
                 />
                 <div>
-                  <label className="block text-sm font-bold text-purple-800 mb-2">難度</label>
+                  <label className="block text-sm font-bold text-purple-800 mb-2">科目</label>
                   <select
                     className="w-full px-4 py-2 border-4 border-purple-300 rounded-2xl bg-white font-bold"
-                    value={gameForm.difficulty}
-                    onChange={(e) => setGameForm(prev => ({ ...prev, difficulty: e.target.value as 'easy' | 'medium' | 'hard' }))}
+                    value={gameForm.subject}
+                    onChange={(e) => {
+                      const newSubject = e.target.value as Subject;
+                      setGameForm(prev => ({ ...prev, subject: newSubject, targetClasses: [], targetGroups: [] }));
+                      loadClassesAndGroups(newSubject);
+                    }}
                   >
-                    <option value="easy">簡單</option>
-                    <option value="medium">中等</option>
-                    <option value="hard">困難</option>
+                    {Object.values(Subject).map(subject => (
+                      <option key={subject} value={subject}>{subject}</option>
+                    ))}
                   </select>
                 </div>
+              </div>
+
+              {/* Target Classes */}
+              <div>
+                <label className="block text-sm font-bold text-purple-800 mb-2">派發至班級</label>
+                <div className="flex flex-wrap gap-2">
+                  {availableClasses.map(className => (
+                    <button
+                      key={className}
+                      type="button"
+                      onClick={() => {
+                        setGameForm(prev => ({
+                          ...prev,
+                          targetClasses: prev.targetClasses.includes(className)
+                            ? prev.targetClasses.filter(c => c !== className)
+                            : [...prev.targetClasses, className]
+                        }));
+                      }}
+                      className={`px-4 py-2 rounded-2xl border-2 font-bold transition-colors ${gameForm.targetClasses.includes(className)
+                        ? 'bg-purple-200 border-purple-500 text-purple-700'
+                        : 'bg-white border-gray-300 text-gray-600 hover:border-purple-500'
+                        }`}
+                    >
+                      {className}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Target Groups */}
+              {availableGroups.length > 0 && (
+                <div>
+                  <label className="block text-sm font-bold text-purple-800 mb-2">
+                    選擇分組 ({gameForm.subject})
+                  </label>
+                  <div className="flex flex-wrap gap-2">
+                    {availableGroups.map(groupName => (
+                      <button
+                        key={groupName}
+                        type="button"
+                        onClick={() => {
+                          setGameForm(prev => ({
+                            ...prev,
+                            targetGroups: prev.targetGroups.includes(groupName)
+                              ? prev.targetGroups.filter(g => g !== groupName)
+                              : [...prev.targetGroups, groupName]
+                          }));
+                        }}
+                        className={`px-4 py-2 rounded-2xl border-2 font-bold transition-colors ${gameForm.targetGroups.includes(groupName)
+                          ? 'bg-purple-200 border-purple-500 text-purple-700'
+                          : 'bg-white border-gray-300 text-gray-600 hover:border-purple-500'
+                          }`}
+                      >
+                        {groupName}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              <div>
+                <label className="block text-sm font-bold text-purple-800 mb-2">難度</label>
+                <select
+                  className="w-full px-4 py-2 border-4 border-purple-300 rounded-2xl bg-white font-bold"
+                  value={gameForm.difficulty}
+                  onChange={(e) => setGameForm(prev => ({ ...prev, difficulty: e.target.value as 'easy' | 'medium' | 'hard' }))}
+                >
+                  <option value="easy">簡單 (迷宮小)</option>
+                  <option value="medium">中等 (迷宮中)</option>
+                  <option value="hard">困難 (迷宮大)</option>
+                </select>
               </div>
 
               <div>
@@ -863,9 +945,47 @@ const TeacherDashboard: React.FC = () => {
                   返回
                 </button>
                 <button
-                  onClick={() => {
-                    alert('迷宮追逐遊戲功能開發中！');
-                    // TODO: Save game to backend
+                  onClick={async () => {
+                    try {
+                      if (!gameForm.title) {
+                        alert('請填寫遊戲標題');
+                        return;
+                      }
+                      if (gameForm.targetClasses.length === 0 && gameForm.targetGroups.length === 0) {
+                        alert('請選擇至少一個班級或分組');
+                        return;
+                      }
+                      if (gameForm.questions.length === 0) {
+                        alert('請至少新增一個題目');
+                        return;
+                      }
+
+                      await authService.createGame({
+                        title: gameForm.title,
+                        description: gameForm.description,
+                        gameType: 'maze',
+                        subject: gameForm.subject,
+                        targetClasses: gameForm.targetClasses,
+                        targetGroups: gameForm.targetGroups,
+                        questions: gameForm.questions,
+                        difficulty: gameForm.difficulty
+                      });
+
+                      alert('迷宮追逐遊戲創建成功！');
+                      setShowGameModal(false);
+                      setGameType(null);
+                      setGameForm({
+                        title: '',
+                        description: '',
+                        subject: Subject.CHINESE,
+                        targetClasses: [],
+                        targetGroups: [],
+                        questions: [],
+                        difficulty: 'medium'
+                      });
+                    } catch (error) {
+                      alert('創建遊戲失敗：' + (error instanceof Error ? error.message : '未知錯誤'));
+                    }
                   }}
                   className="flex-1 py-3 rounded-2xl border-4 border-purple-500 bg-purple-500 text-white font-bold hover:bg-purple-600"
                 >
