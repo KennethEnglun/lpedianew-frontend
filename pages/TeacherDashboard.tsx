@@ -417,6 +417,7 @@ const TeacherDashboard: React.FC = () => {
         description: quizForm.description,
         subject: quizForm.subject,
         targetClasses: quizForm.targetClasses,
+        targetGroups: quizForm.targetGroups,
         questions: quizForm.questions,
         timeLimit: quizForm.timeLimit
       });
@@ -485,8 +486,8 @@ const TeacherDashboard: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-gray-50 flex overflow-hidden font-sans">
-       {/* Background */}
-       <div 
+      {/* Background */}
+      <div
         className="absolute inset-0 z-0 pointer-events-none"
         style={{
           backgroundImage: `url('/teacherpagebg.png')`,
@@ -519,7 +520,7 @@ const TeacherDashboard: React.FC = () => {
       {/* Sidebar */}
       <aside className="relative z-10 w-80 bg-[#D9F3D5] h-[95vh] my-auto ml-0 rounded-r-[3rem] border-y-4 border-r-4 border-brand-brown shadow-2xl flex flex-col p-6">
         <div className="flex items-center justify-center mb-2">
-            <h1 className="text-4xl font-black text-brand-brown font-rounded">Lpedia</h1>
+          <h1 className="text-4xl font-black text-brand-brown font-rounded">Lpedia</h1>
         </div>
 
         {/* User Profile Section */}
@@ -575,31 +576,31 @@ const TeacherDashboard: React.FC = () => {
 
       {/* Main Content Area */}
       <main className="flex-1 relative z-10 flex items-center justify-center p-8">
-        
+
         {/* Dispatch Center Modal */}
         <div className="bg-[#FEF7EC] w-full max-w-2xl rounded-[2rem] border-4 border-brand-brown shadow-comic-xl p-8 relative">
           <h2 className="text-4xl font-black text-center text-brand-brown mb-8 font-rounded">派發中心</h2>
-          
+
           <form className="space-y-6" onSubmit={(e) => { e.preventDefault(); alert('派發成功！'); }}>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <Select 
-                label="選擇題目" 
+              <Select
+                label="選擇題目"
                 options={['中文', '英文', '數學', '科學', '人文', 'STEAM', '普通話', '視藝', '音樂', '圖書', '體育']}
               />
-              <Select 
-                label="選擇工具" 
+              <Select
+                label="選擇工具"
                 options={['Quiz', 'AI Bot', 'Flashcards', 'Reading']}
               />
             </div>
-            
+
             <div>
-               <Input label="設定期間" type="month" defaultValue="2024-06" />
+              <Input label="設定期間" type="month" defaultValue="2024-06" />
             </div>
 
             <div className="pt-4">
-              <Button 
-                type="submit" 
-                fullWidth 
+              <Button
+                type="submit"
+                fullWidth
                 className="bg-[#C7A27C] text-white hover:bg-[#B58F66] border-brand-brown text-2xl py-4"
               >
                 派發
@@ -669,11 +670,10 @@ const TeacherDashboard: React.FC = () => {
                             : [...prev.targetClasses, className]
                         }));
                       }}
-                      className={`px-4 py-2 rounded-2xl border-2 font-bold transition-colors ${
-                        discussionForm.targetClasses.includes(className)
+                      className={`px-4 py-2 rounded-2xl border-2 font-bold transition-colors ${discussionForm.targetClasses.includes(className)
                           ? 'bg-[#F8C5C5] border-brand-brown text-brand-brown'
                           : 'bg-white border-gray-300 text-gray-600 hover:border-brand-brown'
-                      }`}
+                        }`}
                     >
                       {className}
                     </button>
@@ -700,11 +700,10 @@ const TeacherDashboard: React.FC = () => {
                               : [...prev.targetGroups, groupName]
                           }));
                         }}
-                        className={`px-4 py-2 rounded-2xl border-2 font-bold transition-colors ${
-                          discussionForm.targetGroups.includes(groupName)
+                        className={`px-4 py-2 rounded-2xl border-2 font-bold transition-colors ${discussionForm.targetGroups.includes(groupName)
                             ? 'bg-[#E8F4FD] border-blue-500 text-blue-600'
                             : 'bg-white border-gray-300 text-gray-600 hover:border-blue-500'
-                        }`}
+                          }`}
                       >
                         {groupName}
                       </button>
@@ -970,9 +969,8 @@ const TeacherDashboard: React.FC = () => {
                                   )}
                                 </div>
                                 <div className="flex items-center gap-2 text-sm text-gray-500">
-                                  <span className={`px-2 py-1 rounded text-xs font-bold ${
-                                    isQuiz ? 'bg-yellow-200 text-yellow-800' : 'bg-purple-200 text-purple-800'
-                                  }`}>
+                                  <span className={`px-2 py-1 rounded text-xs font-bold ${isQuiz ? 'bg-yellow-200 text-yellow-800' : 'bg-purple-200 text-purple-800'
+                                    }`}>
                                     {isQuiz ? '小測驗' : '討論串'}
                                   </span>
                                   <span>創建時間: {new Date(assignment.createdAt).toLocaleString()}</span>
@@ -1035,9 +1033,8 @@ const TeacherDashboard: React.FC = () => {
                   </div>
 
                   {/* 教師原始內容 */}
-                  <div className={`border-4 rounded-3xl p-6 mb-6 ${
-                    selectedAssignment?.type === 'quiz' ? 'bg-yellow-50 border-yellow-200' : 'bg-yellow-50 border-yellow-200'
-                  }`}>
+                  <div className={`border-4 rounded-3xl p-6 mb-6 ${selectedAssignment?.type === 'quiz' ? 'bg-yellow-50 border-yellow-200' : 'bg-yellow-50 border-yellow-200'
+                    }`}>
                     <div className="flex justify-between items-start mb-4">
                       <h4 className="text-xl font-bold text-brand-brown">
                         {selectedAssignment?.type === 'quiz' ? '小測驗資訊' : '教師原始內容'}
@@ -1156,15 +1153,13 @@ const TeacherDashboard: React.FC = () => {
                       </div>
                     ) : assignmentResponses.length > 0 ? (
                       assignmentResponses.map(response => (
-                        <div key={response.id} className={`border-2 rounded-2xl p-4 ${
-                          selectedAssignment?.type === 'quiz' ? 'bg-yellow-50 border-yellow-200' : 'bg-gray-50 border-gray-300'
-                        }`}>
+                        <div key={response.id} className={`border-2 rounded-2xl p-4 ${selectedAssignment?.type === 'quiz' ? 'bg-yellow-50 border-yellow-200' : 'bg-gray-50 border-gray-300'
+                          }`}>
                           <div className="flex justify-between items-start">
                             <div className="flex-1">
                               <div className="flex items-center gap-3 mb-2">
-                                <div className={`w-8 h-8 rounded-full flex items-center justify-center ${
-                                  selectedAssignment?.type === 'quiz' ? 'bg-yellow-500' : 'bg-brand-green-light'
-                                }`}>
+                                <div className={`w-8 h-8 rounded-full flex items-center justify-center ${selectedAssignment?.type === 'quiz' ? 'bg-yellow-500' : 'bg-brand-green-light'
+                                  }`}>
                                   <span className="text-white font-bold text-sm">
                                     {response.studentName?.charAt(0) || '學'}
                                   </span>
@@ -1175,11 +1170,10 @@ const TeacherDashboard: React.FC = () => {
                                 </div>
                                 {selectedAssignment?.type === 'quiz' && (
                                   <div className="ml-auto flex items-center gap-4">
-                                    <div className={`px-3 py-1 rounded-full text-sm font-bold ${
-                                      response.score >= 80 ? 'bg-green-100 text-green-700' :
-                                      response.score >= 60 ? 'bg-yellow-100 text-yellow-700' :
-                                      'bg-red-100 text-red-700'
-                                    }`}>
+                                    <div className={`px-3 py-1 rounded-full text-sm font-bold ${response.score >= 80 ? 'bg-green-100 text-green-700' :
+                                        response.score >= 60 ? 'bg-yellow-100 text-yellow-700' :
+                                          'bg-red-100 text-red-700'
+                                      }`}>
                                       {Math.round(response.score)}%
                                     </div>
                                     <div className="text-sm text-gray-500">
@@ -1328,11 +1322,10 @@ const TeacherDashboard: React.FC = () => {
                             : [...prev.targetClasses, className]
                         }));
                       }}
-                      className={`px-4 py-2 rounded-2xl border-2 font-bold transition-colors ${
-                        quizForm.targetClasses.includes(className)
+                      className={`px-4 py-2 rounded-2xl border-2 font-bold transition-colors ${quizForm.targetClasses.includes(className)
                           ? 'bg-[#FDEEAD] border-brand-brown text-brand-brown'
                           : 'bg-white border-gray-300 text-gray-600 hover:border-brand-brown'
-                      }`}
+                        }`}
                     >
                       {className}
                     </button>
@@ -1359,11 +1352,10 @@ const TeacherDashboard: React.FC = () => {
                               : [...prev.targetGroups, groupName]
                           }));
                         }}
-                        className={`px-4 py-2 rounded-2xl border-2 font-bold transition-colors ${
-                          quizForm.targetGroups.includes(groupName)
+                        className={`px-4 py-2 rounded-2xl border-2 font-bold transition-colors ${quizForm.targetGroups.includes(groupName)
                             ? 'bg-[#FFF4E6] border-orange-500 text-orange-600'
                             : 'bg-white border-gray-300 text-gray-600 hover:border-orange-500'
-                        }`}
+                          }`}
                       >
                         {groupName}
                       </button>

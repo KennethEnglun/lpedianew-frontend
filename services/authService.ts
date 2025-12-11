@@ -391,6 +391,7 @@ class AuthService {
     description?: string;
     subject: string;
     targetClasses: string[];
+    targetGroups?: string[];
     questions: Array<{
       question: string;
       options: string[];
