@@ -23,6 +23,7 @@ const TeacherDashboard: React.FC = () => {
 
   // 小測驗相關狀態
   const [showQuizModal, setShowQuizModal] = useState(false);
+  const [imageUploading, setImageUploading] = useState(false); // New state for tracking image upload status
   const [quizForm, setQuizForm] = useState({
     title: '',
     description: '',
@@ -223,21 +224,25 @@ const TeacherDashboard: React.FC = () => {
           // 調整尺寸以利壓縮 (最大寬度 800px)
           const MAX_WIDTH = 800;
           if (width > MAX_WIDTH) {
-            height *= MAX_WIDTH / width;
+            height = height * (MAX_WIDTH / width);
             width = MAX_WIDTH;
           }
 
           canvas.width = width;
           canvas.height = height;
           const ctx = canvas.getContext('2d');
-          ctx?.drawImage(img, 0, 0, width, height);
+          if (!ctx) {
+            reject(new Error('Canvas Context fail'));
+            return;
+          }
+          ctx.drawImage(img, 0, 0, width, height);
 
-          // 壓縮至 JPEG, 品質 0.7
-          let quality = 0.7;
+          // 壓縮至 JPEG, 品質 0.8
+          let quality = 0.8;
           let dataUrl = canvas.toDataURL('image/jpeg', quality);
 
-          // 如果還是太大，降低品質
-          while (dataUrl.length > 1024 * 1024 && quality > 0.1) {
+          // 如果還是太大，降低品質直到 1MB 以下
+          while (dataUrl.length > 1000 * 1024 && quality > 0.1) {
             quality -= 0.1;
             dataUrl = canvas.toDataURL('image/jpeg', quality);
           }
@@ -255,11 +260,14 @@ const TeacherDashboard: React.FC = () => {
     const file = event.target.files?.[0];
     if (file) {
       try {
+        setImageUploading(true);
         const compressedImage = await compressImage(file);
         updateQuestion(questionIndex, 'image', compressedImage);
       } catch (error) {
         console.error('圖片處理失敗:', error);
         alert('圖片處理失敗，請重試');
+      } finally {
+        setImageUploading(false);
       }
     }
     // 重置 input
@@ -447,6 +455,11 @@ const TeacherDashboard: React.FC = () => {
   const handleSubmitQuiz = async () => {
     if (!quizForm.title) {
       alert('請填寫標題');
+      return;
+    }
+
+    if (imageUploading) {
+      alert('圖片正在上傳/處理中，請稍候...');
       return;
     }
 
@@ -965,6 +978,7 @@ const TeacherDashboard: React.FC = () => {
                             <option key={className} value={className}>{className}</option>
                           ))}
                         </select>
+
                       </div>
                       <div className="flex items-end">
                         <button
@@ -1577,10 +1591,14 @@ const TeacherDashboard: React.FC = () => {
                   取消
                 </Button>
                 <Button
-                  className="flex-1 bg-[#FDEEAD] text-brand-brown hover:bg-[#FCE690] border-brand-brown"
+                  className={`flex-1 border-brand-brown ${imageUploading
+                      ? 'bg-gray-400 text-white cursor-wait'
+                      : 'bg-[#FDEEAD] text-brand-brown hover:bg-[#FCE690]'
+                    }`}
                   onClick={handleSubmitQuiz}
+                  disabled={imageUploading}
                 >
-                  創建小測驗
+                  {imageUploading ? '圖片處理中...' : '創建小測驗'}
                 </Button>
               </div>
             </div>
