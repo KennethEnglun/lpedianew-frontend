@@ -41,6 +41,18 @@ const StudentDashboard: React.FC = () => {
   const [submittingQuiz, setSubmittingQuiz] = useState(false);
   const [viewingQuizResult, setViewingQuizResult] = useState<any>(null); // State for reviewing quiz result
 
+  // 遊戲相關狀態
+  const [showGameModal, setShowGameModal] = useState(false);
+  const [selectedGame, setSelectedGame] = useState<any>(null);
+  const [gameStatus, setGameStatus] = useState<'playing' | 'completed'>('playing');
+  const [gameScore, setGameScore] = useState(0);
+  const [gameStartTime, setGameStartTime] = useState<Date | null>(null);
+  const [gameCurrentQuestionIndex, setGameCurrentQuestionIndex] = useState(0);
+  const [gameMatchingCards, setGameMatchingCards] = useState<any[]>([]);
+  const [gameSelectedCards, setGameSelectedCards] = useState<number[]>([]);
+  const [gameMatchedPairs, setGameMatchedPairs] = useState<string[]>([]);
+  const [submittingGame, setSubmittingGame] = useState(false);
+
   const navigate = useNavigate();
   const { logout, user } = useAuth();
 
@@ -307,6 +319,157 @@ const StudentDashboard: React.FC = () => {
       alert(error.message || '提交測驗失敗');
     } finally {
       setSubmittingQuiz(false);
+    }
+  };
+
+  // 處理遊戲點擊
+  const handleGameClick = async (gameId: string) => {
+    try {
+      setLoading(true);
+      const response = await authService.getGameForStudent(gameId);
+      const game = response.game;
+
+      setSelectedGame(game);
+      setGameScore(0);
+      setGameStartTime(new Date());
+      setGameStatus('playing');
+      setGameCurrentQuestionIndex(0);
+
+      // 初始化遊戲狀態
+      if (game.gameType === 'matching') {
+        // 準備配對卡片
+        const cards: any[] = [];
+        game.questions.forEach((q: any, index: number) => {
+          // 問題卡
+          cards.push({
+            id: `q-${index}`,
+            content: q.question,
+            type: 'question',
+            pairId: index,
+            isFlipped: false,
+            isMatched: false
+          });
+          // 答案卡
+          cards.push({
+            id: `a-${index}`,
+            content: q.answer,
+            type: 'answer',
+            pairId: index,
+            isFlipped: false,
+            isMatched: false
+          });
+        });
+        // 洗牌
+        setGameMatchingCards(cards.sort(() => Math.random() - 0.5));
+        setGameSelectedCards([]);
+        setGameMatchedPairs([]);
+      }
+
+      setShowGameModal(true);
+    } catch (error: any) {
+      console.error('載入遊戲失敗:', error);
+      alert(error.message || '載入遊戲失敗，請稍後再試');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // 處理配對遊戲卡片點擊
+  const handleCardClick = (index: number) => {
+    if (gameSelectedCards.length >= 2 || gameMatchingCards[index].isMatched || gameMatchingCards[index].isFlipped) {
+      return;
+    }
+
+    const newCards = [...gameMatchingCards];
+    newCards[index].isFlipped = true;
+    setGameMatchingCards(newCards);
+
+    const newSelected = [...gameSelectedCards, index];
+    setGameSelectedCards(newSelected);
+
+    if (newSelected.length === 2) {
+      const card1 = newCards[newSelected[0]];
+      const card2 = newCards[newSelected[1]];
+
+      if (card1.pairId === card2.pairId && card1.type !== card2.type) {
+        // 配對成功
+        setTimeout(() => {
+          const matchedCards = [...newCards];
+          matchedCards[newSelected[0]].isMatched = true;
+          matchedCards[newSelected[1]].isMatched = true;
+          setGameMatchingCards(matchedCards);
+          setGameSelectedCards([]);
+          setGameMatchedPairs(prev => [...prev, String(card1.pairId)]);
+
+          // 檢查是否所有都配對完成
+          if (matchedCards.every(c => c.isMatched)) {
+            handleGameComplete(true);
+          }
+        }, 1000);
+      } else {
+        // 配對失敗
+        setTimeout(() => {
+          const resetCards = [...newCards];
+          resetCards[newSelected[0]].isFlipped = false;
+          resetCards[newSelected[1]].isFlipped = false;
+          setGameMatchingCards(resetCards);
+          setGameSelectedCards([]);
+        }, 1500);
+      }
+    }
+  };
+
+  // 處理迷宮/問答遊戲選擇
+  const handleGameOptionSelect = (isCorrect: boolean) => {
+    if (isCorrect) {
+      // 答對了
+      const nextIndex = gameCurrentQuestionIndex + 1;
+      setGameScore(prev => prev + 1);
+
+      if (nextIndex < selectedGame.questions.length) {
+        setGameCurrentQuestionIndex(nextIndex);
+      } else {
+        handleGameComplete(true);
+      }
+    } else {
+      // 答錯了，重試或扣分
+      alert('答案不正確，請再試一次！');
+    }
+  };
+
+  // 遊戲完成處理
+  const handleGameComplete = async (success: boolean) => {
+    setGameStatus('completed');
+
+    if (success) {
+      try {
+        setSubmittingGame(true);
+        const timeSpent = gameStartTime ? Math.round((Date.now() - gameStartTime.getTime()) / 1000) : 0;
+        const totalQuestions = selectedGame.questions.length;
+
+        // 計算分數 (簡單邏輯：根據完成)
+        const score = 100;
+
+        await authService.submitGameScore(selectedGame.id, {
+          score,
+          correctAnswers: totalQuestions,
+          totalQuestions,
+          timeSpent
+        });
+
+        alert(`恭喜！遊戲通關！\n耗時：${timeSpent}秒`);
+
+        // 延遲關閉
+        setTimeout(() => {
+          setShowGameModal(false);
+          loadDiscussions(); // 刷新列表
+        }, 2000);
+
+      } catch (error) {
+        console.error('提交成績失敗:', error);
+      } finally {
+        setSubmittingGame(false);
+      }
     }
   };
 
@@ -583,6 +746,8 @@ const StudentDashboard: React.FC = () => {
                           handleDiscussionClick(task.id);
                         } else if (task.type === 'quiz') {
                           handleQuizClick(task.id);
+                        } else if (task.type === 'game') {
+                          handleGameClick(task.id);
                         }
                       }}
                       className={`${getTaskButtonColor()} text-brand-brown font-bold px-6 py-2 rounded-2xl border-4 border-brand-brown shadow-comic active:translate-y-1 active:shadow-none bg-opacity-100 ${task.type === 'quiz' && task.completed ? 'cursor-pointer hover:bg-green-300' : ''
@@ -793,6 +958,116 @@ const StudentDashboard: React.FC = () => {
                 </div>
               </div>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Quiz Taking Modal */}
+      {/* Game Playing Modal */}
+      {showGameModal && selectedGame && (
+        <div className="fixed inset-0 bg-black bg-opacity-80 z-50 flex items-center justify-center p-4">
+          <div className="bg-[#2D2D2D] border-4 border-[#4A4A4A] rounded-3xl w-full max-w-5xl h-[90vh] flex flex-col shadow-2xl overflow-hidden relative">
+
+            {/* Game Header */}
+            <div className="bg-[#1A1A1A] p-4 flex justify-between items-center border-b-2 border-[#4A4A4A]">
+              <div>
+                <h2 className="text-2xl font-black text-white tracking-widest">{selectedGame.title}</h2>
+                <p className="text-gray-400 text-sm">
+                  {selectedGame.gameType === 'matching' ? '記憶配對' : '知識迷宮'} • {selectedGame.subject}
+                </p>
+              </div>
+              <div className="flex items-center gap-4">
+                {gameStartTime && (
+                  <div className="bg-[#333] px-3 py-1 rounded text-green-400 font-mono">
+                    時間: {Math.floor((Date.now() - gameStartTime.getTime()) / 1000)}s
+                  </div>
+                )}
+                <button
+                  onClick={() => setShowGameModal(false)}
+                  className="w-10 h-10 rounded-full bg-[#333] hover:bg-[#444] text-white flex items-center justify-center transition-colors"
+                >
+                  <X />
+                </button>
+              </div>
+            </div>
+
+            {/* Game Canvas / Area */}
+            <div className="flex-1 bg-[#222] p-8 overflow-y-auto relative">
+
+              {/* Matching Game Layout */}
+              {selectedGame.gameType === 'matching' && (
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 max-w-4xl mx-auto">
+                  {gameMatchingCards.map((card, index) => (
+                    <button
+                      key={card.id}
+                      onClick={() => handleCardClick(index)}
+                      className={`aspect-[3/4] rounded-xl text-xl font-bold flex items-center justify-center p-4 transition-all duration-500 transform ${card.isFlipped || card.isMatched
+                          ? 'bg-white rotate-y-180'
+                          : 'bg-[#A1D9AE] border-4 border-brand-brown'
+                        } ${card.isMatched ? 'opacity-50' : 'hover:scale-105 shadow-xl'}`}
+                      disabled={card.isMatched}
+                    >
+                      {(card.isFlipped || card.isMatched) ? (
+                        <div className="text-brand-brown text-center text-sm md:text-base">
+                          {card.content}
+                          <div className="text-[10px] text-gray-400 mt-2 uppercase">{card.type === 'question' ? '題目' : '答案'}</div>
+                        </div>
+                      ) : (
+                        <div className="text-4xl text-brand-brown opacity-50">?</div>
+                      )}
+                    </button>
+                  ))}
+                </div>
+              )}
+
+              {/* Maze / Quiz Game Layout */}
+              {selectedGame.gameType === 'maze' && (
+                <div className="max-w-2xl mx-auto text-center mt-10">
+                  <div className="mb-8">
+                    <div className="w-full bg-[#333] rounded-full h-4 mb-2">
+                      <div className="bg-green-500 h-4 rounded-full transition-all" style={{ width: `${((gameCurrentQuestionIndex) / selectedGame.questions.length) * 100}%` }}></div>
+                    </div>
+                    <p className="text-gray-400">關卡 {gameCurrentQuestionIndex + 1} / {selectedGame.questions.length}</p>
+                  </div>
+
+                  <div className="bg-[#333] p-8 rounded-3xl border-2 border-[#555] shadow-2xl">
+                    <h3 className="text-2xl text-white font-bold mb-8 leading-relaxed">
+                      {selectedGame.questions[gameCurrentQuestionIndex]?.question}
+                    </h3>
+
+                    <div className="grid grid-cols-1 gap-4">
+                      {[
+                        selectedGame.questions[gameCurrentQuestionIndex]?.answer,
+                        ...(selectedGame.questions[gameCurrentQuestionIndex]?.wrongOptions || [])
+                      ].sort(() => Math.random() - 0.5).map((option, idx) => (
+                        <button
+                          key={idx}
+                          onClick={() => handleGameOptionSelect(option === selectedGame.questions[gameCurrentQuestionIndex].answer)}
+                          className="p-4 bg-[#444] hover:bg-[#555] text-white rounded-xl border-2 border-[#666] transition-all hover:scale-[1.02] text-lg font-medium"
+                        >
+                          {option}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Game Status Footer */}
+            {gameStatus === 'completed' && (
+              <div className="absolute inset-0 bg-black bg-opacity-90 flex flex-col items-center justify-center p-8 z-50">
+                <h1 className="text-6xl font-black text-[#A1D9AE] mb-4 animate-bounce">VICTORY!</h1>
+                <p className="text-2xl text-white mb-8">恭喜完成所有挑戰！</p>
+                <button
+                  onClick={() => setShowGameModal(false)}
+                  className="px-8 py-3 bg-[#A1D9AE] text-brand-brown font-bold text-xl rounded-full hover:bg-white transition-colors"
+                >
+                  返回任務列表
+                </button>
+              </div>
+            )}
+
           </div>
         </div>
       )}

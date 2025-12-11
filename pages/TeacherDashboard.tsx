@@ -332,8 +332,16 @@ const TeacherDashboard: React.FC = () => {
   const viewAssignmentDetails = async (assignment: any) => {
     try {
       setLoading(true);
+      const isQuiz = assignment.type === 'quiz';
+      const isGame = assignment.type === 'game';
 
-      if (assignment.type === 'quiz') {
+      if (isGame) {
+        // 載入遊戲結果
+        const data = await authService.getGameResults(assignment.id);
+        setSelectedAssignment(assignment);
+        setAssignmentResponses(data.scores || []); // 遊戲成績
+        setEditedContent(assignment.description || '迷宮追逐遊戲');
+      } else if (isQuiz) {
         // 載入小測驗結果
         const data = await authService.getQuizResults(assignment.id);
         setSelectedAssignment(assignment);
