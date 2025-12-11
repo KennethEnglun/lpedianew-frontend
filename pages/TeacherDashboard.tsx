@@ -56,6 +56,7 @@ const TeacherDashboard: React.FC = () => {
   const [availableGroups, setAvailableGroups] = useState<string[]>([]);
   const [isEditingContent, setIsEditingContent] = useState(false);
   const [editedContent, setEditedContent] = useState('');
+  const [viewingResultDetails, setViewingResultDetails] = useState<any>(null); // State for viewing specific student result details
 
   // 處理內容顯示的輔助函數
   const getDisplayContent = (content: any) => {
@@ -205,7 +206,66 @@ const TeacherDashboard: React.FC = () => {
     }
   };
 
-  // 載入班級和分組選項（用於創建討論串/測驗）
+  // 圖片壓縮函式
+  const compressImage = (file: File): Promise<string> => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.readAsDataURL(file);
+      reader.onload = (event) => {
+        const img = new Image();
+        img.src = event.target?.result as string;
+        img.onload = () => {
+          const canvas = document.createElement('canvas');
+          let width = img.width;
+          let height = img.height;
+
+          // 調整尺寸以利壓縮 (最大寬度 800px)
+          const MAX_WIDTH = 800;
+          if (width > MAX_WIDTH) {
+            height *= MAX_WIDTH / width;
+            width = MAX_WIDTH;
+          }
+
+          canvas.width = width;
+          canvas.height = height;
+          const ctx = canvas.getContext('2d');
+          ctx?.drawImage(img, 0, 0, width, height);
+
+          // 壓縮至 JPEG, 品質 0.7
+          let quality = 0.7;
+          let dataUrl = canvas.toDataURL('image/jpeg', quality);
+
+          // 如果還是太大，降低品質
+          while (dataUrl.length > 1024 * 1024 && quality > 0.1) {
+            quality -= 0.1;
+            dataUrl = canvas.toDataURL('image/jpeg', quality);
+          }
+
+          resolve(dataUrl);
+        };
+        img.onerror = (error) => reject(error);
+      };
+      reader.onerror = (error) => reject(error);
+    });
+  };
+
+  // 處理問題圖片上傳
+  const handleQuestionImageUpload = async (questionIndex: number, event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (file) {
+      try {
+        const compressedImage = await compressImage(file);
+        updateQuestion(questionIndex, 'image', compressedImage);
+      } catch (error) {
+        console.error('圖片處理失敗:', error);
+        alert('圖片處理失敗，請重試');
+      }
+    }
+    // 重置 input
+    event.target.value = '';
+  };
+
+  // 載入班級和分組資料選項（用於創建討論串/測驗）
   const loadClassesAndGroups = async (subject?: string) => {
     try {
       const data = await authService.getAvailableClasses(subject);
@@ -457,7 +517,7 @@ const TeacherDashboard: React.FC = () => {
     }
 
     // 將HTML內容轉換為內容區塊格式
-    const contentBlocks = [{ type: 'html', value: discussionForm.content }];
+    const contentBlocks: { type: 'html' | 'text' | 'image' | 'link'; value: string }[] = [{ type: 'html', value: discussionForm.content }];
 
     try {
       await authService.createDiscussion({
@@ -671,8 +731,8 @@ const TeacherDashboard: React.FC = () => {
                         }));
                       }}
                       className={`px-4 py-2 rounded-2xl border-2 font-bold transition-colors ${discussionForm.targetClasses.includes(className)
-                          ? 'bg-[#F8C5C5] border-brand-brown text-brand-brown'
-                          : 'bg-white border-gray-300 text-gray-600 hover:border-brand-brown'
+                        ? 'bg-[#F8C5C5] border-brand-brown text-brand-brown'
+                        : 'bg-white border-gray-300 text-gray-600 hover:border-brand-brown'
                         }`}
                     >
                       {className}
@@ -701,8 +761,8 @@ const TeacherDashboard: React.FC = () => {
                           }));
                         }}
                         className={`px-4 py-2 rounded-2xl border-2 font-bold transition-colors ${discussionForm.targetGroups.includes(groupName)
-                            ? 'bg-[#E8F4FD] border-blue-500 text-blue-600'
-                            : 'bg-white border-gray-300 text-gray-600 hover:border-blue-500'
+                          ? 'bg-[#E8F4FD] border-blue-500 text-blue-600'
+                          : 'bg-white border-gray-300 text-gray-600 hover:border-blue-500'
                           }`}
                       >
                         {groupName}
@@ -1171,8 +1231,8 @@ const TeacherDashboard: React.FC = () => {
                                 {selectedAssignment?.type === 'quiz' && (
                                   <div className="ml-auto flex items-center gap-4">
                                     <div className={`px-3 py-1 rounded-full text-sm font-bold ${response.score >= 80 ? 'bg-green-100 text-green-700' :
-                                        response.score >= 60 ? 'bg-yellow-100 text-yellow-700' :
-                                          'bg-red-100 text-red-700'
+                                      response.score >= 60 ? 'bg-yellow-100 text-yellow-700' :
+                                        'bg-red-100 text-red-700'
                                       }`}>
                                       {Math.round(response.score)}%
                                     </div>
@@ -1184,26 +1244,37 @@ const TeacherDashboard: React.FC = () => {
                               </div>
 
                               {selectedAssignment?.type === 'quiz' ? (
-                                <div className="bg-white p-3 rounded-xl border border-gray-200">
-                                  <div className="grid grid-cols-2 gap-4 text-sm">
-                                    <div>
-                                      <span className="font-medium text-gray-600">得分:</span>
-                                      <span className="ml-2 font-bold">{Math.round(response.score)}%</span>
-                                    </div>
-                                    <div>
-                                      <span className="font-medium text-gray-600">正確答案:</span>
-                                      <span className="ml-2">{response.correctAnswers}/{response.totalQuestions}</span>
-                                    </div>
-                                    <div>
-                                      <span className="font-medium text-gray-600">用時:</span>
-                                      <span className="ml-2">{response.timeSpent ? `${Math.round(response.timeSpent / 60)}分鐘` : '未記錄'}</span>
-                                    </div>
-                                    <div>
-                                      <span className="font-medium text-gray-600">提交時間:</span>
-                                      <span className="ml-2">{new Date(response.submittedAt).toLocaleString()}</span>
+                                <>
+                                  <div className="bg-white p-3 rounded-xl border border-gray-200">
+                                    <div className="grid grid-cols-2 gap-4 text-sm">
+                                      <div>
+                                        <span className="font-medium text-gray-600">得分:</span>
+                                        <span className="ml-2 font-bold">{Math.round(response.score)}%</span>
+                                      </div>
+                                      <div>
+                                        <span className="font-medium text-gray-600">正確答案:</span>
+                                        <span className="ml-2">{response.correctAnswers}/{response.totalQuestions}</span>
+                                      </div>
+                                      <div>
+                                        <span className="font-medium text-gray-600">用時:</span>
+                                        <span className="ml-2">{response.timeSpent ? `${Math.round(response.timeSpent / 60)}分鐘` : '未記錄'}</span>
+                                      </div>
+                                      <div>
+                                        <span className="font-medium text-gray-600">提交時間:</span>
+                                        <span className="ml-2">{new Date(response.submittedAt).toLocaleString()}</span>
+                                      </div>
                                     </div>
                                   </div>
-                                </div>
+                                  <div className="mt-3 flex justify-end">
+                                    <button
+                                      onClick={() => setViewingResultDetails(response)}
+                                      className="px-4 py-2 bg-yellow-100 text-yellow-800 rounded-lg hover:bg-yellow-200 text-sm font-bold flex items-center gap-2"
+                                    >
+                                      <Eye className="w-4 h-4" />
+                                      查看答題詳情
+                                    </button>
+                                  </div>
+                                </>
                               ) : (
                                 <div className="bg-white p-3 rounded-xl border border-gray-200">
                                   <div dangerouslySetInnerHTML={{ __html: response.content || response.message || '無內容' }} />
@@ -1323,8 +1394,8 @@ const TeacherDashboard: React.FC = () => {
                         }));
                       }}
                       className={`px-4 py-2 rounded-2xl border-2 font-bold transition-colors ${quizForm.targetClasses.includes(className)
-                          ? 'bg-[#FDEEAD] border-brand-brown text-brand-brown'
-                          : 'bg-white border-gray-300 text-gray-600 hover:border-brand-brown'
+                        ? 'bg-[#FDEEAD] border-brand-brown text-brand-brown'
+                        : 'bg-white border-gray-300 text-gray-600 hover:border-brand-brown'
                         }`}
                     >
                       {className}
@@ -1353,8 +1424,8 @@ const TeacherDashboard: React.FC = () => {
                           }));
                         }}
                         className={`px-4 py-2 rounded-2xl border-2 font-bold transition-colors ${quizForm.targetGroups.includes(groupName)
-                            ? 'bg-[#FFF4E6] border-orange-500 text-orange-600'
-                            : 'bg-white border-gray-300 text-gray-600 hover:border-orange-500'
+                          ? 'bg-[#FFF4E6] border-orange-500 text-orange-600'
+                          : 'bg-white border-gray-300 text-gray-600 hover:border-orange-500'
                           }`}
                       >
                         {groupName}
@@ -1405,6 +1476,44 @@ const TeacherDashboard: React.FC = () => {
                             value={question.question}
                             onChange={(e) => updateQuestion(questionIndex, 'question', e.target.value)}
                           />
+
+                          {/* 圖片上傳區域 */}
+                          <div>
+                            <label className="block text-sm font-bold text-brand-brown mb-2">
+                              問題圖片 (選填，自動壓縮至1MB內)
+                            </label>
+                            <div className="flex items-start gap-4">
+                              <div className="flex-1">
+                                <label className="flex items-center gap-2 px-4 py-2 bg-white border-2 border-dashed border-gray-300 rounded-xl cursor-pointer hover:border-brand-brown hover:bg-gray-50 transition-colors">
+                                  <input
+                                    type="file"
+                                    accept="image/*"
+                                    onChange={(e) => handleQuestionImageUpload(questionIndex, e)}
+                                    className="hidden"
+                                  />
+                                  <span className="text-gray-600 font-medium">
+                                    {question.image ? '更換圖片' : '上傳圖片'}
+                                  </span>
+                                </label>
+                              </div>
+                              {question.image && (
+                                <div className="relative w-32 h-32 bg-gray-100 rounded-lg overflow-hidden border-2 border-brand-brown">
+                                  <img
+                                    src={question.image}
+                                    alt="Question Preview"
+                                    className="w-full h-full object-cover"
+                                  />
+                                  <button
+                                    onClick={() => updateQuestion(questionIndex, 'image', undefined)}
+                                    className="absolute top-1 right-1 bg-red-500 text-white rounded-full p-1 hover:bg-red-600"
+                                    title="移除圖片"
+                                  >
+                                    <X className="w-3 h-3" />
+                                  </button>
+                                </div>
+                              )}
+                            </div>
+                          </div>
 
                           <div>
                             <label className="block text-sm font-bold text-brand-brown mb-2">選項</label>
@@ -1464,6 +1573,103 @@ const TeacherDashboard: React.FC = () => {
                   創建小測驗
                 </Button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+      {/* Student Quiz Result Detail Modal */}
+      {viewingResultDetails && selectedAssignment && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 z-[60] flex items-center justify-center p-4">
+          <div className="bg-white border-4 border-brand-brown rounded-3xl w-full max-w-4xl max-h-[90vh] overflow-y-auto shadow-comic">
+            <div className="p-6 border-b-4 border-brand-brown bg-[#FDEEAD]">
+              <div className="flex justify-between items-center">
+                <div>
+                  <h2 className="text-2xl font-black text-brand-brown">
+                    {viewingResultDetails.studentName} 的答題詳情
+                  </h2>
+                  <p className="text-sm text-gray-600 mt-1">
+                    得分: {Math.round(viewingResultDetails.score)}% •
+                    用時: {viewingResultDetails.timeSpent ? Math.round(viewingResultDetails.timeSpent / 60) : 0} 分鐘
+                  </p>
+                </div>
+                <button
+                  onClick={() => setViewingResultDetails(null)}
+                  className="w-10 h-10 rounded-full bg-white border-2 border-brand-brown hover:bg-gray-100 flex items-center justify-center"
+                >
+                  <X className="w-6 h-6 text-brand-brown" />
+                </button>
+              </div>
+            </div>
+
+            <div className="p-6 space-y-6">
+              {selectedAssignment.questions?.map((question: any, index: number) => {
+                const studentAnswer = viewingResultDetails.answers[index];
+                const isCorrect = studentAnswer === question.correctAnswer;
+
+                return (
+                  <div key={index} className={`p-6 rounded-2xl border-2 ${isCorrect ? 'bg-green-50 border-green-200' : 'bg-red-50 border-red-200'
+                    }`}>
+                    <div className="flex gap-4">
+                      <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 text-white font-bold ${isCorrect ? 'bg-green-500' : 'bg-red-500'
+                        }`}>
+                        {index + 1}
+                      </div>
+                      <div className="flex-1">
+                        <h4 className="font-bold text-lg text-brand-brown mb-2">{question.question}</h4>
+                        {question.image && (
+                          <img
+                            src={question.image}
+                            alt="Question"
+                            className="max-h-48 rounded-lg border-2 border-gray-200 mb-4"
+                          />
+                        )}
+
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-4">
+                          {question.options.map((option: string, optIndex: number) => {
+                            const isStudentSelected = studentAnswer === optIndex;
+                            const isCorrectOption = question.correctAnswer === optIndex;
+
+                            let optionClass = "bg-white border-gray-200 text-gray-600";
+                            if (isCorrectOption) optionClass = "bg-green-100 border-green-500 text-green-700 font-bold";
+                            else if (isStudentSelected && !isCorrectOption) optionClass = "bg-red-100 border-red-500 text-red-700";
+                            else if (isStudentSelected && isCorrectOption) optionClass = "bg-green-100 border-green-500 text-green-700 font-bold";
+
+                            return (
+                              <div key={optIndex} className={`p-3 rounded-xl border-2 flex items-center gap-3 ${optionClass}`}>
+                                <div className={`w-6 h-6 rounded-full border-2 flex items-center justify-center flex-shrink-0 text-xs ${isCorrectOption ? 'border-green-600 bg-green-600 text-white' :
+                                  (isStudentSelected ? 'border-red-500 bg-red-500 text-white' : 'border-gray-400')
+                                  }`}>
+                                  {String.fromCharCode(65 + optIndex)}
+                                </div>
+                                <span>{option}</span>
+                                {isStudentSelected && (
+                                  <span className="ml-auto text-xs font-bold px-2 py-1 rounded-full bg-white bg-opacity-50">
+                                    學生選擇
+                                  </span>
+                                )}
+                                {isCorrectOption && !isStudentSelected && (
+                                  <span className="ml-auto text-xs font-bold px-2 py-1 rounded-full bg-white bg-opacity-50 text-green-700">
+                                    正確答案
+                                  </span>
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            <div className="p-6 border-t-2 border-gray-200 bg-gray-50 rounded-b-3xl">
+              <button
+                onClick={() => setViewingResultDetails(null)}
+                className="w-full py-3 bg-brand-brown text-white font-bold rounded-xl hover:bg-opacity-90"
+              >
+                關閉
+              </button>
             </div>
           </div>
         </div>

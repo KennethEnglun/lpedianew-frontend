@@ -394,6 +394,7 @@ class AuthService {
     targetGroups?: string[];
     questions: Array<{
       question: string;
+      image?: string;
       options: string[];
       correctAnswer: number;
     }>;
@@ -432,7 +433,7 @@ class AuthService {
   }
 
   // 獲取特定小測驗詳情（學生答題用）
-  async getQuizForStudent(quizId: string): Promise<{ quiz: any }> {
+  async getQuizForStudent(quizId: string): Promise<{ quiz: any; mode?: string; studentResult?: any }> {
     const response = await fetch(`${this.API_BASE}/quizzes/${quizId}/take`, {
       headers: this.getAuthHeaders()
     });

@@ -39,6 +39,7 @@ const StudentDashboard: React.FC = () => {
   const [quizAnswers, setQuizAnswers] = useState<number[]>([]);
   const [quizStartTime, setQuizStartTime] = useState<Date | null>(null);
   const [submittingQuiz, setSubmittingQuiz] = useState(false);
+  const [viewingQuizResult, setViewingQuizResult] = useState<any>(null); // State for reviewing quiz result
 
   const navigate = useNavigate();
   const { logout, user } = useAuth();
@@ -230,10 +231,18 @@ const StudentDashboard: React.FC = () => {
     try {
       setLoading(true);
       const response = await authService.getQuizForStudent(quizId);
-      setSelectedQuiz(response.quiz);
-      setQuizAnswers(new Array(response.quiz.questions.length).fill(-1)); // 初始化答案數組
-      setQuizStartTime(new Date());
-      setShowQuizModal(true);
+
+      if (response.mode === 'review') {
+        setSelectedQuiz(response.quiz);
+        setViewingQuizResult(response.studentResult);
+        setShowQuizModal(true);
+      } else {
+        setSelectedQuiz(response.quiz);
+        setQuizAnswers(new Array(response.quiz.questions.length).fill(-1)); // 初始化答案數組
+        setQuizStartTime(new Date());
+        setViewingQuizResult(null);
+        setShowQuizModal(true);
+      }
     } catch (error: any) {
       console.error('載入小測驗失敗:', error);
       alert(error.message || '載入小測驗失敗');
@@ -353,8 +362,8 @@ const StudentDashboard: React.FC = () => {
 
   return (
     <div className="min-h-screen font-sans flex flex-col relative overflow-hidden" style={{ backgroundColor: '#D9F3D5' }}>
-       {/* Background */}
-       <div 
+      {/* Background */}
+      <div
         className="absolute inset-0 z-0 pointer-events-none opacity-80"
         style={{
           backgroundImage: `url('/studentpagebg.png')`,
@@ -368,7 +377,7 @@ const StudentDashboard: React.FC = () => {
       <header className="relative z-20 bg-[#A1D9AE] border-b-4 border-brand-brown py-2 px-6 flex justify-between items-center shadow-md">
         <div className="w-10"></div>
         <div className="text-center">
-            <h1 className="text-4xl font-black text-brand-brown font-rounded tracking-wider">Lpedia</h1>
+          <h1 className="text-4xl font-black text-brand-brown font-rounded tracking-wider">Lpedia</h1>
         </div>
         <div className="flex gap-3">
           <button className="w-10 h-10 bg-brand-cream rounded-full border-2 border-brand-brown flex items-center justify-center hover:bg-white">
@@ -383,23 +392,23 @@ const StudentDashboard: React.FC = () => {
           </button>
         </div>
       </header>
-      
+
       <div className="relative z-20 bg-[#A1D9AE] border-b-4 border-brand-brown py-2 flex justify-center shadow-comic">
         <h2 className="text-2xl font-bold text-brand-brown tracking-[0.2em]">學生中心</h2>
       </div>
 
       {/* Main Layout */}
       <div className="flex-1 relative z-10 p-4 md:p-8 flex flex-col md:flex-row gap-6 max-w-7xl mx-auto w-full">
-        
+
         {/* Sidebar Subject Selection */}
         <aside className="w-full md:w-64 bg-brand-cream border-4 border-brand-brown rounded-3xl p-6 shadow-comic flex-shrink-0 flex flex-col">
           {/* Avatar Group */}
           <div className="mb-4 relative h-24 flex justify-center">
-             <img
-                src="/student_login.png"
-                alt="Students"
-                className="h-full object-contain"
-              />
+            <img
+              src="/student_login.png"
+              alt="Students"
+              className="h-full object-contain"
+            />
           </div>
 
           {/* User Profile Section */}
@@ -416,7 +425,7 @@ const StudentDashboard: React.FC = () => {
               </div>
             )}
           </div>
-          
+
           <div className="text-center mb-4 border-b-4 border-brand-brown pb-2">
             <h3 className="text-xl font-bold text-brand-brown">我的學科</h3>
           </div>
@@ -429,11 +438,10 @@ const StudentDashboard: React.FC = () => {
                 <button
                   key={subject}
                   onClick={() => setSelectedSubject(subject)}
-                  className={`w-[calc(100%-10px)] flex items-center gap-3 px-4 py-2 rounded-2xl border-4 transition-all duration-150 ${
-                    isSelected 
-                      ? 'border-brand-brown translate-x-2 bg-opacity-100 shadow-comic' 
-                      : 'border-transparent hover:border-brand-brown/30 bg-opacity-70'
-                  }`}
+                  className={`w-[calc(100%-10px)] flex items-center gap-3 px-4 py-2 rounded-2xl border-4 transition-all duration-150 ${isSelected
+                    ? 'border-brand-brown translate-x-2 bg-opacity-100 shadow-comic'
+                    : 'border-transparent hover:border-brand-brown/30 bg-opacity-70'
+                    }`}
                   style={{ backgroundColor: config.color }}
                 >
                   <span className="text-2xl">{config.icon}</span>
@@ -442,133 +450,129 @@ const StudentDashboard: React.FC = () => {
               );
             })}
           </nav>
-          
-           <div className="mt-4 pt-4 border-t-4 border-brand-brown">
-             <button onClick={() => navigate('/')} className="text-sm text-brand-brown font-bold hover:underline">← 返回登入</button>
-           </div>
+
+          <div className="mt-4 pt-4 border-t-4 border-brand-brown">
+            <button onClick={() => navigate('/')} className="text-sm text-brand-brown font-bold hover:underline">← 返回登入</button>
+          </div>
         </aside>
 
         {/* Task Area */}
         <main className="flex-1 bg-brand-cream border-4 border-brand-brown rounded-3xl p-6 md:p-10 shadow-comic min-h-[500px]">
-            <div className="flex justify-between items-center mb-8">
-              <h3 className="text-3xl font-bold text-brand-brown">我的任務</h3>
-              <div className="flex items-center gap-3">
-                {lastRefresh && (
-                  <span className="text-sm text-gray-500">
-                    最後更新: {lastRefresh.toLocaleTimeString()}
-                  </span>
-                )}
-                <button
-                  onClick={handleManualRefresh}
-                  disabled={refreshing}
-                  className="flex items-center gap-1 px-3 py-1 bg-brand-green-light hover:bg-brand-green text-white rounded-xl border-2 border-brand-brown shadow-comic disabled:opacity-50"
-                >
-                  <RefreshCw className={`w-4 h-4 ${refreshing ? 'animate-spin' : ''}`} />
-                  {refreshing ? '刷新中...' : '刷新'}
-                </button>
-              </div>
-            </div>
-
-            <div className="flex items-center gap-3 mb-6">
-               <span className="text-4xl">{subjectConfig.icon}</span>
-               <h4 className="text-2xl font-bold text-brand-brown">{selectedSubject}</h4>
-            </div>
-
-            <div className="space-y-4">
-              {loading ? (
-                <div className="text-center py-12">
-                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-brand-brown mx-auto mb-4"></div>
-                  <p className="text-brand-brown font-bold">載入中...</p>
-                </div>
-              ) : filteredTasks.length > 0 ? (
-                filteredTasks.map(task => {
-                  const getTaskIcon = () => {
-                    switch (task.type) {
-                      case 'quiz': return <HelpCircle className="w-5 h-5 text-blue-600" />;
-                      case 'ai-bot': return <Bot className="w-5 h-5 text-green-600" />;
-                      case 'discussion': return <MessageSquare className="w-5 h-5 text-purple-600" />;
-                      default: return null;
-                    }
-                  };
-
-                  const getTaskButtonText = () => {
-                    if (task.type === 'discussion') {
-                      const status = responseStatus[task.id];
-                      if (status?.hasResponded) {
-                        return '已回應 ✓';
-                      }
-                      return '參與討論';
-                    }
-                    if (task.type === 'quiz') {
-                      if (task.completed) {
-                        return task.score !== null ? `已完成 (${Math.round(task.score)}%)` : '已完成 ✓';
-                      }
-                      return '開始測驗';
-                    }
-                    switch (task.type) {
-                      case 'ai-bot': return '開始對話';
-                      default: return '開始';
-                    }
-                  };
-
-                  const getTaskButtonColor = () => {
-                    if (task.type === 'discussion') {
-                      const status = responseStatus[task.id];
-                      if (status?.hasResponded) {
-                        return 'bg-[#93C47D] hover:bg-[#86b572]'; // 已回應：綠色
-                      }
-                      return 'bg-[#F8C5C5] hover:bg-[#F0B5B5]'; // 未回應：原本的粉紅色
-                    }
-                    if (task.type === 'quiz') {
-                      if (task.completed) {
-                        return 'bg-[#93C47D] hover:bg-[#86b572]'; // 已完成：綠色
-                      }
-                      return 'bg-[#FDEEAD] hover:bg-[#FCE690]'; // 未完成：黃色
-                    }
-                    switch (task.type) {
-                      case 'ai-bot': return 'bg-[#B5D8F8] hover:bg-[#A1CCF0]';
-                      default: return 'bg-[#93C47D] hover:bg-[#86b572]';
-                    }
-                  };
-
-                  return (
-                    <div key={task.id} className="bg-white border-4 border-brand-brown rounded-3xl p-4 flex items-center shadow-comic hover:-translate-y-1 transition-transform cursor-pointer">
-                      <div className="w-14 h-14 rounded-full border-2 border-brand-brown overflow-hidden flex-shrink-0 bg-gray-100">
-                        <img src={task.teacherAvatar} alt={task.teacherName} className="w-full h-full object-cover" />
-                      </div>
-                      <div className="ml-4 flex-1">
-                        <div className="flex items-center gap-2 mb-1">
-                          {getTaskIcon()}
-                          <h5 className="text-xl font-bold text-brand-brown">{task.title}</h5>
-                        </div>
-                        <p className="text-gray-500 text-sm">- {task.teacherName}</p>
-                      </div>
-                      <button
-                        onClick={() => {
-                          if (task.type === 'discussion') {
-                            handleDiscussionClick(task.id);
-                          } else if (task.type === 'quiz') {
-                            if (!task.completed) {
-                              handleQuizClick(task.id);
-                            }
-                          }
-                        }}
-                        disabled={task.type === 'quiz' && task.completed}
-                        className={`${getTaskButtonColor()} text-brand-brown font-bold px-6 py-2 rounded-2xl border-4 border-brand-brown shadow-comic active:translate-y-1 active:shadow-none ${
-                          task.type === 'quiz' && task.completed ? 'opacity-75 cursor-not-allowed' : ''
-                        }`}
-                      >
-                        {getTaskButtonText()}
-                      </button>
-                    </div>
-                  );
-                })
-              ) : (
-                <div className="text-center py-12 text-gray-400 font-bold text-xl border-4 border-dashed border-gray-300 rounded-3xl">
-                  目前沒有任務 🎉
-                </div>
+          <div className="flex justify-between items-center mb-8">
+            <h3 className="text-3xl font-bold text-brand-brown">我的任務</h3>
+            <div className="flex items-center gap-3">
+              {lastRefresh && (
+                <span className="text-sm text-gray-500">
+                  最後更新: {lastRefresh.toLocaleTimeString()}
+                </span>
               )}
+              <button
+                onClick={handleManualRefresh}
+                disabled={refreshing}
+                className="flex items-center gap-1 px-3 py-1 bg-brand-green-light hover:bg-brand-green text-white rounded-xl border-2 border-brand-brown shadow-comic disabled:opacity-50"
+              >
+                <RefreshCw className={`w-4 h-4 ${refreshing ? 'animate-spin' : ''}`} />
+                {refreshing ? '刷新中...' : '刷新'}
+              </button>
             </div>
+          </div>
+
+          <div className="flex items-center gap-3 mb-6">
+            <span className="text-4xl">{subjectConfig.icon}</span>
+            <h4 className="text-2xl font-bold text-brand-brown">{selectedSubject}</h4>
+          </div>
+
+          <div className="space-y-4">
+            {loading ? (
+              <div className="text-center py-12">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-brand-brown mx-auto mb-4"></div>
+                <p className="text-brand-brown font-bold">載入中...</p>
+              </div>
+            ) : filteredTasks.length > 0 ? (
+              filteredTasks.map(task => {
+                const getTaskIcon = () => {
+                  switch (task.type) {
+                    case 'quiz': return <HelpCircle className="w-5 h-5 text-blue-600" />;
+                    case 'ai-bot': return <Bot className="w-5 h-5 text-green-600" />;
+                    case 'discussion': return <MessageSquare className="w-5 h-5 text-purple-600" />;
+                    default: return null;
+                  }
+                };
+
+                const getTaskButtonText = () => {
+                  if (task.type === 'discussion') {
+                    const status = responseStatus[task.id];
+                    if (status?.hasResponded) {
+                      return '已回應 ✓';
+                    }
+                    return '參與討論';
+                  }
+                  if (task.type === 'quiz') {
+                    if (task.completed) {
+                      return task.score !== null ? `已完成 (${Math.round(task.score)}%)` : '已完成 ✓';
+                    }
+                    return '開始測驗';
+                  }
+                  switch (task.type) {
+                    case 'ai-bot': return '開始對話';
+                    default: return '開始';
+                  }
+                };
+
+                const getTaskButtonColor = () => {
+                  if (task.type === 'discussion') {
+                    const status = responseStatus[task.id];
+                    if (status?.hasResponded) {
+                      return 'bg-[#93C47D] hover:bg-[#86b572]'; // 已回應：綠色
+                    }
+                    return 'bg-[#F8C5C5] hover:bg-[#F0B5B5]'; // 未回應：原本的粉紅色
+                  }
+                  if (task.type === 'quiz') {
+                    if (task.completed) {
+                      return 'bg-[#93C47D] hover:bg-[#86b572]'; // 已完成：綠色
+                    }
+                    return 'bg-[#FDEEAD] hover:bg-[#FCE690]'; // 未完成：黃色
+                  }
+                  switch (task.type) {
+                    case 'ai-bot': return 'bg-[#B5D8F8] hover:bg-[#A1CCF0]';
+                    default: return 'bg-[#93C47D] hover:bg-[#86b572]';
+                  }
+                };
+
+                return (
+                  <div key={task.id} className="bg-white border-4 border-brand-brown rounded-3xl p-4 flex items-center shadow-comic hover:-translate-y-1 transition-transform cursor-pointer">
+                    <div className="w-14 h-14 rounded-full border-2 border-brand-brown overflow-hidden flex-shrink-0 bg-gray-100">
+                      <img src={task.teacherAvatar} alt={task.teacherName} className="w-full h-full object-cover" />
+                    </div>
+                    <div className="ml-4 flex-1">
+                      <div className="flex items-center gap-2 mb-1">
+                        {getTaskIcon()}
+                        <h5 className="text-xl font-bold text-brand-brown">{task.title}</h5>
+                      </div>
+                      <p className="text-gray-500 text-sm">- {task.teacherName}</p>
+                    </div>
+                    <button
+                      onClick={() => {
+                        if (task.type === 'discussion') {
+                          handleDiscussionClick(task.id);
+                        } else if (task.type === 'quiz') {
+                          handleQuizClick(task.id);
+                        }
+                      }}
+                      className={`${getTaskButtonColor()} text-brand-brown font-bold px-6 py-2 rounded-2xl border-4 border-brand-brown shadow-comic active:translate-y-1 active:shadow-none bg-opacity-100 ${task.type === 'quiz' && task.completed ? 'cursor-pointer hover:bg-green-300' : ''
+                        }`}
+                    >
+                      {task.type === 'quiz' && task.completed ? '查看結果' : getTaskButtonText()}
+                    </button>
+                  </div>
+                );
+              })
+            ) : (
+              <div className="text-center py-12 text-gray-400 font-bold text-xl border-4 border-dashed border-gray-300 rounded-3xl">
+                目前沒有任務 🎉
+              </div>
+            )}
+          </div>
 
         </main>
 
@@ -616,27 +620,24 @@ const StudentDashboard: React.FC = () => {
                       return (
                         <div
                           key={response.id || index}
-                          className={`border-2 rounded-xl p-4 ${
-                            isCurrentUser
-                              ? 'bg-blue-50 border-blue-300'
-                              : 'bg-gray-50 border-gray-300'
-                          }`}
+                          className={`border-2 rounded-xl p-4 ${isCurrentUser
+                            ? 'bg-blue-50 border-blue-300'
+                            : 'bg-gray-50 border-gray-300'
+                            }`}
                         >
                           <div className="flex items-center gap-2 mb-3">
-                            <div className={`w-6 h-6 rounded-full flex items-center justify-center ${
-                              isCurrentUser
-                                ? 'bg-blue-500'
-                                : 'bg-gray-500'
-                            }`}>
+                            <div className={`w-6 h-6 rounded-full flex items-center justify-center ${isCurrentUser
+                              ? 'bg-blue-500'
+                              : 'bg-gray-500'
+                              }`}>
                               <span className="text-white text-sm font-bold">
                                 {isCurrentUser ? '你' : response.studentName?.charAt(0) || '?'}
                               </span>
                             </div>
-                            <span className={`font-bold ${
-                              isCurrentUser
-                                ? 'text-blue-700'
-                                : 'text-gray-700'
-                            }`}>
+                            <span className={`font-bold ${isCurrentUser
+                              ? 'text-blue-700'
+                              : 'text-gray-700'
+                              }`}>
                               {isCurrentUser ? '你的回應' : `${response.studentName || '未知學生'} 的回應`}
                             </span>
                             <span className="text-sm text-gray-500">
@@ -801,6 +802,20 @@ const StudentDashboard: React.FC = () => {
             </div>
 
             <div className="p-6">
+              {/* 複習模式提示 */}
+              {viewingQuizResult && (
+                <div className="mb-6 bg-blue-100 border-l-4 border-blue-500 p-4 rounded-r-xl">
+                  <div className="flex justify-between items-center">
+                    <div>
+                      <p className="font-bold text-blue-900 text-lg">測驗結果回顧</p>
+                      <p className="text-blue-800">
+                        得分: <span className="text-2xl font-black">{Math.round(viewingQuizResult.score)}%</span> •
+                        正確: {viewingQuizResult.correctAnswers}/{viewingQuizResult.totalQuestions}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
               {/* 進度條 */}
               <div className="mb-6">
                 <div className="flex justify-between items-center mb-2">
@@ -829,30 +844,68 @@ const StudentDashboard: React.FC = () => {
                       <h3 className="text-lg font-bold text-brand-brown mb-3">
                         問題 {questionIndex + 1}: {question.question}
                       </h3>
+                      {question.image && (
+                        <div className="mb-4">
+                          <img
+                            src={question.image}
+                            alt="Question"
+                            className="max-h-64 rounded-xl border-4 border-white shadow-md mx-auto"
+                          />
+                        </div>
+                      )}
                     </div>
 
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                       {question.options?.map((option: string, optionIndex: number) => (
                         <button
                           key={optionIndex}
-                          onClick={() => handleAnswerSelect(questionIndex, optionIndex)}
-                          className={`p-4 rounded-xl border-2 text-left font-medium transition-all duration-200 ${
-                            quizAnswers[questionIndex] === optionIndex
+                          onClick={() => !viewingQuizResult && handleAnswerSelect(questionIndex, optionIndex)}
+                          disabled={!!viewingQuizResult}
+                          className={`p-4 rounded-xl border-2 text-left font-medium transition-all duration-200 ${viewingQuizResult
+                            ? (() => {
+                              const studentSelection = viewingQuizResult.answers[questionIndex];
+                              const isCorrect = question.correctAnswer === optionIndex;
+                              const isSelected = studentSelection === optionIndex;
+
+                              if (isCorrect) return 'bg-green-100 border-green-500 text-green-900';
+                              if (isSelected && !isCorrect) return 'bg-red-100 border-red-500 text-red-900';
+                              return 'bg-white border-gray-200 opacity-60';
+                            })()
+                            : quizAnswers[questionIndex] === optionIndex
                               ? 'bg-[#FDEEAD] border-brand-brown text-brand-brown shadow-comic'
                               : 'bg-white border-gray-300 text-gray-700 hover:border-brand-brown hover:bg-yellow-50'
-                          }`}
+                            }`}
                         >
                           <div className="flex items-center gap-3">
-                            <div className={`w-6 h-6 rounded-full border-2 flex items-center justify-center ${
-                              quizAnswers[questionIndex] === optionIndex
+                            <div className={`w-6 h-6 rounded-full border-2 flex items-center justify-center flex-shrink-0 ${viewingQuizResult
+                              ? (() => {
+                                const studentSelection = viewingQuizResult.answers[questionIndex];
+                                const isCorrect = question.correctAnswer === optionIndex;
+                                const isSelected = studentSelection === optionIndex;
+
+                                if (isCorrect) return 'border-green-600 bg-green-600 text-white';
+                                if (isSelected) return 'border-red-500 bg-red-500 text-white';
+                                return 'border-gray-300 text-gray-400';
+                              })()
+                              : quizAnswers[questionIndex] === optionIndex
                                 ? 'border-brand-brown bg-brand-brown text-white'
                                 : 'border-gray-400'
-                            }`}>
+                              }`}>
                               <span className="text-sm font-bold">
                                 {String.fromCharCode(65 + optionIndex)}
                               </span>
                             </div>
                             <span className="flex-1">{option}</span>
+                            {viewingQuizResult && (
+                              <>
+                                {question.correctAnswer === optionIndex && (
+                                  <span className="text-xs font-bold bg-green-200 text-green-800 px-2 py-1 rounded-full">正確答案</span>
+                                )}
+                                {viewingQuizResult.answers[questionIndex] === optionIndex && viewingQuizResult.answers[questionIndex] !== question.correctAnswer && (
+                                  <span className="text-xs font-bold bg-red-200 text-red-800 px-2 py-1 rounded-full">你的選擇</span>
+                                )}
+                              </>
+                            )}
                           </div>
                         </button>
                       ))}
@@ -861,22 +914,23 @@ const StudentDashboard: React.FC = () => {
                 ))}
               </div>
 
-              {/* 提交按鈕 */}
-              <div className="flex justify-center mt-8 pt-6 border-t-4 border-gray-200">
-                <button
-                  onClick={handleSubmitQuiz}
-                  disabled={submittingQuiz || quizAnswers.includes(-1)}
-                  className={`px-8 py-3 font-bold rounded-2xl border-4 text-lg transition-all duration-200 ${
-                    quizAnswers.includes(-1)
+              {/* 提交按鈕 (只在非複習模式顯示) */}
+              {!viewingQuizResult && (
+                <div className="flex justify-center mt-8 pt-6 border-t-4 border-gray-200">
+                  <button
+                    onClick={handleSubmitQuiz}
+                    disabled={submittingQuiz || quizAnswers.includes(-1)}
+                    className={`px-8 py-3 font-bold rounded-2xl border-4 text-lg transition-all duration-200 ${quizAnswers.includes(-1)
                       ? 'bg-gray-300 border-gray-400 text-gray-600 cursor-not-allowed'
                       : submittingQuiz
-                      ? 'bg-yellow-400 border-yellow-600 text-yellow-800 cursor-wait'
-                      : 'bg-[#FDEEAD] border-brand-brown text-brand-brown hover:bg-[#FCE690] shadow-comic active:translate-y-1 active:shadow-none'
-                  }`}
-                >
-                  {submittingQuiz ? '提交中...' : '提交測驗'}
-                </button>
-              </div>
+                        ? 'bg-yellow-400 border-yellow-600 text-yellow-800 cursor-wait'
+                        : 'bg-[#FDEEAD] border-brand-brown text-brand-brown hover:bg-[#FCE690] shadow-comic active:translate-y-1 active:shadow-none'
+                      }`}
+                  >
+                    {submittingQuiz ? '提交中...' : '提交測驗'}
+                  </button>
+                </div>
+              )}
 
               {/* 提示信息 */}
               {quizAnswers.includes(-1) && (
