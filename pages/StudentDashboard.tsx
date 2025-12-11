@@ -352,7 +352,7 @@ const StudentDashboard: React.FC = () => {
 
     const interval = setInterval(() => {
       loadDiscussions();
-    }, 5000); // 5秒刷新一次
+    }, 60000); // 1分鐘刷新一次
 
     return () => clearInterval(interval);
   }, [user]);

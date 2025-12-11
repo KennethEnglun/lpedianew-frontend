@@ -214,7 +214,7 @@ const TeacherDashboard: React.FC = () => {
       const reader = new FileReader();
       reader.readAsDataURL(file);
       reader.onload = (event) => {
-        const img = new Image();
+        const img = document.createElement('img');
         img.src = event.target?.result as string;
         img.onload = () => {
           const canvas = document.createElement('canvas');
@@ -1592,8 +1592,8 @@ const TeacherDashboard: React.FC = () => {
                 </Button>
                 <Button
                   className={`flex-1 border-brand-brown ${imageUploading
-                      ? 'bg-gray-400 text-white cursor-wait'
-                      : 'bg-[#FDEEAD] text-brand-brown hover:bg-[#FCE690]'
+                    ? 'bg-gray-400 text-white cursor-wait'
+                    : 'bg-[#FDEEAD] text-brand-brown hover:bg-[#FCE690]'
                     }`}
                   onClick={handleSubmitQuiz}
                   disabled={imageUploading}
