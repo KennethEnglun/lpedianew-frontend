@@ -190,21 +190,23 @@ const TeacherDashboard: React.FC = () => {
 
   // === 作業管理功能 ===
 
-  // 載入作業列表（包含小測驗）
+  // 載入作業列表（包含小測驗和遊戲）
   const loadAssignments = async () => {
     try {
       setLoading(true);
 
-      // 並行載入作業和小測驗
-      const [assignmentData, quizData] = await Promise.all([
+      // 並行載入作業、小測驗和遊戲
+      const [assignmentData, quizData, gameData] = await Promise.all([
         authService.getTeacherAssignments(filterSubject || undefined, filterClass || undefined),
-        authService.getTeacherQuizzes(filterSubject || undefined, filterClass || undefined)
+        authService.getTeacherQuizzes(filterSubject || undefined, filterClass || undefined),
+        authService.getTeacherGames(filterSubject || undefined, filterClass || undefined)
       ]);
 
-      // 合併作業和小測驗，標記類型
+      // 合併作業、小測驗和遊戲，標記類型
       let allAssignments = [
         ...(assignmentData.assignments || []).map((item: any) => ({ ...item, type: 'assignment' })),
-        ...(quizData.quizzes || []).map((item: any) => ({ ...item, type: 'quiz' }))
+        ...(quizData.quizzes || []).map((item: any) => ({ ...item, type: 'quiz' })),
+        ...(gameData.games || []).map((item: any) => ({ ...item, type: 'game' }))
       ];
 
       // 收集所有分組選項
@@ -1492,6 +1494,7 @@ const TeacherDashboard: React.FC = () => {
                       ) : assignments.length > 0 ? (
                         assignments.map(assignment => {
                           const isQuiz = assignment.type === 'quiz';
+                          const isGame = assignment.type === 'game';
                           const isSelected = selectedAssignments.includes(assignment.id);
                           return (
                             <div key={assignment.id} className={`bg-white border-4 rounded-3xl p-6 shadow-comic ${isSelected ? 'border-blue-500 bg-blue-50' : 'border-brand-brown'}`}>
@@ -1513,7 +1516,9 @@ const TeacherDashboard: React.FC = () => {
                                   )}
                                   <div className="flex-1">
                                     <div className="flex items-center gap-2 mb-2">
-                                      {isQuiz ? (
+                                      {isGame ? (
+                                        <span className="text-2xl">🎮</span>
+                                      ) : isQuiz ? (
                                         <HelpCircle className="w-5 h-5 text-yellow-600" />
                                       ) : (
                                         <MessageSquare className="w-5 h-5 text-purple-600" />
@@ -1521,8 +1526,8 @@ const TeacherDashboard: React.FC = () => {
                                       <h4 className="text-xl font-bold text-brand-brown">{assignment.title}</h4>
                                     </div>
                                     <div className="flex flex-wrap gap-4 text-sm text-gray-600 mb-3">
-                                      <span className={`px-2 py-1 rounded-lg ${isQuiz ? 'bg-yellow-100' : 'bg-purple-100'}`}>
-                                        {isQuiz ? '🧠' : '📚'} {assignment.subject}
+                                      <span className={`px-2 py-1 rounded-lg ${isGame ? 'bg-green-100' : isQuiz ? 'bg-yellow-100' : 'bg-purple-100'}`}>
+                                        {isGame ? '🎮' : isQuiz ? '🧠' : '📚'} {assignment.subject}
                                       </span>
                                       <span className="bg-green-100 px-2 py-1 rounded-lg">
                                         🏫 {(() => {
@@ -1534,13 +1539,13 @@ const TeacherDashboard: React.FC = () => {
                                           return '無指定班級';
                                         })()}
                                       </span>
-                                      <span className={`px-2 py-1 rounded-lg ${isQuiz ? 'bg-orange-100' : 'bg-yellow-100'}`}>
-                                        {isQuiz ? '📊' : '💬'} {isQuiz ? (assignment.totalSubmissions || 0) : (assignment.responseCount || 0)} 個{isQuiz ? '提交' : '回應'}
+                                      <span className={`px-2 py-1 rounded-lg ${isGame ? 'bg-blue-100' : isQuiz ? 'bg-orange-100' : 'bg-yellow-100'}`}>
+                                        {isGame ? '🏆' : isQuiz ? '📊' : '💬'} {isGame ? (assignment.totalAttempts || 0) : isQuiz ? (assignment.totalSubmissions || 0) : (assignment.responseCount || 0)} 個{isGame ? '遊玩記錄' : isQuiz ? '提交' : '回應'}
                                       </span>
                                       <span className="bg-purple-100 px-2 py-1 rounded-lg">
                                         👥 {assignment.uniqueStudents || 0} 位學生
                                       </span>
-                                      {isQuiz && assignment.averageScore !== undefined && (
+                                      {(isQuiz || isGame) && assignment.averageScore !== undefined && (
                                         <span className="bg-blue-100 px-2 py-1 rounded-lg">
                                           📈 平均分數: {Math.round(assignment.averageScore)}%
                                         </span>
@@ -2215,4 +2220,4 @@ const TeacherDashboard: React.FC = () => {
   );
 };
 
-export default TeacherDashboard;
+export default TeacherDashboard;                                                                                                                                                                                                                                                                                          

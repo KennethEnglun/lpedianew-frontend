@@ -133,7 +133,7 @@ const StudentDashboard: React.FC = () => {
     }
   };
 
-  // 載入學生的討論串和小測驗
+  // 載入學生的討論串、小測驗和遊戲
   const loadDiscussions = async (isManualRefresh = false) => {
     if (!user || user.role !== 'student') return;
 
@@ -144,10 +144,11 @@ const StudentDashboard: React.FC = () => {
         setLoading(true);
       }
 
-      // 並行載入討論串和小測驗
-      const [discussionResponse, quizResponse] = await Promise.all([
+      // 並行載入討論串、小測驗和遊戲
+      const [discussionResponse, quizResponse, gameResponse] = await Promise.all([
         authService.getStudentDiscussions(),
-        authService.getStudentQuizzes()
+        authService.getStudentQuizzes(),
+        authService.getStudentGames()
       ]);
 
       setDiscussions(discussionResponse.discussions || []);
@@ -174,8 +175,20 @@ const StudentDashboard: React.FC = () => {
         score: quiz.score || null
       }));
 
+      // 轉換遊戲為任務格式
+      const gameTasks: Task[] = (gameResponse.games || []).map((game: any) => ({
+        id: game.id,
+        title: game.title,
+        type: 'game' as const,
+        subject: game.subject,
+        teacherName: '系統',
+        teacherAvatar: '/teacher_login.png',
+        completed: game.completed || false,
+        score: game.bestScore || null
+      }));
+
       // 合併所有任務
-      const allTasks = [...discussionTasks, ...quizTasks];
+      const allTasks = [...discussionTasks, ...quizTasks, ...gameTasks];
       setTasks(allTasks);
       setLastRefresh(new Date());
 
@@ -495,6 +508,7 @@ const StudentDashboard: React.FC = () => {
                     case 'quiz': return <HelpCircle className="w-5 h-5 text-blue-600" />;
                     case 'ai-bot': return <Bot className="w-5 h-5 text-green-600" />;
                     case 'discussion': return <MessageSquare className="w-5 h-5 text-purple-600" />;
+                    case 'game': return <span className="text-xl">🎮</span>;
                     default: return null;
                   }
                 };
@@ -512,6 +526,12 @@ const StudentDashboard: React.FC = () => {
                       return task.score !== null ? `已完成 (${Math.round(task.score)}%)` : '已完成 ✓';
                     }
                     return '開始測驗';
+                  }
+                  if (task.type === 'game') {
+                    if (task.completed) {
+                      return task.score !== null ? `最佳分數: ${Math.round(task.score)}%` : '已遊玩 ✓';
+                    }
+                    return '開始遊戲';
                   }
                   switch (task.type) {
                     case 'ai-bot': return '開始對話';
@@ -532,6 +552,12 @@ const StudentDashboard: React.FC = () => {
                       return 'bg-[#93C47D] hover:bg-[#86b572]'; // 已完成：綠色
                     }
                     return 'bg-[#FDEEAD] hover:bg-[#FCE690]'; // 未完成：黃色
+                  }
+                  if (task.type === 'game') {
+                    if (task.completed) {
+                      return 'bg-[#93C47D] hover:bg-[#86b572]'; // 已遊玩：綠色
+                    }
+                    return 'bg-[#E8F5E9] hover:bg-[#C8E6C9]'; // 未遊玩：淺綠色
                   }
                   switch (task.type) {
                     case 'ai-bot': return 'bg-[#B5D8F8] hover:bg-[#A1CCF0]';

@@ -15,7 +15,7 @@ export enum Subject {
 export interface Task {
   id: string;
   title: string;
-  type: 'quiz' | 'ai-bot' | 'discussion';
+  type: 'quiz' | 'ai-bot' | 'discussion' | 'game';
   subject: Subject;
   teacherName: string;
   teacherAvatar: string;
