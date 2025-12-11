@@ -401,7 +401,7 @@ const StudentDashboard: React.FC = () => {
       <div className="flex-1 relative z-10 p-4 md:p-8 flex flex-col md:flex-row gap-6 max-w-7xl mx-auto w-full">
 
         {/* Sidebar Subject Selection */}
-        <aside className="w-full md:w-64 bg-brand-cream border-4 border-brand-brown rounded-3xl p-6 shadow-comic flex-shrink-0 flex flex-col">
+        <aside className="w-full md:w-64 bg-brand-cream border-4 border-brand-brown rounded-3xl p-6 shadow-comic flex-shrink-0 flex flex-col min-h-fit">
           {/* Avatar Group */}
           <div className="mb-4 relative h-24 flex justify-center">
             <img
