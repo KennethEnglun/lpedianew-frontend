@@ -33,6 +33,7 @@ const TeacherDashboard: React.FC = () => {
       question: string;
       options: string[];
       correctAnswer: number;
+      image?: string;
     }>,
     timeLimit: 0
   });
@@ -1156,6 +1157,15 @@ const TeacherDashboard: React.FC = () => {
                                   <p className="font-medium text-sm">
                                     <span className="text-brand-brown">Q{index + 1}:</span> {question.question}
                                   </p>
+                                  {question.image && (
+                                    <div className="mt-2 mb-2">
+                                      <img
+                                        src={question.image}
+                                        alt={`Q${index + 1}`}
+                                        className="max-h-40 rounded-lg border border-gray-300"
+                                      />
+                                    </div>
+                                  )}
                                   <p className="text-xs text-gray-600 mt-1">
                                     正確答案: {String.fromCharCode(65 + question.correctAnswer)} - {question.options[question.correctAnswer]}
                                   </p>
