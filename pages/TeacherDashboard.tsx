@@ -948,7 +948,14 @@ const TeacherDashboard: React.FC = () => {
                                     {isQuiz ? '🧠' : '📚'} {assignment.subject}
                                   </span>
                                   <span className="bg-green-100 px-2 py-1 rounded-lg">
-                                    🏫 {filterClass ? filterClass : assignment.targetClasses?.join(', ') || '無指定班級'}
+                                    🏫 {(() => {
+                                      const classes = Array.isArray(assignment.targetClasses) ? assignment.targetClasses.join(', ') : '';
+                                      const groups = Array.isArray(assignment.targetGroups) ? assignment.targetGroups.join(', ') : '';
+                                      if (classes && groups) return `${classes} (${groups})`;
+                                      if (classes) return classes;
+                                      if (groups) return `分組: ${groups}`;
+                                      return '無指定班級';
+                                    })()}
                                   </span>
                                   <span className={`px-2 py-1 rounded-lg ${isQuiz ? 'bg-orange-100' : 'bg-yellow-100'}`}>
                                     {isQuiz ? '📊' : '💬'} {isQuiz ? (assignment.totalSubmissions || 0) : (assignment.responseCount || 0)} 個{isQuiz ? '提交' : '回應'}
@@ -1015,7 +1022,14 @@ const TeacherDashboard: React.FC = () => {
                     <div className="flex flex-wrap gap-4 text-sm text-gray-600 mb-4">
                       <span className="bg-blue-100 px-2 py-1 rounded-lg">📚 {selectedAssignment.subject}</span>
                       <span className="bg-green-100 px-2 py-1 rounded-lg">
-                        🏫 {selectedAssignment.targetClasses?.join(', ') || '無指定班級'}
+                        🏫 {(() => {
+                          const classes = Array.isArray(selectedAssignment.targetClasses) ? selectedAssignment.targetClasses.join(', ') : '';
+                          const groups = Array.isArray(selectedAssignment.targetGroups) ? selectedAssignment.targetGroups.join(', ') : '';
+                          if (classes && groups) return `${classes} (${groups})`;
+                          if (classes) return classes;
+                          if (groups) return `分組: ${groups}`;
+                          return '無指定班級';
+                        })()}
                       </span>
                     </div>
                   </div>
@@ -1063,8 +1077,15 @@ const TeacherDashboard: React.FC = () => {
                             <span>{selectedAssignment.questions?.length || 0} 題</span>
                           </div>
                           <div>
-                            <span className="font-bold text-brand-brown">目標班級：</span>
-                            <span>{selectedAssignment.targetClasses?.join(', ') || '無指定'}</span>
+                            <span className="font-bold text-brand-brown">派發對象：</span>
+                            <span>{(() => {
+                              const classes = Array.isArray(selectedAssignment.targetClasses) ? selectedAssignment.targetClasses.join(', ') : '';
+                              const groups = Array.isArray(selectedAssignment.targetGroups) ? selectedAssignment.targetGroups.join(', ') : '';
+                              if (classes && groups) return `班級: ${classes}, 分組: ${groups}`;
+                              if (classes) return `班級: ${classes}`;
+                              if (groups) return `分組: ${groups}`;
+                              return '無指定班級';
+                            })()}</span>
                           </div>
                         </div>
 
