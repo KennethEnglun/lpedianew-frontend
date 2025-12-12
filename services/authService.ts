@@ -44,14 +44,28 @@ class AuthService {
     return userStr ? JSON.parse(userStr) : null;
   }
 
+  // 解碼 JWT payload（支援 base64url / 無 padding）
+  private decodeBase64Url(input: string): string {
+    const base64 = input.replace(/-/g, '+').replace(/_/g, '/');
+    const padding = (4 - (base64.length % 4)) % 4;
+    const padded = base64 + '='.repeat(padding);
+    return atob(padded);
+  }
+
   // 檢查是否已登入
   isAuthenticated(): boolean {
     const token = this.getToken();
     if (!token) return false;
 
     try {
-      // 檢查token是否過期
-      const payload = JSON.parse(atob(token.split('.')[1]));
+      const parts = token.split('.');
+      const payloadPart = parts.length >= 2 ? parts[1] : parts[0];
+      if (!payloadPart) return false;
+
+      const payloadJson = this.decodeBase64Url(payloadPart);
+      const payload = JSON.parse(payloadJson);
+
+      if (typeof payload.exp !== 'number') return false;
       return payload.exp * 1000 > Date.now();
     } catch {
       return false;

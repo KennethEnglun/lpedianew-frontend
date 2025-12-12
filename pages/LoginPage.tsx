@@ -21,7 +21,10 @@ const LoginPage: React.FC = () => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState('');
   const [showAdminModal, setShowAdminModal] = useState(false);
-  const [adminPassword, setAdminPassword] = useState('');
+  const [adminForm, setAdminForm] = useState({
+    username: 'admin',
+    password: ''
+  });
 
   // 如果已經登入，重定向到對應頁面
   useEffect(() => {
@@ -82,24 +85,24 @@ const LoginPage: React.FC = () => {
 
   const handleAdminAccess = () => {
     setShowAdminModal(true);
-    setAdminPassword('');
+    setAdminForm({ username: 'admin', password: '' });
     setError('');
   };
 
   const handleAdminLogin = async () => {
-    if (adminPassword !== 'Lpit512524') {
-      setError('管理員密碼錯誤');
+    if (!adminForm.username || !adminForm.password) {
+      setError('請輸入管理員帳號和密碼');
       return;
     }
 
     setIsSubmitting(true);
     setError('');
-    setShowAdminModal(false);
 
     try {
-      await login('admin', 'Lpit512524', 'admin');
+      await login(adminForm.username, adminForm.password, 'admin');
+      setShowAdminModal(false);
     } catch (error) {
-      setError('管理員登入失敗，請聯絡系統管理員');
+      setError(error instanceof Error ? error.message : '管理員登入失敗，請聯絡系統管理員');
     } finally {
       setIsSubmitting(false);
     }
@@ -245,12 +248,17 @@ const LoginPage: React.FC = () => {
             <h3 className="text-2xl font-bold text-brand-brown text-center mb-6">管理員驗證</h3>
             <div className="space-y-4">
               <Input
-                type="password"
-                placeholder="請輸入管理員密碼"
-                value={adminPassword}
-                onChange={(e) => setAdminPassword(e.target.value)}
-                onKeyPress={(e) => e.key === 'Enter' && handleAdminLogin()}
+                placeholder="管理員帳號"
+                value={adminForm.username}
+                onChange={(e) => setAdminForm(prev => ({ ...prev, username: e.target.value }))}
                 autoFocus
+              />
+              <Input
+                type="password"
+                placeholder="管理員密碼"
+                value={adminForm.password}
+                onChange={(e) => setAdminForm(prev => ({ ...prev, password: e.target.value }))}
+                onKeyPress={(e) => e.key === 'Enter' && handleAdminLogin()}
               />
               <div className="flex gap-3">
                 <Button
@@ -258,7 +266,7 @@ const LoginPage: React.FC = () => {
                   variant="secondary"
                   onClick={() => {
                     setShowAdminModal(false);
-                    setAdminPassword('');
+                    setAdminForm({ username: 'admin', password: '' });
                     setError('');
                   }}
                   disabled={isSubmitting}
@@ -268,7 +276,7 @@ const LoginPage: React.FC = () => {
                 <Button
                   fullWidth
                   onClick={handleAdminLogin}
-                  disabled={isSubmitting || !adminPassword}
+                  disabled={isSubmitting || !adminForm.password || !adminForm.username}
                 >
                   {isSubmitting ? '登入中...' : '確認'}
                 </Button>

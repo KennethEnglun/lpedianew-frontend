@@ -6,6 +6,7 @@ import Input from '../components/Input';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { authService } from '../services/authService';
+import { sanitizeHtml } from '../services/sanitizeHtml';
 import { Subject, Discussion } from '../types';
 
 const TeacherDashboard: React.FC = () => {
@@ -59,6 +60,7 @@ const TeacherDashboard: React.FC = () => {
   const [isEditingContent, setIsEditingContent] = useState(false);
   const [editedContent, setEditedContent] = useState('');
   const [viewingResultDetails, setViewingResultDetails] = useState<any>(null); // State for viewing specific student result details
+  const [allStudents, setAllStudents] = useState<any[]>([]); // Store all students for completion checking
 
   // 分組篩選狀態
   const [filterGroup, setFilterGroup] = useState('');
@@ -432,6 +434,13 @@ const TeacherDashboard: React.FC = () => {
     setShowAssignmentModal(true);
     await loadFilterOptions();
     await loadAssignments();
+    // Fetch all students for completion tracking
+    try {
+      const usersData = await authService.getUsers({ role: 'student', limit: 1000 });
+      setAllStudents(usersData.users || []);
+    } catch (err) {
+      console.error('Failed to load students list', err);
+    }
   };
 
   // 監聽篩選條件變化
@@ -588,8 +597,14 @@ const TeacherDashboard: React.FC = () => {
       return;
     }
 
+    const safeContent = sanitizeHtml(discussionForm.content);
+    if (!safeContent.trim()) {
+      alert('討論串內容無有效文字或圖片');
+      return;
+    }
+
     // 將HTML內容轉換為內容區塊格式
-    const contentBlocks: { type: 'html' | 'text' | 'image' | 'link'; value: string }[] = [{ type: 'html', value: discussionForm.content }];
+    const contentBlocks: { type: 'html' | 'text' | 'image' | 'link'; value: string }[] = [{ type: 'html', value: safeContent }];
 
     try {
       await authService.createDiscussion({
@@ -928,7 +943,7 @@ const TeacherDashboard: React.FC = () => {
                           value={q.wrongOptions?.join(', ') || ''}
                           onChange={(e) => {
                             const newQuestions = [...gameForm.questions];
-                            newQuestions[index].wrongOptions = e.target.value.split(',').map(s => s.trim()).filter(s => s);
+                            newQuestions[index].wrongOptions = e.target.value.split(','); // Allow raw input, clean up on save if needed
                             setGameForm(prev => ({ ...prev, questions: newQuestions }));
                           }}
                         />
@@ -1713,7 +1728,7 @@ const TeacherDashboard: React.FC = () => {
                             <div
                               contentEditable
                               onInput={(e) => setEditedContent(e.currentTarget.innerHTML)}
-                              dangerouslySetInnerHTML={{ __html: editedContent }}
+                              dangerouslySetInnerHTML={{ __html: sanitizeHtml(editedContent) }}
                               className="min-h-32 p-4 border-2 border-yellow-300 rounded-xl bg-white focus:outline-none focus:border-yellow-500"
                             />
                             <div className="flex gap-2">
@@ -1736,11 +1751,100 @@ const TeacherDashboard: React.FC = () => {
                           </div>
                         ) : (
                           <div className="bg-white p-4 rounded-xl border-2 border-yellow-300">
-                            <div dangerouslySetInnerHTML={{ __html: getDisplayContent(selectedAssignment.content) }} />
+                            <div dangerouslySetInnerHTML={{ __html: sanitizeHtml(getDisplayContent(selectedAssignment.content)) }} />
                           </div>
                         )
                       )}
                     </div>
+
+
+
+                    {/* Completion Analysis for Games & Quizzes */}
+                    {(selectedAssignment?.type === 'quiz' || selectedAssignment?.type === 'game') && (
+                      <div className="mb-8 p-6 bg-blue-50 border-4 border-blue-200 rounded-3xl">
+                        <h4 className="text-xl font-bold text-blue-800 mb-4">🏆 完成狀況分析</h4>
+                        {(() => {
+                          const targetClassList = selectedAssignment.targetClasses || [];
+                          const targetGroupList = selectedAssignment.targetGroups || [];
+
+                          // Convert targets to sets for easier lookup
+                          // Only filter by class if classes are specified. 
+                          // If targetGroups is present, check specific group field on user profile.
+
+                          const expectedStudents = allStudents.filter(student => {
+                            // If no targets, assume all students? Or none? Usually implies all or error. 
+                            // Safety: if both empty, maybe showing all is safer or showing none.
+                            if (targetClassList.length === 0 && targetGroupList.length === 0) return false;
+
+                            const inClass = targetClassList.length === 0 || targetClassList.includes(student.profile?.class || '');
+
+                            // Check groups
+                            // Student might have chineseGroup, mathGroup, englishGroup.
+                            // We need to know which subject this assignment is for to check the correct group.
+                            let inGroup = true;
+                            if (targetGroupList.length > 0) {
+                              const subject = selectedAssignment.subject;
+                              let studentGroup = '';
+                              if (subject === '中文') studentGroup = student.profile?.chineseGroup || '';
+                              else if (subject === '英文') studentGroup = student.profile?.englishGroup || '';
+                              else if (subject === '數學') studentGroup = student.profile?.mathGroup || '';
+                              else if (subject === '常識') studentGroup = student.profile?.gsGroup || ''; // Assuming generic or specific mapping
+
+                              inGroup = targetGroupList.includes(studentGroup);
+                            }
+
+                            return inClass && inGroup;
+                          });
+
+                          const completedStudentIds = new Set(assignmentResponses.map(r => r.studentId));
+                          const notCompletedStudents = expectedStudents.filter(s => !completedStudentIds.has(s.id));
+
+                          const bestScore = assignmentResponses.length > 0
+                            ? Math.max(...assignmentResponses.map(r => r.score || 0))
+                            : 0;
+
+                          const avgScore = assignmentResponses.length > 0
+                            ? (assignmentResponses.reduce((acc, curr) => acc + (curr.score || 0), 0) / assignmentResponses.length).toFixed(1)
+                            : 0;
+
+                          return (
+                            <div>
+                              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+                                <div className="bg-white p-4 rounded-xl shadow-sm text-center">
+                                  <p className="text-gray-500 text-sm font-bold">應完成人數</p>
+                                  <p className="text-2xl font-black text-gray-700">{expectedStudents.length}</p>
+                                </div>
+                                <div className="bg-white p-4 rounded-xl shadow-sm text-center">
+                                  <p className="text-gray-500 text-sm font-bold">已完成</p>
+                                  <p className="text-2xl font-black text-green-600">{assignmentResponses.length}</p>
+                                </div>
+                                <div className="bg-white p-4 rounded-xl shadow-sm text-center">
+                                  <p className="text-gray-500 text-sm font-bold">未完成</p>
+                                  <p className="text-2xl font-black text-red-500">{notCompletedStudents.length}</p>
+                                </div>
+                                <div className="bg-white p-4 rounded-xl shadow-sm text-center">
+                                  <p className="text-gray-500 text-sm font-bold">最高分 / 平均</p>
+                                  <p className="text-xl font-black text-blue-600">{Math.round(bestScore)} / {avgScore}</p>
+                                </div>
+                              </div>
+
+                              {notCompletedStudents.length > 0 && (
+                                <div className="bg-white p-4 rounded-xl border-2 border-red-100">
+                                  <h5 className="font-bold text-red-600 mb-2">⚠️ 未完成名單</h5>
+                                  <div className="flex flex-wrap gap-2">
+                                    {notCompletedStudents.map(s => (
+                                      <span key={s.id} className="px-3 py-1 bg-red-50 text-red-700 rounded-lg text-sm border border-red-100">
+                                        {s.profile?.name} ({s.profile?.class})
+                                      </span>
+                                    ))}
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })()}
+                      </div>
+                    )}
 
                     {/* 學生回應或測驗結果列表 */}
                     <div className="space-y-4">
@@ -1784,7 +1888,7 @@ const TeacherDashboard: React.FC = () => {
                                   )}
                                 </div>
 
-                                {selectedAssignment?.type === 'quiz' ? (
+                                {selectedAssignment?.type === 'quiz' || selectedAssignment?.type === 'game' ? (
                                   <>
                                     <div className="bg-white p-3 rounded-xl border border-gray-200">
                                       <div className="grid grid-cols-2 gap-4 text-sm">
@@ -1792,6 +1896,13 @@ const TeacherDashboard: React.FC = () => {
                                           <span className="font-medium text-gray-600">得分:</span>
                                           <span className="ml-2 font-bold">{Math.round(response.score)}%</span>
                                         </div>
+                                        {/* For games, check if attempts data is available, otherwise show standard stats */}
+                                        {selectedAssignment?.type === 'game' && response.attempts && (
+                                          <div>
+                                            <span className="font-medium text-gray-600">遊玩次數:</span>
+                                            <span className="ml-2">{response.attempts}</span>
+                                          </div>
+                                        )}
                                         <div>
                                           <span className="font-medium text-gray-600">正確答案:</span>
                                           <span className="ml-2">{response.correctAnswers}/{response.totalQuestions}</span>
@@ -1802,7 +1913,7 @@ const TeacherDashboard: React.FC = () => {
                                         </div>
                                         <div>
                                           <span className="font-medium text-gray-600">提交時間:</span>
-                                          <span className="ml-2">{new Date(response.submittedAt).toLocaleString()}</span>
+                                          <span className="ml-2">{new Date(response.submittedAt || response.playedAt || Date.now()).toLocaleString()}</span>
                                         </div>
                                       </div>
                                     </div>
@@ -1812,13 +1923,13 @@ const TeacherDashboard: React.FC = () => {
                                         className="px-4 py-2 bg-yellow-100 text-yellow-800 rounded-lg hover:bg-yellow-200 text-sm font-bold flex items-center gap-2"
                                       >
                                         <Eye className="w-4 h-4" />
-                                        查看答題詳情
+                                        查看詳情
                                       </button>
                                     </div>
                                   </>
                                 ) : (
                                   <div className="bg-white p-3 rounded-xl border border-gray-200">
-                                    <div dangerouslySetInnerHTML={{ __html: response.content || response.message || '無內容' }} />
+                                    <div dangerouslySetInnerHTML={{ __html: sanitizeHtml(response.content || response.message || '無內容') }} />
                                   </div>
                                 )}
 
@@ -1848,7 +1959,7 @@ const TeacherDashboard: React.FC = () => {
                 )}
               </div>
             </div>
-          </div>
+          </div >
         )
       }
 

@@ -4,6 +4,7 @@ import { Subject, SUBJECT_CONFIG, Task } from '../types';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { authService } from '../services/authService';
+import { sanitizeHtml } from '../services/sanitizeHtml';
 import { MazeGame } from '../components/MazeGame';
 
 interface Discussion {
@@ -287,7 +288,8 @@ const StudentDashboard: React.FC = () => {
     try {
       setSubmittingResponse(true);
 
-      const result = await authService.submitStudentResponse(selectedDiscussion.id, responseContent);
+      const safeContent = sanitizeHtml(responseContent);
+      const result = await authService.submitStudentResponse(selectedDiscussion.id, safeContent);
 
       alert('回應提交成功！');
       setResponseContent('');
@@ -323,14 +325,16 @@ const StudentDashboard: React.FC = () => {
   };
 
   // 載入學生的討論串、小測驗和遊戲
-  const loadDiscussions = async (isManualRefresh = false) => {
+  const loadDiscussions = async (isManualRefresh = false, isBackgroundRefresh = false) => {
     if (!user || user.role !== 'student') return;
 
     try {
-      if (isManualRefresh) {
-        setRefreshing(true);
-      } else {
-        setLoading(true);
+      if (!isBackgroundRefresh) {
+        if (isManualRefresh) {
+          setRefreshing(true);
+        } else {
+          setLoading(true);
+        }
       }
 
       // 並行載入討論串、小測驗和遊戲
@@ -390,8 +394,10 @@ const StudentDashboard: React.FC = () => {
       console.error('載入任務失敗:', error);
       setTasks([]);
     } finally {
-      setLoading(false);
-      setRefreshing(false);
+      if (!isBackgroundRefresh) {
+        setLoading(false);
+        setRefreshing(false);
+      }
     }
   };
 
@@ -637,7 +643,7 @@ const StudentDashboard: React.FC = () => {
         {block.type === 'html' && (
           <div
             className="p-3 bg-gray-50 border-2 border-gray-200 rounded-xl"
-            dangerouslySetInnerHTML={{ __html: block.value }}
+            dangerouslySetInnerHTML={{ __html: sanitizeHtml(block.value) }}
           />
         )}
       </div>
@@ -654,7 +660,7 @@ const StudentDashboard: React.FC = () => {
     if (!user || user.role !== 'student') return;
 
     const interval = setInterval(() => {
-      loadDiscussions();
+      loadDiscussions(false, true);
     }, 60000); // 1分鐘刷新一次
 
     return () => clearInterval(interval);
@@ -969,7 +975,7 @@ const StudentDashboard: React.FC = () => {
                           </div>
                           <div
                             className="bg-white border border-gray-200 rounded-lg p-4 min-h-16"
-                            dangerouslySetInnerHTML={{ __html: response.content || '載入中...' }}
+                            dangerouslySetInnerHTML={{ __html: sanitizeHtml(response.content || '載入中...') }}
                           />
                         </div>
                       );
