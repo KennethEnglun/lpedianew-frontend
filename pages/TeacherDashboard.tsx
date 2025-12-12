@@ -1162,6 +1162,129 @@ const TeacherDashboard: React.FC = () => {
 	                </div>
 	      )}
 
+	              <div>
+	                <label className="block text-sm font-bold text-blue-800 mb-2">配對內容（左邊配右邊）</label>
+	                <p className="text-xs text-gray-500 mb-2">
+	                  依難度需要配對數：{gameForm.difficulty === 'easy' ? '4對' : gameForm.difficulty === 'medium' ? '6對' : '8對'}（多於需求的配對會自動忽略）
+	                </p>
+	                <div className="space-y-4">
+	                  {gameForm.questions.map((q, index) => (
+	                    <div key={index} className="bg-white p-4 rounded-xl border-2 border-blue-200 flex items-center gap-4">
+	                      <span className="font-bold text-blue-700 w-8">{index + 1}.</span>
+                      <Input
+                        placeholder="詞彙/問題..."
+                        value={q.question}
+                        onChange={(e) => {
+                          const newQuestions = [...gameForm.questions];
+                          newQuestions[index].question = e.target.value;
+                          setGameForm(prev => ({ ...prev, questions: newQuestions }));
+                        }}
+                      />
+                      <span className="text-2xl">↔</span>
+                      <Input
+                        placeholder="解釋/答案..."
+                        value={q.answer}
+                        onChange={(e) => {
+                          const newQuestions = [...gameForm.questions];
+                          newQuestions[index].answer = e.target.value;
+                          setGameForm(prev => ({ ...prev, questions: newQuestions }));
+                        }}
+                      />
+                      <button
+                        onClick={() => setGameForm(prev => ({
+                          ...prev,
+                          questions: prev.questions.filter((_, i) => i !== index)
+                        }))}
+                        className="text-red-500 hover:text-red-700 p-2"
+                      >
+                        <Trash className="w-5 h-5" />
+                      </button>
+                    </div>
+                  ))}
+                  <button
+                    onClick={() => setGameForm(prev => ({
+                      ...prev,
+                      questions: [...prev.questions, { question: '', answer: '' }]
+                    }))}
+                    className="w-full py-3 border-4 border-dashed border-blue-300 rounded-2xl text-blue-600 font-bold hover:bg-blue-50"
+                  >
+                    + 新增配對
+                  </button>
+                </div>
+              </div>
+
+              <div className="flex gap-4 pt-4 border-t-4 border-blue-200">
+                <button
+                  onClick={() => { setGameType(null); }}
+                  className="flex-1 py-3 rounded-2xl border-4 border-gray-300 text-gray-600 font-bold hover:bg-gray-100"
+                >
+                  返回
+                </button>
+	                <button
+	                  onClick={() => {
+	                    (async () => {
+	                      try {
+	                        if (!gameForm.title.trim()) {
+	                          alert('請輸入遊戲標題');
+	                          return;
+	                        }
+
+	                        if (gameForm.targetClasses.length === 0 && gameForm.targetGroups.length === 0) {
+	                          alert('請選擇至少一個班級或分組');
+	                          return;
+	                        }
+
+	                        const requiredPairs = gameForm.difficulty === 'easy' ? 4 : gameForm.difficulty === 'medium' ? 6 : 8;
+	                        const cleanedPairs = gameForm.questions
+	                          .map(q => ({
+	                            question: q.question.trim(),
+	                            answer: q.answer.trim()
+	                          }))
+	                          .filter(q => q.question && q.answer);
+
+	                        if (cleanedPairs.length < requiredPairs) {
+	                          alert(`請至少輸入 ${requiredPairs} 對配對內容`);
+	                          return;
+	                        }
+
+	                        await authService.createGame({
+	                          title: gameForm.title.trim(),
+	                          description: gameForm.description,
+	                          gameType: 'matching',
+	                          subject: gameForm.subject,
+	                          targetClasses: gameForm.targetClasses,
+	                          targetGroups: gameForm.targetGroups,
+	                          questions: cleanedPairs.slice(0, requiredPairs),
+	                          difficulty: gameForm.difficulty
+	                        });
+
+	                        alert('翻牌記憶遊戲創建成功！');
+	                        setShowGameModal(false);
+	                        setGameType(null);
+	                        setGameForm({
+	                          title: '',
+	                          description: '',
+	                          subject: Subject.CHINESE,
+	                          targetClasses: [],
+	                          targetGroups: [],
+	                          questions: [],
+	                          difficulty: 'medium'
+	                        });
+	                      } catch (error) {
+	                        alert('創建遊戲失敗：' + (error instanceof Error ? error.message : '未知錯誤'));
+	                      }
+	                    })();
+	                  }}
+	                  className="flex-1 py-3 rounded-2xl border-4 border-blue-500 bg-blue-500 text-white font-bold hover:bg-blue-600"
+	                >
+	                  創建遊戲
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+	      )}
+
 	      {/* Tower Defense Game Creation Modal */}
 	      {showGameModal && gameType === 'tower-defense' && (
 	        <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
@@ -1416,132 +1539,9 @@ const TeacherDashboard: React.FC = () => {
 	        </div>
 	      )}
 
-	              <div>
-	                <label className="block text-sm font-bold text-blue-800 mb-2">配對內容（左邊配右邊）</label>
-	                <p className="text-xs text-gray-500 mb-2">
-	                  依難度需要配對數：{gameForm.difficulty === 'easy' ? '4對' : gameForm.difficulty === 'medium' ? '6對' : '8對'}（多於需求的配對會自動忽略）
-	                </p>
-	                <div className="space-y-4">
-	                  {gameForm.questions.map((q, index) => (
-	                    <div key={index} className="bg-white p-4 rounded-xl border-2 border-blue-200 flex items-center gap-4">
-	                      <span className="font-bold text-blue-700 w-8">{index + 1}.</span>
-                      <Input
-                        placeholder="詞彙/問題..."
-                        value={q.question}
-                        onChange={(e) => {
-                          const newQuestions = [...gameForm.questions];
-                          newQuestions[index].question = e.target.value;
-                          setGameForm(prev => ({ ...prev, questions: newQuestions }));
-                        }}
-                      />
-                      <span className="text-2xl">↔</span>
-                      <Input
-                        placeholder="解釋/答案..."
-                        value={q.answer}
-                        onChange={(e) => {
-                          const newQuestions = [...gameForm.questions];
-                          newQuestions[index].answer = e.target.value;
-                          setGameForm(prev => ({ ...prev, questions: newQuestions }));
-                        }}
-                      />
-                      <button
-                        onClick={() => setGameForm(prev => ({
-                          ...prev,
-                          questions: prev.questions.filter((_, i) => i !== index)
-                        }))}
-                        className="text-red-500 hover:text-red-700 p-2"
-                      >
-                        <Trash className="w-5 h-5" />
-                      </button>
-                    </div>
-                  ))}
-                  <button
-                    onClick={() => setGameForm(prev => ({
-                      ...prev,
-                      questions: [...prev.questions, { question: '', answer: '' }]
-                    }))}
-                    className="w-full py-3 border-4 border-dashed border-blue-300 rounded-2xl text-blue-600 font-bold hover:bg-blue-50"
-                  >
-                    + 新增配對
-                  </button>
-                </div>
-              </div>
-
-              <div className="flex gap-4 pt-4 border-t-4 border-blue-200">
-                <button
-                  onClick={() => { setGameType(null); }}
-                  className="flex-1 py-3 rounded-2xl border-4 border-gray-300 text-gray-600 font-bold hover:bg-gray-100"
-                >
-                  返回
-                </button>
-	                <button
-	                  onClick={() => {
-	                    (async () => {
-	                      try {
-	                        if (!gameForm.title.trim()) {
-	                          alert('請輸入遊戲標題');
-	                          return;
-	                        }
-
-	                        if (gameForm.targetClasses.length === 0 && gameForm.targetGroups.length === 0) {
-	                          alert('請選擇至少一個班級或分組');
-	                          return;
-	                        }
-
-	                        const requiredPairs = gameForm.difficulty === 'easy' ? 4 : gameForm.difficulty === 'medium' ? 6 : 8;
-	                        const cleanedPairs = gameForm.questions
-	                          .map(q => ({
-	                            question: q.question.trim(),
-	                            answer: q.answer.trim()
-	                          }))
-	                          .filter(q => q.question && q.answer);
-
-	                        if (cleanedPairs.length < requiredPairs) {
-	                          alert(`請至少輸入 ${requiredPairs} 對配對內容`);
-	                          return;
-	                        }
-
-	                        await authService.createGame({
-	                          title: gameForm.title.trim(),
-	                          description: gameForm.description,
-	                          gameType: 'matching',
-	                          subject: gameForm.subject,
-	                          targetClasses: gameForm.targetClasses,
-	                          targetGroups: gameForm.targetGroups,
-	                          questions: cleanedPairs.slice(0, requiredPairs),
-	                          difficulty: gameForm.difficulty
-	                        });
-
-	                        alert('翻牌記憶遊戲創建成功！');
-	                        setShowGameModal(false);
-	                        setGameType(null);
-	                        setGameForm({
-	                          title: '',
-	                          description: '',
-	                          subject: Subject.CHINESE,
-	                          targetClasses: [],
-	                          targetGroups: [],
-	                          questions: [],
-	                          difficulty: 'medium'
-	                        });
-	                      } catch (error) {
-	                        alert('創建遊戲失敗：' + (error instanceof Error ? error.message : '未知錯誤'));
-	                      }
-	                    })();
-	                  }}
-	                  className="flex-1 py-3 rounded-2xl border-4 border-blue-500 bg-blue-500 text-white font-bold hover:bg-blue-600"
-	                >
-	                  創建遊戲
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Discussion Creation Modal */}
-      {
-        showDiscussionModal && (
+	      {/* Discussion Creation Modal */}
+	      {
+	        showDiscussionModal && (
           <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
             <div className="bg-white border-4 border-brand-brown rounded-3xl w-full max-w-4xl max-h-[90vh] overflow-y-auto shadow-comic">
               <div className="p-6 border-b-4 border-brand-brown bg-[#F8C5C5]">
