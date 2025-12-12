@@ -6,6 +6,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { authService } from '../services/authService';
 import { sanitizeHtml } from '../services/sanitizeHtml';
 import { MazeGame } from '../components/MazeGame';
+import TowerDefenseGame from '../components/TowerDefenseGame';
 
 interface Discussion {
   id: string;
@@ -137,7 +138,7 @@ const StudentDashboard: React.FC = () => {
   // 遊戲相關狀態
   const [showGameModal, setShowGameModal] = useState(false);
   const [selectedGame, setSelectedGame] = useState<any>(null);
-  const [gameStatus, setGameStatus] = useState<'playing' | 'completed'>('playing');
+  const [gameStatus, setGameStatus] = useState<'playing' | 'completed' | 'lost'>('playing');
   const [gameScore, setGameScore] = useState(0);
   const [gameStartTime, setGameStartTime] = useState<Date | null>(null);
   const [gameCurrentQuestionIndex, setGameCurrentQuestionIndex] = useState(0);
@@ -784,38 +785,45 @@ const StudentDashboard: React.FC = () => {
   };
 
   // 遊戲完成處理
-  const handleGameComplete = async (success: boolean) => {
-    setGameStatus('completed');
+  const handleGameComplete = async (
+    success: boolean,
+    override?: {
+      score: number;
+      correctAnswers: number;
+      totalQuestions: number;
+      timeSpent: number;
+    }
+  ) => {
+    setGameStatus(success ? 'completed' : 'lost');
 
-    if (success) {
-      try {
-        setSubmittingGame(true);
-        const timeSpent = gameStartTime ? Math.round((Date.now() - gameStartTime.getTime()) / 1000) : 0;
-        const totalQuestions = selectedGame.questions.length;
+    try {
+      setSubmittingGame(true);
+      const timeSpent = override?.timeSpent ?? (gameStartTime ? Math.round((Date.now() - gameStartTime.getTime()) / 1000) : 0);
+      const totalQuestions = override?.totalQuestions ?? (selectedGame?.questions?.length || 0);
+      const correctAnswers = override?.correctAnswers ?? (success ? totalQuestions : 0);
+      const score = override?.score ?? (success ? 100 : Math.max(0, Math.round(gameScore)));
 
-        // 計算分數 (簡單邏輯：根據完成)
-        const score = 100;
+      await authService.submitGameScore(selectedGame.id, {
+        score,
+        correctAnswers,
+        totalQuestions,
+        timeSpent
+      });
 
-        await authService.submitGameScore(selectedGame.id, {
-          score,
-          correctAnswers: totalQuestions,
-          totalQuestions,
-          timeSpent
-        });
-
+      if (success) {
         alert(`恭喜！遊戲通關！\n耗時：${timeSpent}秒`);
-
-        // 延遲關閉
-        setTimeout(() => {
-          setShowGameModal(false);
-          loadDiscussions(); // 刷新列表
-        }, 2000);
-
-      } catch (error) {
-        console.error('提交成績失敗:', error);
-      } finally {
-        setSubmittingGame(false);
+      } else {
+        alert(`遊戲結束！\n分數：${score}\n耗時：${timeSpent}秒`);
       }
+
+      setTimeout(() => {
+        setShowGameModal(false);
+        loadDiscussions();
+      }, 2000);
+    } catch (error) {
+      console.error('提交成績失敗:', error);
+    } finally {
+      setSubmittingGame(false);
     }
   };
 
@@ -1318,9 +1326,13 @@ const StudentDashboard: React.FC = () => {
             <div className="bg-[#1A1A1A] p-4 flex justify-between items-center border-b-2 border-[#4A4A4A]">
               <div>
                 <h2 className="text-2xl font-black text-white tracking-widest">{selectedGame.title}</h2>
-                <p className="text-gray-400 text-sm">
-                  {selectedGame.gameType === 'matching' ? '記憶配對' : '知識迷宮'} • {selectedGame.subject}
-                </p>
+	                <p className="text-gray-400 text-sm">
+	                  {selectedGame.gameType === 'matching'
+	                    ? '記憶配對'
+	                    : selectedGame.gameType === 'maze'
+	                      ? '知識迷宮'
+	                      : '答題塔防'} • {selectedGame.subject}
+	                </p>
               </div>
               <div className="flex items-center gap-4">
                 {gameStartTime && (
@@ -1459,11 +1471,30 @@ const StudentDashboard: React.FC = () => {
 	                    ))}
 	                  </div>
 	                </div>
-              )}
+	              )}
 
-              {/* Maze / Quiz Game Layout - New 3D Implementation */}
-              {selectedGame.gameType === 'maze' && (
-                <MazeGame
+	              {/* Tower Defense Game Layout */}
+	              {selectedGame.gameType === 'tower-defense' && (
+	                <TowerDefenseGame
+	                  questions={selectedGame.questions || []}
+	                  subject={selectedGame.subject as Subject}
+	                  difficulty={(selectedGame.difficulty || 'medium') as any}
+	                  onExit={() => setShowGameModal(false)}
+	                  onComplete={(result) => {
+	                    setGameScore(result.score);
+	                    handleGameComplete(result.success, {
+	                      score: result.score,
+	                      correctAnswers: result.correctAnswers,
+	                      totalQuestions: result.totalQuestions,
+	                      timeSpent: result.timeSpent
+	                    });
+	                  }}
+	                />
+	              )}
+
+	              {/* Maze / Quiz Game Layout - New 3D Implementation */}
+	              {selectedGame.gameType === 'maze' && (
+	                <MazeGame
                   questions={selectedGame.questions.map((q: any, i: number) => {
                     const allOptions = [q.answer, ...(q.wrongOptions || [])];
                     const shuffledOptions = [...allOptions].sort(() => Math.random() - 0.5);
@@ -1484,21 +1515,29 @@ const StudentDashboard: React.FC = () => {
               )}
             </div>
 
-            {/* Game Status Footer */}
-            {
-              gameStatus === 'completed' && (
-                <div className="absolute inset-0 bg-black bg-opacity-90 flex flex-col items-center justify-center p-8 z-50">
-                  <h1 className="text-6xl font-black text-[#A1D9AE] mb-4 animate-bounce">VICTORY!</h1>
-                  <p className="text-2xl text-white mb-8">恭喜完成所有挑戰！</p>
-                  <button
-                    onClick={() => setShowGameModal(false)}
-                    className="px-8 py-3 bg-[#A1D9AE] text-brand-brown font-bold text-xl rounded-full hover:bg-white transition-colors"
-                  >
-                    返回任務列表
-                  </button>
-                </div>
-              )
-            }
+	            {/* Game Status Footer */}
+	            {gameStatus !== 'playing' && (
+	              <div className="absolute inset-0 bg-black bg-opacity-90 flex flex-col items-center justify-center p-8 z-50">
+	                {gameStatus === 'completed' ? (
+	                  <>
+	                    <h1 className="text-6xl font-black text-[#A1D9AE] mb-4 animate-bounce">VICTORY!</h1>
+	                    <p className="text-2xl text-white mb-8">恭喜完成所有挑戰！</p>
+	                  </>
+	                ) : (
+	                  <>
+	                    <h1 className="text-6xl font-black text-red-300 mb-4 animate-pulse">GAME OVER</h1>
+	                    <p className="text-2xl text-white mb-2">基地被突破了！</p>
+	                    <p className="text-lg text-gray-300 mb-8">努力再試一次吧。</p>
+	                  </>
+	                )}
+	                <button
+	                  onClick={() => setShowGameModal(false)}
+	                  className="px-8 py-3 bg-[#A1D9AE] text-brand-brown font-bold text-xl rounded-full hover:bg-white transition-colors"
+	                >
+	                  返回任務列表
+	                </button>
+	              </div>
+	            )}
 
           </div >
         </div >

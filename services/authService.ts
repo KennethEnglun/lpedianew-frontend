@@ -501,7 +501,7 @@ class AuthService {
   async createGame(gameData: {
     title: string;
     description?: string;
-    gameType: 'maze' | 'matching';
+    gameType: 'maze' | 'matching' | 'tower-defense';
     subject: string;
     targetClasses: string[];
     targetGroups?: string[];
