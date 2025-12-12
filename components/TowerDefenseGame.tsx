@@ -173,10 +173,6 @@ export const TowerDefenseGame: React.FC<Props> = ({ questions, subject, difficul
     ];
   }, []);
 
-  const pathScreenPoints = useMemo(() => {
-    return PATH_CELLS.map(cell => isoToScreen(cell.x, cell.y));
-  }, []);
-
   function isoToScreen(gridX: number, gridY: number) {
     const canvas = canvasRef.current;
     const width = canvas?.width ? canvas.width / (window.devicePixelRatio || 1) : 900;
@@ -256,8 +252,10 @@ export const TowerDefenseGame: React.FC<Props> = ({ questions, subject, difficul
     const nextIndex = Math.min(baseIndex + 1, maxIndex);
     const t = clampedIndex - baseIndex;
 
-    const p0 = pathScreenPoints[baseIndex];
-    const p1 = pathScreenPoints[nextIndex];
+    const cell0 = PATH_CELLS[baseIndex];
+    const cell1 = PATH_CELLS[nextIndex];
+    const p0 = isoToScreen(cell0.x, cell0.y);
+    const p1 = isoToScreen(cell1.x, cell1.y);
     const x = p0.x + (p1.x - p0.x) * t;
     const y = p0.y + (p1.y - p0.y) * t;
     return { x, y };
@@ -413,34 +411,38 @@ export const TowerDefenseGame: React.FC<Props> = ({ questions, subject, difficul
       movedEnemies.push({ ...enemy, pathIndex: nextIndex });
     }
 
-    setProjectiles(() => {
-      const updatedProjectiles: Projectile[] = [];
-      for (const projectile of projectilesSnapshot) {
-        const newX = projectile.x + projectile.vx * deltaSeconds;
-        const newY = projectile.y + projectile.vy * deltaSeconds;
-        const newLife = projectile.life - deltaSeconds;
-        if (newLife <= 0) continue;
+    if (projectilesSnapshot.length > 0) {
+      setProjectiles(() => {
+        const updatedProjectiles: Projectile[] = [];
+        for (const projectile of projectilesSnapshot) {
+          const newX = projectile.x + projectile.vx * deltaSeconds;
+          const newY = projectile.y + projectile.vy * deltaSeconds;
+          const newLife = projectile.life - deltaSeconds;
+          if (newLife <= 0) continue;
 
-        updatedProjectiles.push({ ...projectile, x: newX, y: newY, life: newLife });
-      }
-      return updatedProjectiles;
-    });
+          updatedProjectiles.push({ ...projectile, x: newX, y: newY, life: newLife });
+        }
+        return updatedProjectiles;
+      });
+    }
 
-    setParticles(() => {
-      const updatedParticles: Particle[] = [];
-      for (const particle of particlesSnapshot) {
-        const newLife = particle.life - deltaSeconds * 1.4;
-        if (newLife <= 0) continue;
-        updatedParticles.push({
-          ...particle,
-          x: particle.x + particle.vx * deltaSeconds * 60,
-          y: particle.y + particle.vy * deltaSeconds * 60,
-          vy: particle.vy + 0.03 * deltaSeconds * 60,
-          life: newLife
-        });
-      }
-      return updatedParticles;
-    });
+    if (particlesSnapshot.length > 0) {
+      setParticles(() => {
+        const updatedParticles: Particle[] = [];
+        for (const particle of particlesSnapshot) {
+          const newLife = particle.life - deltaSeconds * 1.4;
+          if (newLife <= 0) continue;
+          updatedParticles.push({
+            ...particle,
+            x: particle.x + particle.vx * deltaSeconds * 60,
+            y: particle.y + particle.vy * deltaSeconds * 60,
+            vy: particle.vy + 0.03 * deltaSeconds * 60,
+            life: newLife
+          });
+        }
+        return updatedParticles;
+      });
+    }
 
     if (movedEnemies.length > 0) {
       const towersToUpdate = towersSnapshot.map(t => ({ ...t }));
@@ -494,7 +496,9 @@ export const TowerDefenseGame: React.FC<Props> = ({ questions, subject, difficul
       setProjectiles(remainingProjectiles);
     }
 
-    setEnemies(finalEnemies);
+    if (enemiesSnapshot.length > 0 || finalEnemies.length > 0) {
+      setEnemies(finalEnemies);
+    }
 
     if (finalEnemies.length === 0 && enemiesSnapshot.length > 0) {
       setWave(w => {
