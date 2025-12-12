@@ -429,24 +429,30 @@ const TeacherDashboard: React.FC = () => {
     }
   };
 
-  // 開啟作業管理模態框
-  const openAssignmentManagement = async () => {
-    setShowAssignmentModal(true);
-    await loadFilterOptions();
-    await loadAssignments();
+	  // 開啟作業管理模態框
+	  const openAssignmentManagement = async () => {
+	    setShowAssignmentModal(true);
+	    await loadFilterOptions();
+	    await loadAssignments();
     // Fetch all students for completion tracking
     try {
       const usersData = await authService.getUsers({ role: 'student', limit: 1000 });
       setAllStudents(usersData.users || []);
     } catch (err) {
       console.error('Failed to load students list', err);
-    }
-  };
+	    }
+	  };
 
-  // 監聽篩選條件變化
-  useEffect(() => {
-    if (showAssignmentModal) {
-      loadAssignments();
+	  // 開啟小遊戲建立入口（確保每次從選單開始）
+	  const openGameCreator = () => {
+	    setGameType(null);
+	    setShowGameModal(true);
+	  };
+
+	  // 監聽篩選條件變化
+	  useEffect(() => {
+	    if (showAssignmentModal) {
+	      loadAssignments();
     }
   }, [filterSubject, filterClass, filterGroup, showAssignmentModal]);
 
@@ -712,13 +718,13 @@ const TeacherDashboard: React.FC = () => {
           <Button fullWidth className="bg-[#C0E2BE] hover:bg-[#A9D8A7] text-lg" onClick={openAssignmentManagement}>
             作業管理
           </Button>
-          <Button
-            fullWidth
-            className="bg-[#E8F5E9] hover:bg-[#C8E6C9] text-lg flex items-center justify-center gap-2"
-            onClick={() => setShowGameModal(true)}
-          >
-            🎮 創建小遊戲
-          </Button>
+	          <Button
+	            fullWidth
+	            className="bg-[#E8F5E9] hover:bg-[#C8E6C9] text-lg flex items-center justify-center gap-2"
+	            onClick={openGameCreator}
+	          >
+	            🎮 創建小遊戲
+	          </Button>
           <Button fullWidth className="bg-[#E0D2F8] hover:bg-[#D0BCF5] text-lg">學生進度</Button>
           <Button fullWidth className="bg-[#FAD5BE] hover:bg-[#F8C4A6] text-lg">更多功能</Button>
         </nav>
@@ -742,12 +748,12 @@ const TeacherDashboard: React.FC = () => {
             <div className="bg-white border-4 border-brand-brown rounded-3xl w-full max-w-2xl shadow-comic">
               <div className="p-6 border-b-4 border-brand-brown bg-[#E8F5E9]">
                 <div className="flex justify-between items-center">
-                  <h2 className="text-3xl font-black text-brand-brown">創建小遊戲</h2>
-                  <button
-                    onClick={() => setShowGameModal(false)}
-                    className="w-10 h-10 rounded-full bg-white border-2 border-brand-brown hover:bg-gray-100 flex items-center justify-center"
-                  >
-                    <X className="w-6 h-6 text-brand-brown" />
+	                  <h2 className="text-3xl font-black text-brand-brown">創建小遊戲</h2>
+	                  <button
+	                    onClick={() => { setShowGameModal(false); setGameType(null); }}
+	                    className="w-10 h-10 rounded-full bg-white border-2 border-brand-brown hover:bg-gray-100 flex items-center justify-center"
+	                  >
+	                    <X className="w-6 h-6 text-brand-brown" />
                   </button>
                 </div>
               </div>
