@@ -17,6 +17,74 @@ interface Discussion {
   updatedAt: string;
 }
 
+// Maze Generation Helper
+const generateMaze = (width: number, height: number, items: number) => {
+  // 0: Wall, 1: Path, 2: Start, 3: End, 4: Question Gate, 5: Question Path (Passed)
+  const maze = Array(height).fill(null).map(() => Array(width).fill(0));
+
+  // DFS to generate maze
+  const stack = [{ x: 1, y: 1 }];
+  maze[1][1] = 1;
+  const directions = [[0, 2], [2, 0], [0, -2], [-2, 0]]; // Jump 2 cells
+
+  while (stack.length > 0) {
+    const current = stack[stack.length - 1];
+    const neighbors = [];
+
+    for (const [dx, dy] of directions) {
+      const nx = current.x + dx;
+      const ny = current.y + dy;
+      if (nx > 0 && nx < width - 1 && ny > 0 && ny < height - 1 && maze[ny][nx] === 0) {
+        neighbors.push({ x: nx, y: ny, dx, dy });
+      }
+    }
+
+    if (neighbors.length > 0) {
+      const { x, y, dx, dy } = neighbors[Math.floor(Math.random() * neighbors.length)];
+      maze[y][x] = 1;
+      maze[current.y + dy / 2][current.x + dx / 2] = 1; // Knock down wall
+      stack.push({ x, y });
+    } else {
+      stack.pop();
+    }
+  }
+
+  // Set Start
+  maze[1][1] = 2; // Start
+
+  // Set End (Furthest point or bottom right)
+  let endX = width - 2;
+  let endY = height - 2;
+  while (maze[endY][endX] === 0) {
+    // Simple fallback if bottom right is a wall
+    endX--;
+    if (endX < 1) { endX = width - 2; endY--; }
+  }
+  maze[endY][endX] = 3;
+
+  // Place Items (Question Gates)
+  // Find valid path points
+  const validPoints = [];
+  for (let y = 1; y < height - 1; y++) {
+    for (let x = 1; x < width - 1; x++) {
+      if ((maze[y][x] === 1) && !(x === 1 && y === 1) && !(x === endX && y === endY)) {
+        validPoints.push({ x, y });
+      }
+    }
+  }
+
+  // Shuffle and pick
+  const questionMap: Record<string, number> = {};
+  for (let i = 0; i < Math.min(items, validPoints.length); i++) {
+    const idx = Math.floor(Math.random() * validPoints.length);
+    const p = validPoints.splice(idx, 1)[0];
+    maze[p.y][p.x] = 4; // Gate
+    questionMap[`${p.x},${p.y}`] = i; // Map gate to question index
+  }
+
+  return { maze, end: { x: endX, y: endY }, questionMap };
+};
+
 const StudentDashboard: React.FC = () => {
   const [selectedSubject, setSelectedSubject] = useState<Subject>(Subject.CHINESE);
   const [discussions, setDiscussions] = useState<Discussion[]>([]);
@@ -53,8 +121,116 @@ const StudentDashboard: React.FC = () => {
   const [gameMatchedPairs, setGameMatchedPairs] = useState<string[]>([]);
   const [submittingGame, setSubmittingGame] = useState(false);
 
+  // Maze Only Logic
+  const [mazeGrid, setMazeGrid] = useState<number[][]>([]);
+  const [playerPos, setPlayerPos] = useState({ x: 1, y: 1 });
+  const [gameQuestionMap, setGameQuestionMap] = useState<Record<string, number>>({});
+  const [mazeSteps, setMazeSteps] = useState(0);
+
   const navigate = useNavigate();
   const { logout, user } = useAuth();
+
+  // ... (Keep existing refs/functions)
+
+  // 處理遊戲點擊
+  const handleGameClick = async (gameId: string) => {
+    try {
+      setLoading(true);
+      const response = await authService.getGameForStudent(gameId);
+      const game = response.game;
+
+      setSelectedGame(game);
+      setGameScore(0);
+      setGameStartTime(new Date());
+      setGameStatus('playing');
+      setGameCurrentQuestionIndex(0);
+
+      // 初始化遊戲狀態
+      if (game.gameType === 'matching') {
+        // ... (Matching logic remains same)
+        const cards: any[] = [];
+        game.questions.forEach((q: any, index: number) => {
+          cards.push({ id: `q-${index}`, content: q.question, type: 'question', pairId: index, isFlipped: false, isMatched: false });
+          cards.push({ id: `a-${index}`, content: q.answer, type: 'answer', pairId: index, isFlipped: false, isMatched: false });
+        });
+        setGameMatchingCards(cards.sort(() => Math.random() - 0.5));
+        setGameSelectedCards([]);
+        setGameMatchedPairs([]);
+      } else if (game.gameType === 'maze') {
+        // Generate Maze Grid
+        const mazeW = 15; // Must be odd for DFS
+        const mazeH = 11;
+        const { maze, end, questionMap } = generateMaze(mazeW, mazeH, game.questions.length);
+        setMazeGrid(maze);
+        setPlayerPos({ x: 1, y: 1 });
+        setGameQuestionMap(questionMap);
+        setMazeSteps(0);
+        setGameCurrentQuestionIndex(-1); // Ensure no modal on start
+      }
+
+      setShowGameModal(true);
+    } catch (error: any) {
+      console.error('載入遊戲失敗:', error);
+      alert(error.message || '載入遊戲失敗，請稍後再試');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Maze Movement Logic
+  const handleMazeMove = (dx: number, dy: number) => {
+    if (gameStatus !== 'playing') return;
+
+    const newX = playerPos.x + dx;
+    const newY = playerPos.y + dy;
+
+    // Check bounds
+    if (newY < 0 || newY >= mazeGrid.length || newX < 0 || newX >= mazeGrid[0].length) return;
+
+    const cell = mazeGrid[newY][newX];
+
+    // Wall
+    if (cell === 0) return;
+
+    // Gate / Question
+    if (cell === 4) {
+      // Trigger Question
+      const qIndex = gameQuestionMap[`${newX},${newY}`];
+      setGameCurrentQuestionIndex(qIndex);
+      // Don't move into the cell yet, open question modal
+      // We need a specific state to show the question overlay
+      // For simplicity, we can reuse the "card" overlay style
+    } else if (cell === 3) {
+      // Exit
+      setPlayerPos({ x: newX, y: newY });
+      handleGameComplete(true);
+    } else {
+      // Walk
+      setPlayerPos({ x: newX, y: newY });
+      setMazeSteps(prev => prev + 1);
+    }
+  };
+
+  // 處理迷宮/問答遊戲選擇 (For Grid Maze)
+  const handleMazeAnswer = (isCorrect: boolean, atX: number, atY: number) => {
+    if (isCorrect) {
+      // Updates map to remove gate
+      const newGrid = [...mazeGrid];
+      newGrid[atY][atX] = 1; // Become path
+      setMazeGrid(newGrid);
+
+      setGameScore(prev => prev + 1);
+      setGameCurrentQuestionIndex(-1); // Close question overlay
+
+      // Move player into the cell
+      setPlayerPos({ x: atX, y: atY });
+      setMazeSteps(prev => prev + 1);
+    } else {
+      alert('回答錯誤，請再試一次！');
+      // Can add penalty here
+    }
+  };
+
 
   // 執行富文本格式化命令
   const execCommand = (command: string, value?: string) => {
@@ -322,57 +498,7 @@ const StudentDashboard: React.FC = () => {
     }
   };
 
-  // 處理遊戲點擊
-  const handleGameClick = async (gameId: string) => {
-    try {
-      setLoading(true);
-      const response = await authService.getGameForStudent(gameId);
-      const game = response.game;
 
-      setSelectedGame(game);
-      setGameScore(0);
-      setGameStartTime(new Date());
-      setGameStatus('playing');
-      setGameCurrentQuestionIndex(0);
-
-      // 初始化遊戲狀態
-      if (game.gameType === 'matching') {
-        // 準備配對卡片
-        const cards: any[] = [];
-        game.questions.forEach((q: any, index: number) => {
-          // 問題卡
-          cards.push({
-            id: `q-${index}`,
-            content: q.question,
-            type: 'question',
-            pairId: index,
-            isFlipped: false,
-            isMatched: false
-          });
-          // 答案卡
-          cards.push({
-            id: `a-${index}`,
-            content: q.answer,
-            type: 'answer',
-            pairId: index,
-            isFlipped: false,
-            isMatched: false
-          });
-        });
-        // 洗牌
-        setGameMatchingCards(cards.sort(() => Math.random() - 0.5));
-        setGameSelectedCards([]);
-        setGameMatchedPairs([]);
-      }
-
-      setShowGameModal(true);
-    } catch (error: any) {
-      console.error('載入遊戲失敗:', error);
-      alert(error.message || '載入遊戲失敗，請稍後再試');
-    } finally {
-      setLoading(false);
-    }
-  };
 
   // 處理配對遊戲卡片點擊
   const handleCardClick = (index: number) => {
@@ -996,58 +1122,240 @@ const StudentDashboard: React.FC = () => {
 
               {/* Matching Game Layout */}
               {selectedGame.gameType === 'matching' && (
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 max-w-4xl mx-auto">
-                  {gameMatchingCards.map((card, index) => (
-                    <button
-                      key={card.id}
-                      onClick={() => handleCardClick(index)}
-                      className={`aspect-[3/4] rounded-xl text-xl font-bold flex items-center justify-center p-4 transition-all duration-500 transform ${card.isFlipped || card.isMatched
-                          ? 'bg-white rotate-y-180'
-                          : 'bg-[#A1D9AE] border-4 border-brand-brown'
-                        } ${card.isMatched ? 'opacity-50' : 'hover:scale-105 shadow-xl'}`}
-                      disabled={card.isMatched}
-                    >
-                      {(card.isFlipped || card.isMatched) ? (
-                        <div className="text-brand-brown text-center text-sm md:text-base">
-                          {card.content}
-                          <div className="text-[10px] text-gray-400 mt-2 uppercase">{card.type === 'question' ? '題目' : '答案'}</div>
+                <div className="flex flex-col items-center h-full">
+                  <div className="flex justify-between w-full max-w-4xl mb-6 px-4">
+                    <div className="text-white text-xl font-bold bg-[#333] px-6 py-2 rounded-full border border-[#555]">
+                      配對進度: {gameMatchedPairs.length} / {selectedGame.questions.length}
+                    </div>
+                    <div className="text-white text-xl font-bold bg-[#333] px-6 py-2 rounded-full border border-[#555]">
+                      步數: {gameSelectedCards.length + gameMatchedPairs.length * 2}
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4 max-w-5xl w-full mx-auto p-4 content-start overflow-y-auto">
+                    {gameMatchingCards.map((card, index) => (
+                      <div
+                        key={card.id}
+                        className="group relative aspect-[3/4] cursor-pointer [perspective:1000px]"
+                        onClick={() => handleCardClick(index)}
+                      >
+                        <div
+                          className={`w-full h-full duration-500 [transform-style:preserve-3d] absolute inset-0 transition-all ${card.isFlipped || card.isMatched ? '[transform:rotateY(180deg)]' : ''
+                            } ${card.isMatched ? 'opacity-0 scale-0' : 'opacity-100 scale-100'}`}
+                        >
+                          {/* Card Back (Hidden state) */}
+                          <div className="absolute inset-0 [backface-visibility:hidden] w-full h-full bg-gradient-to-br from-indigo-500 to-purple-600 rounded-xl shadow-xl flex items-center justify-center border-4 border-indigo-300 group-hover:scale-105 transition-transform">
+                            <span className="text-5xl text-white/50 font-black">?</span>
+                          </div>
+
+                          {/* Card Front (Revealed state) */}
+                          <div className="absolute inset-0 [backface-visibility:hidden] w-full h-full [transform:rotateY(180deg)] bg-white rounded-xl shadow-2xl flex flex-col items-center justify-center p-4 border-4 border-yellow-400">
+                            <span className={`text-xs font-bold uppercase mb-2 px-2 py-1 rounded-full ${card.type === 'question' ? 'bg-blue-100 text-blue-800' : 'bg-green-100 text-green-800'
+                              }`}>
+                              {card.type === 'question' ? '問題' : '答案'}
+                            </span>
+                            <p className="text-center font-bold text-gray-800 text-lg md:text-xl leading-tight line-clamp-4">
+                              {card.content}
+                            </p>
+                          </div>
                         </div>
-                      ) : (
-                        <div className="text-4xl text-brand-brown opacity-50">?</div>
-                      )}
-                    </button>
-                  ))}
+
+                        {/* Placeholder for matched cards to keep grid stability */}
+                        {card.isMatched && (
+                          <div className="w-full h-full rounded-xl border-4 border-dashed border-gray-600 flex items-center justify-center opacity-30">
+                            <span className="text-4xl">✨</span>
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
                 </div>
               )}
 
-              {/* Maze / Quiz Game Layout */}
+              {/* Maze / Quiz Game Layout - SVG Map Style */}
               {selectedGame.gameType === 'maze' && (
-                <div className="max-w-2xl mx-auto text-center mt-10">
-                  <div className="mb-8">
-                    <div className="w-full bg-[#333] rounded-full h-4 mb-2">
-                      <div className="bg-green-500 h-4 rounded-full transition-all" style={{ width: `${((gameCurrentQuestionIndex) / selectedGame.questions.length) * 100}%` }}></div>
-                    </div>
-                    <p className="text-gray-400">關卡 {gameCurrentQuestionIndex + 1} / {selectedGame.questions.length}</p>
+                <div className="w-full h-full flex flex-col items-center relative overflow-hidden bg-[#87CEEB]">
+                  {/* Sky & Background Elements */}
+                  <div className="absolute top-10 left-10 opacity-80 animate-pulse">
+                    <svg width="100" height="60" viewBox="0 0 100 60" fill="white">
+                      <path d="M20,40 Q30,20 50,40 T80,40 Q90,50 80,60 T50,60 Q30,60 20,40 Z" />
+                    </svg>
+                  </div>
+                  <div className="absolute top-20 right-20 opacity-60" style={{ animation: 'float 6s ease-in-out infinite' }}>
+                    <svg width="120" height="70" viewBox="0 0 120 70" fill="white">
+                      <path d="M20,50 Q40,20 70,50 T110,50 Q120,60 110,70 T70,70 Q40,70 20,50 Z" />
+                    </svg>
                   </div>
 
-                  <div className="bg-[#333] p-8 rounded-3xl border-2 border-[#555] shadow-2xl">
-                    <h3 className="text-2xl text-white font-bold mb-8 leading-relaxed">
-                      {selectedGame.questions[gameCurrentQuestionIndex]?.question}
-                    </h3>
+                  {/* Ground */}
+                  <div className="absolute bottom-0 w-full h-1/3 bg-[#90EE90] border-t-8 border-[#228B22]"></div>
 
-                    <div className="grid grid-cols-1 gap-4">
-                      {[
-                        selectedGame.questions[gameCurrentQuestionIndex]?.answer,
-                        ...(selectedGame.questions[gameCurrentQuestionIndex]?.wrongOptions || [])
-                      ].sort(() => Math.random() - 0.5).map((option, idx) => (
-                        <button
-                          key={idx}
-                          onClick={() => handleGameOptionSelect(option === selectedGame.questions[gameCurrentQuestionIndex].answer)}
-                          className="p-4 bg-[#444] hover:bg-[#555] text-white rounded-xl border-2 border-[#666] transition-all hover:scale-[1.02] text-lg font-medium"
-                        >
-                          {option}
-                        </button>
+                  {/* Map Container */}
+                  {/* Grid Maze Container */}
+                  <div className="relative w-full max-w-4xl flex flex-col items-center mt-6">
+
+                    {/* Game Info Bar */}
+                    <div className="flex w-full justify-between items-center bg-white/90 p-4 rounded-xl border-4 border-brand-brown mb-4 shadow-lg">
+                      <div className="flex items-center gap-4">
+                        <span className="text-xl font-bold text-brand-brown">步數: {mazeSteps}</span>
+                        <span className="text-xl font-bold text-brand-brown">
+                          收集知識: {gameScore}/{selectedGame.questions.length}
+                        </span>
+                      </div>
+                      <div className="text-gray-500 font-mono text-lg">
+                        TIME: {gameStartTime && Math.floor((Date.now() - gameStartTime.getTime()) / 1000)}s
+                      </div>
+                    </div>
+
+                    {/* The Maze Grid */}
+                    <div
+                      className="bg-[#2a2a2a] p-2 rounded-lg shadow-2xl overflow-hidden relative"
+                      style={{
+                        display: 'grid',
+                        gridTemplateColumns: `repeat(${mazeGrid[0]?.length || 1}, minmax(20px, 40px))`,
+                        gridTemplateRows: `repeat(${mazeGrid.length || 1}, minmax(20px, 40px))`,
+                        gap: '2px'
+                      }}
+                    >
+                      {mazeGrid.map((row, y) => (
+                        row.map((cell, x) => {
+                          const isPlayer = playerPos.x === x && playerPos.y === y;
+                          const isGate = cell === 4;
+                          const isStart = cell === 2;
+                          const isEnd = cell === 3;
+                          const isWall = cell === 0;
+
+                          return (
+                            <div
+                              key={`${x}-${y}`}
+                              onClick={() => {
+                                // Allow click adjacent to move
+                                const dx = x - playerPos.x;
+                                const dy = y - playerPos.y;
+                                if (Math.abs(dx) + Math.abs(dy) === 1) {
+                                  handleMazeMove(dx, dy);
+                                }
+                              }}
+                              className={`
+                                        relative rounded-sm
+                                        ${isWall ? 'bg-gray-800' : 'bg-gray-200'}
+                                        ${isStart ? 'bg-green-200' : ''}
+                                        ${isEnd ? 'bg-red-200' : ''}
+                                        ${isGate ? 'bg-yellow-200 animate-pulse' : ''}
+                                        cursor-pointer hover:opacity-80 transition-colors duration-1000
+                                     `}
+                            >
+                              {isPlayer && (
+                                <div className="absolute inset-1 bg-brand-brown rounded-full border-2 border-white flex items-center justify-center z-10 transition-all shadow-md">
+                                  <span className="text-white text-[10px]">🏃</span>
+                                </div>
+                              )}
+                              {isStart && !isPlayer && <div className="absolute inset-0 flex items-center justify-center text-xs">🏁</div>}
+                              {isEnd && !isPlayer && <div className="absolute inset-0 flex items-center justify-center text-xs">🏠</div>}
+                              {isGate && !isPlayer && <div className="absolute inset-0 flex items-center justify-center text-xs">🔒</div>}
+                            </div>
+                          );
+                        })
                       ))}
+                    </div>
+
+                    {/* Touch Controls (Virtual D-Pad for Tablet) */}
+                    <div className="flex gap-4 mt-8">
+                      <div className="grid grid-cols-3 gap-2 p-4 bg-black/20 rounded-full">
+                        <div></div>
+                        <button onClick={() => handleMazeMove(0, -1)} className="w-16 h-16 bg-white rounded-full shadow-xl active:bg-gray-200 border-b-4 border-gray-300 text-3xl font-black">⬆️</button>
+                        <div></div>
+                        <button onClick={() => handleMazeMove(-1, 0)} className="w-16 h-16 bg-white rounded-full shadow-xl active:bg-gray-200 border-b-4 border-gray-300 text-3xl font-black">⬅️</button>
+                        <button onClick={() => handleMazeMove(0, 1)} className="w-16 h-16 bg-white rounded-full shadow-xl active:bg-gray-200 border-b-4 border-gray-300 text-3xl font-black">⬇️</button>
+                        <button onClick={() => handleMazeMove(1, 0)} className="w-16 h-16 bg-white rounded-full shadow-xl active:bg-gray-200 border-b-4 border-gray-300 text-3xl font-black">➡️</button>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Question Modal (When hitting a Gate) */}
+                  {mazeGrid[playerPos.y + (0)] && (() => {
+                    // Check if we are interacting with a gate? 
+                    // Actually logic is: if cell==4, we show question. But player isn't ON the cell yet.
+                    // We need 'pendingMove' state or check the questionIndex.
+
+                    // Using gameCurrentQuestionIndex !== -1 to trigger modal
+                    // But currentQuestionIndex logic in previous code was 0..N.
+                    // Here we map gate -> index.
+
+                    const qIndex = gameCurrentQuestionIndex;
+                    if (qIndex === -1) return null; // No active question
+
+                    // We need to know WHICH gate coordinates triggered this to pass to answer handler.
+                    // Let's find coordinates by qIndex or store it previously.
+                    // Simplification: We need 'activeGateCoords' state.
+                    // For now, let's reverse look up in QuestionMap (slow but works for small map) or just store it.
+                    const activeGateKey = Object.keys(gameQuestionMap).find(key => gameQuestionMap[key] === qIndex);
+                    if (!activeGateKey) return null;
+
+                    const [gx, gy] = activeGateKey.split(',').map(Number);
+
+                    // Check if the player is adjacent to this gate (verify intent)
+                    const dist = Math.abs(playerPos.x - gx) + Math.abs(playerPos.y - gy);
+                    if (dist !== 1) return null; // Logic check: only show if attempting to enter
+
+                    return (
+                      <div className="absolute inset-0 bg-black/80 z-20 flex items-center justify-center p-4">
+                        <div className="bg-white rounded-3xl p-6 max-w-lg w-full border-4 border-yellow-400 shadow-2xl animate-bounce-in">
+                          <h3 className="text-xl font-bold text-center mb-4">解開謎題以開啟道路！</h3>
+                          <div className="p-4 bg-yellow-50 rounded-xl mb-4 border-2 border-yellow-200">
+                            <p className="font-bold text-lg text-brand-brown">{selectedGame.questions[qIndex].question}</p>
+                          </div>
+                          <div className="grid grid-cols-1 gap-3">
+                            {[
+                              selectedGame.questions[qIndex].answer,
+                              ...(selectedGame.questions[qIndex].wrongOptions || [])
+                            ].sort(() => Math.random() - 0.5).map((opt, idx) => (
+                              <button
+                                key={idx}
+                                onClick={() => handleMazeAnswer(opt === selectedGame.questions[qIndex].answer, gx, gy)}
+                                className="p-3 bg-white border-2 border-gray-300 rounded-lg font-bold hover:bg-yellow-100 hover:border-yellow-400 text-left"
+                              >
+                                {String.fromCharCode(65 + idx)}. {opt}
+                              </button>
+                            ))}
+                          </div>
+                          <button onClick={() => setGameCurrentQuestionIndex(-1)} className="mt-4 text-gray-400 underline w-full text-center">暫時撤退</button>
+                        </div>
+                      </div>
+                    );
+                  })()}
+
+
+                  {/* Current Question Overlay - Tablet Friendly Big Card */}
+                  <div className="absolute inset-x-0 bottom-0 p-6 flex justify-center items-end pointer-events-none">
+                    <div className="bg-white/95 backdrop-blur-md border-4 border-brand-brown rounded-3xl p-6 w-full max-w-3xl shadow-[0_-10px_40px_rgba(0,0,0,0.2)] pointer-events-auto transform transition-transform duration-500 hover:scale-[1.01]">
+                      <div className="flex justify-between items-start mb-4">
+                        <span className="bg-yellow-400 text-yellow-900 px-4 py-1 rounded-full font-bold text-sm">
+                          關卡 {gameCurrentQuestionIndex + 1}
+                        </span>
+                      </div>
+
+                      <h3 className="text-2xl md:text-3xl font-black text-brand-brown mb-6 leading-tight">
+                        {selectedGame.questions[gameCurrentQuestionIndex]?.question}
+                      </h3>
+
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        {[
+                          selectedGame.questions[gameCurrentQuestionIndex]?.answer,
+                          ...(selectedGame.questions[gameCurrentQuestionIndex]?.wrongOptions || [])
+                        ].sort(() => Math.random() - 0.5).map((option, idx) => (
+                          <button
+                            key={idx}
+                            onClick={() => handleGameOptionSelect(option === selectedGame.questions[gameCurrentQuestionIndex].answer)}
+                            className="p-4 md:p-6 bg-white border-4 border-gray-200 text-gray-700 rounded-2xl text-xl font-bold hover:bg-yellow-50 hover:border-brand-brown hover:text-brand-brown transition-all active:scale-95 shadow-sm text-left flex items-center gap-3"
+                          >
+                            <div className="w-10 h-10 rounded-full bg-gray-100 flex items-center justify-center text-gray-500 font-black text-lg border-2 border-gray-300">
+                              {String.fromCharCode(65 + idx)}
+                            </div>
+                            {option}
+                          </button>
+                        ))}
+                      </div>
                     </div>
                   </div>
                 </div>
