@@ -247,7 +247,18 @@ export const TowerDefenseGame: React.FC<Props> = ({ questions, subject, difficul
 
   function getEnemyPosition(enemy: Enemy) {
     const maxIndex = PATH_CELLS.length - 1;
-    const clampedIndex = Math.min(enemy.pathIndex, maxIndex);
+    const pathIndex = enemy.pathIndex;
+    const clampedIndex = Math.min(pathIndex, maxIndex);
+
+    if (pathIndex < 0) {
+      const startCell = PATH_CELLS[0];
+      const nextCell = PATH_CELLS[1];
+      const start = isoToScreen(startCell.x, startCell.y);
+      const next = isoToScreen(nextCell.x, nextCell.y);
+      const vx = next.x - start.x;
+      const vy = next.y - start.y;
+      return { x: start.x + vx * pathIndex, y: start.y + vy * pathIndex };
+    }
     const baseIndex = Math.floor(clampedIndex);
     const nextIndex = Math.min(baseIndex + 1, maxIndex);
     const t = clampedIndex - baseIndex;

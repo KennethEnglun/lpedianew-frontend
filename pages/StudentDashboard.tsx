@@ -141,6 +141,7 @@ const StudentDashboard: React.FC = () => {
   const [gameStatus, setGameStatus] = useState<'playing' | 'completed' | 'lost'>('playing');
   const [gameScore, setGameScore] = useState(0);
   const [gameStartTime, setGameStartTime] = useState<Date | null>(null);
+  const [gameTimerTick, setGameTimerTick] = useState(0);
   const [gameCurrentQuestionIndex, setGameCurrentQuestionIndex] = useState(0);
   const [gameMatchingCards, setGameMatchingCards] = useState<MatchingCard[]>([]);
   const [gameSelectedCards, setGameSelectedCards] = useState<number[]>([]);
@@ -346,6 +347,7 @@ const StudentDashboard: React.FC = () => {
       setSelectedGame(game);
       setGameScore(0);
       setGameStartTime(new Date());
+      setGameTimerTick(0);
       setGameStatus('playing');
       setGameCurrentQuestionIndex(0);
 
@@ -383,6 +385,12 @@ const StudentDashboard: React.FC = () => {
       setLoading(false);
     }
   };
+
+  useEffect(() => {
+    if (!showGameModal || !gameStartTime) return;
+    const interval = setInterval(() => setGameTimerTick(v => v + 1), 1000);
+    return () => clearInterval(interval);
+  }, [showGameModal, gameStartTime]);
 
   // Maze Movement Logic
   const handleMazeMove = (dx: number, dy: number) => {
