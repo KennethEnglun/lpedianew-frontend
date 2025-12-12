@@ -1048,33 +1048,115 @@ const TeacherDashboard: React.FC = () => {
                 </p>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <Input
-                  label="遊戲標題"
-                  placeholder="輸入遊戲標題..."
-                  value={gameForm.title}
-                  onChange={(e) => setGameForm(prev => ({ ...prev, title: e.target.value }))}
-                />
-                <div>
-                  <label className="block text-sm font-bold text-blue-800 mb-2">難度（影響卡牌數量）</label>
-                  <select
-                    className="w-full px-4 py-2 border-4 border-blue-300 rounded-2xl bg-white font-bold"
-                    value={gameForm.difficulty}
-                    onChange={(e) => setGameForm(prev => ({ ...prev, difficulty: e.target.value as 'easy' | 'medium' | 'hard' }))}
-                  >
-                    <option value="easy">簡單 (4對)</option>
-                    <option value="medium">中等 (6對)</option>
-                    <option value="hard">困難 (8對)</option>
-                  </select>
-                </div>
-              </div>
+	              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+	                <Input
+	                  label="遊戲標題"
+	                  placeholder="輸入遊戲標題..."
+	                  value={gameForm.title}
+	                  onChange={(e) => setGameForm(prev => ({ ...prev, title: e.target.value }))}
+	                />
+	                <div>
+	                  <label className="block text-sm font-bold text-blue-800 mb-2">難度（影響卡牌數量）</label>
+	                  <select
+	                    className="w-full px-4 py-2 border-4 border-blue-300 rounded-2xl bg-white font-bold"
+	                    value={gameForm.difficulty}
+	                    onChange={(e) => setGameForm(prev => ({ ...prev, difficulty: e.target.value as 'easy' | 'medium' | 'hard' }))}
+	                  >
+	                    <option value="easy">簡單 (4對)</option>
+	                    <option value="medium">中等 (6對)</option>
+	                    <option value="hard">困難 (8對)</option>
+	                  </select>
+	                </div>
+	              </div>
 
-              <div>
-                <label className="block text-sm font-bold text-blue-800 mb-2">配對內容（左邊配右邊）</label>
-                <div className="space-y-4">
-                  {gameForm.questions.map((q, index) => (
-                    <div key={index} className="bg-white p-4 rounded-xl border-2 border-blue-200 flex items-center gap-4">
-                      <span className="font-bold text-blue-700 w-8">{index + 1}.</span>
+	              {/* Subject */}
+	              <div>
+	                <label className="block text-sm font-bold text-blue-800 mb-2">科目</label>
+	                <select
+	                  className="w-full px-4 py-2 border-4 border-blue-300 rounded-2xl bg-white font-bold"
+	                  value={gameForm.subject}
+	                  onChange={(e) => {
+	                    const newSubject = e.target.value as Subject;
+	                    setGameForm(prev => ({ ...prev, subject: newSubject, targetClasses: [], targetGroups: [] }));
+	                    loadClassesAndGroups(newSubject);
+	                  }}
+	                >
+	                  {Object.values(Subject).map(subject => (
+	                    <option key={subject} value={subject}>{subject}</option>
+	                  ))}
+	                </select>
+	              </div>
+
+	              {/* Target Classes */}
+	              <div>
+	                <label className="block text-sm font-bold text-blue-800 mb-2">派發至班級</label>
+	                <div className="flex flex-wrap gap-2">
+	                  {availableClasses.map(className => (
+	                    <button
+	                      key={className}
+	                      type="button"
+	                      onClick={() => {
+	                        setGameForm(prev => ({
+	                          ...prev,
+	                          targetClasses: prev.targetClasses.includes(className)
+	                            ? prev.targetClasses.filter(c => c !== className)
+	                            : [...prev.targetClasses, className]
+	                        }));
+	                      }}
+	                      className={`px-4 py-2 rounded-2xl border-2 font-bold transition-colors ${gameForm.targetClasses.includes(className)
+	                        ? 'bg-blue-200 border-blue-500 text-blue-800'
+	                        : 'bg-white border-gray-300 text-gray-600 hover:border-blue-500'
+	                        }`}
+	                    >
+	                      {className}
+	                    </button>
+	                  ))}
+	                </div>
+	              </div>
+
+	              {/* Target Groups */}
+	              {availableGroups.length > 0 && (
+	                <div>
+	                  <label className="block text-sm font-bold text-blue-800 mb-2">
+	                    選擇分組 ({gameForm.subject})
+	                  </label>
+	                  <div className="flex flex-wrap gap-2">
+	                    {availableGroups.map(groupName => (
+	                      <button
+	                        key={groupName}
+	                        type="button"
+	                        onClick={() => {
+	                          setGameForm(prev => ({
+	                            ...prev,
+	                            targetGroups: prev.targetGroups.includes(groupName)
+	                              ? prev.targetGroups.filter(g => g !== groupName)
+	                              : [...prev.targetGroups, groupName]
+	                          }));
+	                        }}
+	                        className={`px-4 py-2 rounded-2xl border-2 font-bold transition-colors ${gameForm.targetGroups.includes(groupName)
+	                          ? 'bg-blue-100 border-blue-500 text-blue-700'
+	                          : 'bg-white border-gray-300 text-gray-600 hover:border-blue-500'
+	                          }`}
+	                      >
+	                        {groupName}
+	                      </button>
+	                    ))}
+	                  </div>
+	                  <p className="text-xs text-gray-500 mt-1">
+	                    選擇分組會精確派發給該分組的學生
+	                  </p>
+	                </div>
+	              )}
+
+	              <div>
+	                <label className="block text-sm font-bold text-blue-800 mb-2">配對內容（左邊配右邊）</label>
+	                <p className="text-xs text-gray-500 mb-2">
+	                  依難度需要配對數：{gameForm.difficulty === 'easy' ? '4對' : gameForm.difficulty === 'medium' ? '6對' : '8對'}（多於需求的配對會自動忽略）
+	                </p>
+	                <div className="space-y-4">
+	                  {gameForm.questions.map((q, index) => (
+	                    <div key={index} className="bg-white p-4 rounded-xl border-2 border-blue-200 flex items-center gap-4">
+	                      <span className="font-bold text-blue-700 w-8">{index + 1}.</span>
                       <Input
                         placeholder="詞彙/問題..."
                         value={q.question}
@@ -1124,14 +1206,64 @@ const TeacherDashboard: React.FC = () => {
                 >
                   返回
                 </button>
-                <button
-                  onClick={() => {
-                    alert('翻牌記憶遊戲功能開發中！');
-                    // TODO: Save game to backend
-                  }}
-                  className="flex-1 py-3 rounded-2xl border-4 border-blue-500 bg-blue-500 text-white font-bold hover:bg-blue-600"
-                >
-                  創建遊戲
+	                <button
+	                  onClick={() => {
+	                    (async () => {
+	                      try {
+	                        if (!gameForm.title.trim()) {
+	                          alert('請輸入遊戲標題');
+	                          return;
+	                        }
+
+	                        if (gameForm.targetClasses.length === 0 && gameForm.targetGroups.length === 0) {
+	                          alert('請選擇至少一個班級或分組');
+	                          return;
+	                        }
+
+	                        const requiredPairs = gameForm.difficulty === 'easy' ? 4 : gameForm.difficulty === 'medium' ? 6 : 8;
+	                        const cleanedPairs = gameForm.questions
+	                          .map(q => ({
+	                            question: q.question.trim(),
+	                            answer: q.answer.trim()
+	                          }))
+	                          .filter(q => q.question && q.answer);
+
+	                        if (cleanedPairs.length < requiredPairs) {
+	                          alert(`請至少輸入 ${requiredPairs} 對配對內容`);
+	                          return;
+	                        }
+
+	                        await authService.createGame({
+	                          title: gameForm.title.trim(),
+	                          description: gameForm.description,
+	                          gameType: 'matching',
+	                          subject: gameForm.subject,
+	                          targetClasses: gameForm.targetClasses,
+	                          targetGroups: gameForm.targetGroups,
+	                          questions: cleanedPairs.slice(0, requiredPairs),
+	                          difficulty: gameForm.difficulty
+	                        });
+
+	                        alert('翻牌記憶遊戲創建成功！');
+	                        setShowGameModal(false);
+	                        setGameType(null);
+	                        setGameForm({
+	                          title: '',
+	                          description: '',
+	                          subject: Subject.CHINESE,
+	                          targetClasses: [],
+	                          targetGroups: [],
+	                          questions: [],
+	                          difficulty: 'medium'
+	                        });
+	                      } catch (error) {
+	                        alert('創建遊戲失敗：' + (error instanceof Error ? error.message : '未知錯誤'));
+	                      }
+	                    })();
+	                  }}
+	                  className="flex-1 py-3 rounded-2xl border-4 border-blue-500 bg-blue-500 text-white font-bold hover:bg-blue-600"
+	                >
+	                  創建遊戲
                 </button>
               </div>
             </div>
