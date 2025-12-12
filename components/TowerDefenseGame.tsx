@@ -400,46 +400,31 @@ export const TowerDefenseGame: React.FC<Props> = ({ questions, subject, difficul
     tower.lastShotAt = now;
   }
 
-  function updateGame(deltaSeconds: number, now: number) {
-    if (gameOverRef.current) return;
+	  function updateGame(deltaSeconds: number, now: number) {
+	    if (gameOverRef.current) return;
 
-    const enemiesSnapshot = enemiesRef.current;
-    const towersSnapshot = towersRef.current;
-    const projectilesSnapshot = projectilesRef.current;
-    const particlesSnapshot = particlesRef.current;
+	    const enemiesSnapshot = enemiesRef.current;
+	    const towersSnapshot = towersRef.current;
+	    const projectilesSnapshot = projectilesRef.current;
+	    const particlesSnapshot = particlesRef.current;
 
-    const movedEnemies: Enemy[] = [];
-    for (const enemy of enemiesSnapshot) {
-      const nextIndex = enemy.pathIndex + enemy.speed * deltaSeconds;
-      if (nextIndex >= PATH_CELLS.length - 0.2) {
-        setLives(v => {
-          const newLives = v - 1;
-          if (newLives <= 0) setGameOver(true);
-          return newLives;
-        });
-        continue;
-      }
-      movedEnemies.push({ ...enemy, pathIndex: nextIndex });
-    }
+	    const movedEnemies: Enemy[] = [];
+	    for (const enemy of enemiesSnapshot) {
+	      const nextIndex = enemy.pathIndex + enemy.speed * deltaSeconds;
+	      if (nextIndex >= PATH_CELLS.length - 0.2) {
+	        setLives(v => {
+	          const newLives = v - 1;
+	          if (newLives <= 0) setGameOver(true);
+	          return newLives;
+	        });
+	        continue;
+	      }
+	      movedEnemies.push({ ...enemy, pathIndex: nextIndex });
+	    }
 
-    if (projectilesSnapshot.length > 0) {
-      setProjectiles(() => {
-        const updatedProjectiles: Projectile[] = [];
-        for (const projectile of projectilesSnapshot) {
-          const newX = projectile.x + projectile.vx * deltaSeconds;
-          const newY = projectile.y + projectile.vy * deltaSeconds;
-          const newLife = projectile.life - deltaSeconds;
-          if (newLife <= 0) continue;
-
-          updatedProjectiles.push({ ...projectile, x: newX, y: newY, life: newLife });
-        }
-        return updatedProjectiles;
-      });
-    }
-
-    if (particlesSnapshot.length > 0) {
-      setParticles(() => {
-        const updatedParticles: Particle[] = [];
+	    if (particlesSnapshot.length > 0) {
+	      setParticles(() => {
+	        const updatedParticles: Particle[] = [];
         for (const particle of particlesSnapshot) {
           const newLife = particle.life - deltaSeconds * 1.4;
           if (newLife <= 0) continue;
@@ -451,65 +436,79 @@ export const TowerDefenseGame: React.FC<Props> = ({ questions, subject, difficul
             life: newLife
           });
         }
-        return updatedParticles;
-      });
-    }
+	        return updatedParticles;
+	      });
+	    }
 
-    if (movedEnemies.length > 0) {
-      const towersToUpdate = towersSnapshot.map(t => ({ ...t }));
-      for (const tower of towersToUpdate) {
-        const towerPos = isoToScreen(tower.gridX, tower.gridY);
-        const inRange = movedEnemies
-          .map(enemy => ({ enemy, pos: getEnemyPosition(enemy) }))
-          .filter(item => Math.hypot(item.pos.x - towerPos.x, item.pos.y - towerPos.y) <= tower.range)
-          .sort((a, b) => a.enemy.pathIndex - b.enemy.pathIndex);
+	    let finalEnemies = movedEnemies;
+	    if (projectilesSnapshot.length > 0) {
+	      const updatedProjectiles: Projectile[] = [];
+	      for (const projectile of projectilesSnapshot) {
+	        const newX = projectile.x + projectile.vx * deltaSeconds;
+	        const newY = projectile.y + projectile.vy * deltaSeconds;
+	        const newLife = projectile.life - deltaSeconds;
+	        if (newLife <= 0) continue;
+	        updatedProjectiles.push({ ...projectile, x: newX, y: newY, life: newLife });
+	      }
 
-        if (inRange.length > 0 && now - tower.lastShotAt >= tower.fireRate) {
-          fireTower(tower, inRange[inRange.length - 1].enemy, now);
-        }
-      }
-      setTowers(towersToUpdate);
-    }
+	      let remainingProjectiles = updatedProjectiles;
+	      if (updatedProjectiles.length > 0 && movedEnemies.length > 0) {
+	        const enemyMap = new Map(movedEnemies.map(e => [e.id, { ...e }]));
+	        const updatedEnemies = movedEnemies.map(e => enemyMap.get(e.id)!);
+	        let anyHit = false;
 
-    let finalEnemies = movedEnemies;
-    if (projectilesSnapshot.length > 0 && movedEnemies.length > 0) {
-      const enemyMap = new Map(movedEnemies.map(e => [e.id, { ...e }]));
-      const updatedEnemies = movedEnemies.map(e => enemyMap.get(e.id)!);
-      let anyHit = false;
+	        const afterCollision: Projectile[] = [];
+	        for (const projectile of updatedProjectiles) {
+	          const target = enemyMap.get(projectile.targetId);
+	          if (!target) {
+	            afterCollision.push(projectile);
+	            continue;
+	          }
+	          const targetPos = getEnemyPosition(target);
+	          const dist = Math.hypot(projectile.x - targetPos.x, projectile.y - targetPos.y);
+	          if (dist < target.size * 0.9) {
+	            target.hp -= projectile.damage;
+	            anyHit = true;
+	            spawnParticles(targetPos.x, targetPos.y - 6, 8, projectile.color);
+	            continue;
+	          }
+	          afterCollision.push(projectile);
+	        }
+	        remainingProjectiles = afterCollision;
 
-      const remainingProjectiles: Projectile[] = [];
-      for (const projectile of projectilesSnapshot) {
-        const target = enemyMap.get(projectile.targetId);
-        if (!target) {
-          remainingProjectiles.push(projectile);
-          continue;
-        }
-        const targetPos = getEnemyPosition(target);
-        const dist = Math.hypot(projectile.x - targetPos.x, projectile.y - targetPos.y);
-        if (dist < target.size * 0.9) {
-          target.hp -= projectile.damage;
-          anyHit = true;
-          spawnParticles(targetPos.x, targetPos.y - 6, 8, projectile.color);
-          continue;
-        }
-        remainingProjectiles.push(projectile);
-      }
+	        if (anyHit) {
+	          const survivors = updatedEnemies.filter(e => e.hp > 0);
+	          if (survivors.length !== updatedEnemies.length) {
+	            setScore(v => v + (updatedEnemies.length - survivors.length) * 3);
+	          }
+	          finalEnemies = survivors;
+	        } else {
+	          finalEnemies = updatedEnemies;
+	        }
+	      }
 
-      if (anyHit) {
-        const survivors = updatedEnemies.filter(e => e.hp > 0);
-        if (survivors.length !== updatedEnemies.length) {
-          setScore(v => v + (updatedEnemies.length - survivors.length) * 3);
-        }
-        finalEnemies = survivors;
-      } else {
-        finalEnemies = updatedEnemies;
-      }
-      setProjectiles(remainingProjectiles);
-    }
+	      setProjectiles(remainingProjectiles);
+	    }
 
-    if (enemiesSnapshot.length > 0 || finalEnemies.length > 0) {
-      setEnemies(finalEnemies);
-    }
+	    if (finalEnemies.length > 0) {
+	      const towersToUpdate = towersSnapshot.map(t => ({ ...t }));
+	      for (const tower of towersToUpdate) {
+	        const towerPos = isoToScreen(tower.gridX, tower.gridY);
+	        const inRange = finalEnemies
+	          .map(enemy => ({ enemy, pos: getEnemyPosition(enemy) }))
+	          .filter(item => Math.hypot(item.pos.x - towerPos.x, item.pos.y - towerPos.y) <= tower.range)
+	          .sort((a, b) => a.enemy.pathIndex - b.enemy.pathIndex);
+
+	        if (inRange.length > 0 && now - tower.lastShotAt >= tower.fireRate) {
+	          fireTower(tower, inRange[inRange.length - 1].enemy, now);
+	        }
+	      }
+	      setTowers(towersToUpdate);
+	    }
+
+	    if (enemiesSnapshot.length > 0 || finalEnemies.length > 0) {
+	      setEnemies(finalEnemies);
+	    }
 
     if (finalEnemies.length === 0 && enemiesSnapshot.length > 0) {
       setWave(w => {
