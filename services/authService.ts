@@ -587,6 +587,39 @@ class AuthService {
 
     await this.handleResponse(response);
   }
+
+  // === AI (Grok) ===
+  async getAiSettings(): Promise<{ provider: string; model: string; hasApiKey: boolean; updatedAt: string | null }> {
+    const response = await fetch(`${this.API_BASE}/ai/settings`, {
+      method: 'GET',
+      headers: this.getAuthHeaders()
+    });
+    return this.handleResponse(response);
+  }
+
+  async updateAiSettings(payload: { apiKey: string }): Promise<{ provider: string; model: string; hasApiKey: boolean; updatedAt: string | null }> {
+    const response = await fetch(`${this.API_BASE}/ai/settings`, {
+      method: 'PUT',
+      headers: this.getAuthHeaders(),
+      body: JSON.stringify(payload)
+    });
+    return this.handleResponse(response);
+  }
+
+  async generateQuizQuestions(payload: {
+    subject: string;
+    topic: string;
+    count: number;
+    scopeText?: string;
+    advancedOnly?: boolean;
+  }): Promise<{ questions: Array<{ question: string; options: string[]; correctIndex: number }> }> {
+    const response = await fetch(`${this.API_BASE}/ai/quiz-generate`, {
+      method: 'POST',
+      headers: this.getAuthHeaders(),
+      body: JSON.stringify(payload)
+    });
+    return this.handleResponse(response);
+  }
 }
 
 export const authService = new AuthService();

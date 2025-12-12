@@ -13,6 +13,13 @@ const TeacherDashboard: React.FC = () => {
   const navigate = useNavigate();
   const { logout, user } = useAuth();
 
+  const [showAiSettingsModal, setShowAiSettingsModal] = useState(false);
+  const [aiSettings, setAiSettings] = useState<{ provider: string; model: string; hasApiKey: boolean; updatedAt: string | null } | null>(null);
+  const [aiApiKeyDraft, setAiApiKeyDraft] = useState('');
+  const [aiKeyVisible, setAiKeyVisible] = useState(false);
+  const [aiLoading, setAiLoading] = useState(false);
+  const [aiSaving, setAiSaving] = useState(false);
+
   const [showDiscussionModal, setShowDiscussionModal] = useState(false);
   const [discussionForm, setDiscussionForm] = useState({
     title: '',
@@ -39,6 +46,16 @@ const TeacherDashboard: React.FC = () => {
     }>,
     timeLimit: 0
   });
+
+  const [showAiQuizGenerator, setShowAiQuizGenerator] = useState(false);
+  const [aiGenCount, setAiGenCount] = useState(10);
+  const [aiGenTopic, setAiGenTopic] = useState('');
+  const [aiGenUseScope, setAiGenUseScope] = useState(false);
+  const [aiGenScopeText, setAiGenScopeText] = useState('');
+  const [aiGenAdvancedOnly, setAiGenAdvancedOnly] = useState(false);
+  const [aiGenLoading, setAiGenLoading] = useState(false);
+  const [aiGenError, setAiGenError] = useState<string | null>(null);
+  const [aiGenPreview, setAiGenPreview] = useState<Array<{ question: string; options: string[]; correctIndex: number }>>([]);
 
   const [editorRef, setEditorRef] = useState<HTMLDivElement | null>(null);
   const [currentFontSize, setCurrentFontSize] = useState('16');
@@ -194,6 +211,107 @@ const TeacherDashboard: React.FC = () => {
       const linkText = prompt('請輸入連結文字:') || linkUrl;
       execCommand('createLink', linkUrl);
     }
+  };
+
+  const openAiSettings = async () => {
+    setShowAiSettingsModal(true);
+    setAiKeyVisible(false);
+    setAiApiKeyDraft('');
+    try {
+      setAiLoading(true);
+      const settings = await authService.getAiSettings();
+      setAiSettings(settings);
+    } catch (error) {
+      console.error('載入 AI 設定失敗:', error);
+      setAiSettings({ provider: 'grok', model: 'grok-4-1-fast-reasoning-latest', hasApiKey: false, updatedAt: null });
+    } finally {
+      setAiLoading(false);
+    }
+  };
+
+  const saveAiSettings = async () => {
+    try {
+      setAiSaving(true);
+      const saved = await authService.updateAiSettings({ apiKey: aiApiKeyDraft });
+      setAiSettings(saved);
+      setAiApiKeyDraft('');
+      alert('AI 設定已更新');
+    } catch (error) {
+      console.error('更新 AI 設定失敗:', error);
+      alert('更新 AI 設定失敗：' + (error instanceof Error ? error.message : '未知錯誤'));
+    } finally {
+      setAiSaving(false);
+    }
+  };
+
+  const openAiQuizGenerator = async () => {
+    setShowAiQuizGenerator(true);
+    setAiGenError(null);
+    setAiGenPreview([]);
+    setAiGenTopic('');
+    setAiGenCount(10);
+    setAiGenUseScope(false);
+    setAiGenScopeText('');
+    setAiGenAdvancedOnly(false);
+    try {
+      const settings = await authService.getAiSettings();
+      setAiSettings(settings);
+    } catch {
+      // ignore
+    }
+  };
+
+  const runAiQuizGeneration = async () => {
+    setAiGenError(null);
+    setAiGenPreview([]);
+
+    try {
+      setAiGenLoading(true);
+
+      const settings = aiSettings || await authService.getAiSettings();
+      setAiSettings(settings);
+      if (!settings?.hasApiKey) {
+        setAiGenError('尚未設定 AI API Key，請先到右上設定完成設定');
+        return;
+      }
+
+      const scopeText = aiGenUseScope ? aiGenScopeText : '';
+      if (aiGenAdvancedOnly && !scopeText.trim()) {
+        setAiGenError('進階輸入模式需要提供範圍輸入內容');
+        return;
+      }
+
+      const count = Math.max(1, Math.min(50, Math.floor(aiGenCount || 10)));
+      const result = await authService.generateQuizQuestions({
+        subject: String(quizForm.subject),
+        topic: aiGenTopic.trim(),
+        count,
+        scopeText: scopeText.slice(0, 5000),
+        advancedOnly: aiGenAdvancedOnly
+      });
+
+      setAiGenPreview(result.questions || []);
+    } catch (error) {
+      console.error('AI 生成題目失敗:', error);
+      setAiGenError(error instanceof Error ? error.message : 'AI 生成失敗');
+    } finally {
+      setAiGenLoading(false);
+    }
+  };
+
+  const importAiQuestions = (mode: 'replace' | 'append') => {
+    if (!aiGenPreview.length) return;
+    const incoming = aiGenPreview.map(q => ({
+      question: q.question,
+      options: q.options,
+      correctAnswer: q.correctIndex
+    }));
+    setQuizForm(prev => ({
+      ...prev,
+      questions: mode === 'replace' ? incoming : [...prev.questions, ...incoming]
+    }));
+    setShowAiQuizGenerator(false);
+    setAiGenPreview([]);
   };
 
   // === 作業管理功能 ===
@@ -682,7 +800,11 @@ const TeacherDashboard: React.FC = () => {
 
       {/* Header Icons */}
       <header className="fixed top-4 right-6 z-20 flex gap-4">
-        <button className="w-12 h-12 bg-white rounded-full border-2 border-brand-brown shadow-comic flex items-center justify-center hover:scale-105 transition-transform">
+        <button
+          onClick={openAiSettings}
+          className="w-12 h-12 bg-white rounded-full border-2 border-brand-brown shadow-comic flex items-center justify-center hover:scale-105 transition-transform"
+          title="設定（AI）"
+        >
           <Settings className="text-brand-brown w-6 h-6" />
         </button>
         <button
@@ -2435,10 +2557,10 @@ const TeacherDashboard: React.FC = () => {
         )
       }
 
-      {/* Quiz Creation Modal */}
-      {
-        showQuizModal && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
+	      {/* Quiz Creation Modal */}
+	      {
+	        showQuizModal && (
+	          <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
             <div className="bg-white border-4 border-brand-brown rounded-3xl w-full max-w-5xl max-h-[90vh] overflow-y-auto shadow-comic">
               <div className="p-6 border-b-4 border-brand-brown bg-[#FDEEAD]">
                 <div className="flex justify-between items-center">
@@ -2564,18 +2686,26 @@ const TeacherDashboard: React.FC = () => {
                   </div>
                 )}
 
-                {/* Questions Section */}
-                <div className="border-t-4 border-gray-200 pt-6">
-                  <div className="flex justify-between items-center mb-4">
-                    <h3 className="text-xl font-bold text-brand-brown">問題列表</h3>
-                    <Button
-                      onClick={addQuestion}
-                      className="bg-green-100 text-green-700 hover:bg-green-200 border-green-300 flex items-center gap-2"
-                    >
-                      <Plus className="w-4 h-4" />
-                      新增問題
-                    </Button>
-                  </div>
+	                {/* Questions Section */}
+	                <div className="border-t-4 border-gray-200 pt-6">
+	                  <div className="flex justify-between items-center mb-4">
+	                    <h3 className="text-xl font-bold text-brand-brown">問題列表</h3>
+	                    <div className="flex gap-3">
+	                      <Button
+	                        onClick={openAiQuizGenerator}
+	                        className="bg-blue-100 text-blue-700 hover:bg-blue-200 border-blue-300 flex items-center gap-2"
+	                      >
+	                        🤖 AI 生成
+	                      </Button>
+	                      <Button
+	                        onClick={addQuestion}
+	                        className="bg-green-100 text-green-700 hover:bg-green-200 border-green-300 flex items-center gap-2"
+	                      >
+	                        <Plus className="w-4 h-4" />
+	                        新增問題
+	                      </Button>
+	                    </div>
+	                  </div>
 
                   {quizForm.questions.length === 0 ? (
                     <div className="text-center py-8 text-gray-400 font-bold border-4 border-dashed border-gray-300 rounded-3xl">
@@ -2705,9 +2835,241 @@ const TeacherDashboard: React.FC = () => {
                 </div>
               </div>
             </div>
-          </div>
-        )
-      }
+	          </div>
+	        )
+	      }
+
+	      {/* AI Settings Modal */}
+	      {showAiSettingsModal && (
+	        <div className="fixed inset-0 bg-black bg-opacity-50 z-[70] flex items-center justify-center p-4">
+	          <div className="bg-white border-4 border-brand-brown rounded-3xl w-full max-w-2xl shadow-comic-xl">
+	            <div className="p-6 border-b-4 border-brand-brown bg-[#D9F3D5]">
+	              <div className="flex justify-between items-center">
+	                <div>
+	                  <h2 className="text-2xl font-black text-brand-brown">設定（AI）</h2>
+	                  <p className="text-sm text-gray-600 mt-1">
+	                    模型：<span className="font-bold">{aiSettings?.model || 'grok-4-1-fast-reasoning-latest'}</span>
+	                  </p>
+	                </div>
+	                <button
+	                  onClick={() => setShowAiSettingsModal(false)}
+	                  className="w-10 h-10 rounded-full bg-white border-2 border-brand-brown hover:bg-gray-100 flex items-center justify-center"
+	                >
+	                  <X className="w-6 h-6 text-brand-brown" />
+	                </button>
+	              </div>
+	            </div>
+
+	            <div className="p-6 space-y-4">
+	              <div className="bg-yellow-50 border-2 border-yellow-200 rounded-2xl p-4 text-sm text-gray-700">
+	                建議把 API Key 設定在後端代理中使用；前端不會顯示已保存的 Key，只會顯示「已設定/未設定」狀態。
+	              </div>
+
+	              <div className="flex items-center gap-3">
+	                <span className={`px-3 py-1 rounded-full text-xs font-black border-2 ${aiSettings?.hasApiKey ? 'bg-emerald-100 border-emerald-300 text-emerald-800' : 'bg-red-100 border-red-300 text-red-800'}`}>
+	                  {aiSettings?.hasApiKey ? '已設定 API Key' : '未設定 API Key'}
+	                </span>
+	                {aiSettings?.updatedAt && (
+	                  <span className="text-xs text-gray-500">
+	                    更新時間：{new Date(aiSettings.updatedAt).toLocaleString()}
+	                  </span>
+	                )}
+	              </div>
+
+	              {aiLoading ? (
+	                <div className="text-center py-6 text-brand-brown font-bold">載入中...</div>
+	              ) : (
+	                <>
+	                  <Input
+	                    label="Grok API Key（更新/清除）"
+	                    type={aiKeyVisible ? 'text' : 'password'}
+	                    placeholder="輸入 Grok API Key（留空代表清除）"
+	                    value={aiApiKeyDraft}
+	                    onChange={(e) => setAiApiKeyDraft(e.target.value)}
+	                  />
+	                  <div className="flex items-center gap-3">
+	                    <button
+	                      type="button"
+	                      onClick={() => setAiKeyVisible(v => !v)}
+	                      className="px-4 py-2 bg-gray-100 border-2 border-gray-300 rounded-2xl font-bold text-gray-700 hover:bg-gray-200"
+	                    >
+	                      {aiKeyVisible ? '隱藏' : '顯示'}
+	                    </button>
+	                    <button
+	                      type="button"
+	                      onClick={saveAiSettings}
+	                      disabled={aiSaving}
+	                      className={`ml-auto px-6 py-2 rounded-2xl border-2 border-brand-brown font-black ${aiSaving ? 'bg-gray-300 text-gray-600 cursor-wait' : 'bg-[#FDEEAD] text-brand-brown hover:bg-[#FCE690]'}`}
+	                    >
+	                      {aiSaving ? '儲存中...' : '儲存'}
+	                    </button>
+	                  </div>
+	                </>
+	              )}
+	            </div>
+	          </div>
+	        </div>
+	      )}
+
+	      {/* AI Quiz Generator Modal */}
+	      {showAiQuizGenerator && (
+	        <div className="fixed inset-0 bg-black bg-opacity-50 z-[70] flex items-center justify-center p-4">
+	          <div className="bg-white border-4 border-brand-brown rounded-3xl w-full max-w-4xl max-h-[90vh] overflow-y-auto shadow-comic-xl">
+	            <div className="p-6 border-b-4 border-brand-brown bg-[#E0F2FE]">
+	              <div className="flex justify-between items-center">
+	                <div>
+	                  <h2 className="text-2xl font-black text-brand-brown">AI 生成小測驗題目</h2>
+	                  <p className="text-sm text-gray-600 mt-1">
+	                    科目：<span className="font-bold">{String(quizForm.subject)}</span> • 模型：<span className="font-bold">grok-4-1-fast-reasoning-latest</span>
+	                  </p>
+	                </div>
+	                <button
+	                  onClick={() => setShowAiQuizGenerator(false)}
+	                  className="w-10 h-10 rounded-full bg-white border-2 border-brand-brown hover:bg-gray-100 flex items-center justify-center"
+	                >
+	                  <X className="w-6 h-6 text-brand-brown" />
+	                </button>
+	              </div>
+	            </div>
+
+	            <div className="p-6 space-y-6">
+	              {aiGenError && (
+	                <div className="bg-red-50 border-2 border-red-200 rounded-2xl p-4 text-red-700 font-bold">
+	                  {aiGenError}
+	                  {aiGenError.includes('API Key') && (
+	                    <button
+	                      type="button"
+	                      onClick={() => { setShowAiQuizGenerator(false); openAiSettings(); }}
+	                      className="ml-3 underline"
+	                    >
+	                      立即前往設定
+	                    </button>
+	                  )}
+	                </div>
+	              )}
+
+	              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+	                <div>
+	                  <label className="block text-sm font-bold text-brand-brown mb-2">題目數量</label>
+	                  <input
+	                    type="number"
+	                    min={1}
+	                    max={50}
+	                    value={aiGenCount}
+	                    onChange={(e) => setAiGenCount(parseInt(e.target.value) || 1)}
+	                    className="w-full px-4 py-3 rounded-2xl border-2 border-brand-brown bg-white font-bold text-brand-brown"
+	                  />
+	                </div>
+	                <Input
+	                  label="題目主題（可選）"
+	                  placeholder="例如：分數加減 / 文言文 / 乘法 / 詞性..."
+	                  value={aiGenTopic}
+	                  onChange={(e) => setAiGenTopic(e.target.value)}
+	                />
+	              </div>
+
+	              <div className="bg-[#F8FAFC] border-2 border-gray-200 rounded-2xl p-4">
+	                <div className="flex items-center gap-3 mb-3">
+	                  <label className="flex items-center gap-2 font-bold text-brand-brown">
+	                    <input
+	                      type="checkbox"
+	                      checked={aiGenUseScope}
+	                      onChange={(e) => {
+	                        const next = e.target.checked;
+	                        setAiGenUseScope(next);
+	                        if (!next) {
+	                          setAiGenScopeText('');
+	                          setAiGenAdvancedOnly(false);
+	                        }
+	                      }}
+	                    />
+	                    範圍輸入（最多 5000 字）
+	                  </label>
+	                  <label className="flex items-center gap-2 font-bold text-brand-brown ml-auto">
+	                    <input
+	                      type="checkbox"
+	                      checked={aiGenAdvancedOnly}
+	                      disabled={!aiGenUseScope}
+	                      onChange={(e) => setAiGenAdvancedOnly(e.target.checked)}
+	                    />
+	                    進階輸入：只按範圍出題
+	                  </label>
+	                </div>
+	                {aiGenUseScope && (
+	                  <>
+	                    <textarea
+	                      value={aiGenScopeText}
+	                      onChange={(e) => setAiGenScopeText(e.target.value.slice(0, 5000))}
+	                      placeholder="貼上課文/筆記/教材內容..."
+	                      className="w-full h-40 px-4 py-3 rounded-2xl border-2 border-gray-300 focus:border-brand-brown font-medium text-gray-800"
+	                    />
+	                    <div className="mt-2 text-xs text-gray-500 text-right">
+	                      {aiGenScopeText.length}/5000
+	                    </div>
+	                  </>
+	                )}
+	              </div>
+
+	              <div className="flex gap-3">
+	                <button
+	                  type="button"
+	                  onClick={runAiQuizGeneration}
+	                  disabled={aiGenLoading}
+	                  className={`px-6 py-3 rounded-2xl border-2 border-brand-brown font-black ${aiGenLoading ? 'bg-gray-300 text-gray-600 cursor-wait' : 'bg-[#FDEEAD] text-brand-brown hover:bg-[#FCE690]'}`}
+	                >
+	                  {aiGenLoading ? '生成中...' : '開始生成'}
+	                </button>
+	                <button
+	                  type="button"
+	                  onClick={() => { setAiGenPreview([]); setAiGenError(null); }}
+	                  className="px-6 py-3 rounded-2xl border-2 border-gray-300 font-black text-gray-700 bg-gray-100 hover:bg-gray-200"
+	                >
+	                  清除預覽
+	                </button>
+	              </div>
+
+	              {aiGenPreview.length > 0 && (
+	                <div className="border-t-2 border-gray-200 pt-6 space-y-4">
+	                  <div className="flex items-center gap-3">
+	                    <h3 className="text-xl font-black text-brand-brown">預覽（{aiGenPreview.length} 題）</h3>
+	                    <div className="ml-auto flex gap-3">
+	                      <button
+	                        type="button"
+	                        onClick={() => importAiQuestions('replace')}
+	                        className="px-5 py-2 rounded-2xl border-2 border-brand-brown font-black bg-emerald-500 text-white hover:bg-emerald-600"
+	                      >
+	                        匯入（取代題庫）
+	                      </button>
+	                      <button
+	                        type="button"
+	                        onClick={() => importAiQuestions('append')}
+	                        className="px-5 py-2 rounded-2xl border-2 border-brand-brown font-black bg-blue-500 text-white hover:bg-blue-600"
+	                      >
+	                        匯入（追加）
+	                      </button>
+	                    </div>
+	                  </div>
+
+	                  <div className="space-y-4">
+	                    {aiGenPreview.map((q, idx) => (
+	                      <div key={idx} className="bg-white border-2 border-gray-200 rounded-2xl p-4">
+	                        <div className="font-black text-brand-brown mb-2">題目 {idx + 1}：{q.question}</div>
+	                        <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+	                          {q.options.map((opt, oi) => (
+	                            <div key={oi} className={`px-3 py-2 rounded-xl border ${q.correctIndex === oi ? 'bg-emerald-50 border-emerald-300 font-bold' : 'bg-gray-50 border-gray-200'}`}>
+	                              {String.fromCharCode(65 + oi)}. {opt}
+	                            </div>
+	                          ))}
+	                        </div>
+	                      </div>
+	                    ))}
+	                  </div>
+	                </div>
+	              )}
+	            </div>
+	          </div>
+	        </div>
+	      )}
       {/* Student Quiz Result Detail Modal */}
       {
         viewingResultDetails && selectedAssignment && (
