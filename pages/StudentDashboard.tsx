@@ -4,6 +4,7 @@ import { Subject, SUBJECT_CONFIG, Task } from '../types';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { authService } from '../services/authService';
+import { MazeGame } from '../components/MazeGame';
 
 interface Discussion {
   id: string;
@@ -1172,388 +1173,225 @@ const StudentDashboard: React.FC = () => {
                 </div>
               )}
 
-              {/* Maze / Quiz Game Layout - SVG Map Style */}
+              {/* Maze / Quiz Game Layout - New 3D Implementation */}
               {selectedGame.gameType === 'maze' && (
-                <div className="w-full h-full flex flex-col items-center relative overflow-hidden bg-[#87CEEB]">
-                  {/* Sky & Background Elements */}
-                  <div className="absolute top-10 left-10 opacity-80 animate-pulse">
-                    <svg width="100" height="60" viewBox="0 0 100 60" fill="white">
-                      <path d="M20,40 Q30,20 50,40 T80,40 Q90,50 80,60 T50,60 Q30,60 20,40 Z" />
-                    </svg>
-                  </div>
-                  <div className="absolute top-20 right-20 opacity-60" style={{ animation: 'float 6s ease-in-out infinite' }}>
-                    <svg width="120" height="70" viewBox="0 0 120 70" fill="white">
-                      <path d="M20,50 Q40,20 70,50 T110,50 Q120,60 110,70 T70,70 Q40,70 20,50 Z" />
-                    </svg>
-                  </div>
-
-                  {/* Ground */}
-                  <div className="absolute bottom-0 w-full h-1/3 bg-[#90EE90] border-t-8 border-[#228B22]"></div>
-
-                  {/* Map Container */}
-                  {/* Grid Maze Container */}
-                  <div className="relative w-full max-w-4xl flex flex-col items-center mt-6">
-
-                    {/* Game Info Bar */}
-                    <div className="flex w-full justify-between items-center bg-white/90 p-4 rounded-xl border-4 border-brand-brown mb-4 shadow-lg">
-                      <div className="flex items-center gap-4">
-                        <span className="text-xl font-bold text-brand-brown">步數: {mazeSteps}</span>
-                        <span className="text-xl font-bold text-brand-brown">
-                          收集知識: {gameScore}/{selectedGame.questions.length}
-                        </span>
-                      </div>
-                      <div className="text-gray-500 font-mono text-lg">
-                        TIME: {gameStartTime && Math.floor((Date.now() - gameStartTime.getTime()) / 1000)}s
-                      </div>
-                    </div>
-
-                    {/* The Maze Grid */}
-                    <div
-                      className="bg-[#2a2a2a] p-2 rounded-lg shadow-2xl overflow-hidden relative"
-                      style={{
-                        display: 'grid',
-                        gridTemplateColumns: `repeat(${mazeGrid[0]?.length || 1}, minmax(20px, 40px))`,
-                        gridTemplateRows: `repeat(${mazeGrid.length || 1}, minmax(20px, 40px))`,
-                        gap: '2px'
-                      }}
-                    >
-                      {mazeGrid.map((row, y) => (
-                        row.map((cell, x) => {
-                          const isPlayer = playerPos.x === x && playerPos.y === y;
-                          const isGate = cell === 4;
-                          const isStart = cell === 2;
-                          const isEnd = cell === 3;
-                          const isWall = cell === 0;
-
-                          return (
-                            <div
-                              key={`${x}-${y}`}
-                              onClick={() => {
-                                // Allow click adjacent to move
-                                const dx = x - playerPos.x;
-                                const dy = y - playerPos.y;
-                                if (Math.abs(dx) + Math.abs(dy) === 1) {
-                                  handleMazeMove(dx, dy);
-                                }
-                              }}
-                              className={`
-                                        relative rounded-sm
-                                        ${isWall ? 'bg-gray-800' : 'bg-gray-200'}
-                                        ${isStart ? 'bg-green-200' : ''}
-                                        ${isEnd ? 'bg-red-200' : ''}
-                                        ${isGate ? 'bg-yellow-200 animate-pulse' : ''}
-                                        cursor-pointer hover:opacity-80 transition-colors duration-1000
-                                     `}
-                            >
-                              {isPlayer && (
-                                <div className="absolute inset-1 bg-brand-brown rounded-full border-2 border-white flex items-center justify-center z-10 transition-all shadow-md">
-                                  <span className="text-white text-[10px]">🏃</span>
-                                </div>
-                              )}
-                              {isStart && !isPlayer && <div className="absolute inset-0 flex items-center justify-center text-xs">🏁</div>}
-                              {isEnd && !isPlayer && <div className="absolute inset-0 flex items-center justify-center text-xs">🏠</div>}
-                              {isGate && !isPlayer && <div className="absolute inset-0 flex items-center justify-center text-xs">🔒</div>}
-                            </div>
-                          );
-                        })
-                      ))}
-                    </div>
-
-                    {/* Touch Controls (Virtual D-Pad for Tablet) */}
-                    <div className="flex gap-4 mt-8">
-                      <div className="grid grid-cols-3 gap-2 p-4 bg-black/20 rounded-full">
-                        <div></div>
-                        <button onClick={() => handleMazeMove(0, -1)} className="w-16 h-16 bg-white rounded-full shadow-xl active:bg-gray-200 border-b-4 border-gray-300 text-3xl font-black">⬆️</button>
-                        <div></div>
-                        <button onClick={() => handleMazeMove(-1, 0)} className="w-16 h-16 bg-white rounded-full shadow-xl active:bg-gray-200 border-b-4 border-gray-300 text-3xl font-black">⬅️</button>
-                        <button onClick={() => handleMazeMove(0, 1)} className="w-16 h-16 bg-white rounded-full shadow-xl active:bg-gray-200 border-b-4 border-gray-300 text-3xl font-black">⬇️</button>
-                        <button onClick={() => handleMazeMove(1, 0)} className="w-16 h-16 bg-white rounded-full shadow-xl active:bg-gray-200 border-b-4 border-gray-300 text-3xl font-black">➡️</button>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Question Modal (When hitting a Gate) */}
-                  {mazeGrid[playerPos.y + (0)] && (() => {
-                    // Check if we are interacting with a gate? 
-                    // Actually logic is: if cell==4, we show question. But player isn't ON the cell yet.
-                    // We need 'pendingMove' state or check the questionIndex.
-
-                    // Using gameCurrentQuestionIndex !== -1 to trigger modal
-                    // But currentQuestionIndex logic in previous code was 0..N.
-                    // Here we map gate -> index.
-
-                    const qIndex = gameCurrentQuestionIndex;
-                    if (qIndex === -1) return null; // No active question
-
-                    // We need to know WHICH gate coordinates triggered this to pass to answer handler.
-                    // Let's find coordinates by qIndex or store it previously.
-                    // Simplification: We need 'activeGateCoords' state.
-                    // For now, let's reverse look up in QuestionMap (slow but works for small map) or just store it.
-                    const activeGateKey = Object.keys(gameQuestionMap).find(key => gameQuestionMap[key] === qIndex);
-                    if (!activeGateKey) return null;
-
-                    const [gx, gy] = activeGateKey.split(',').map(Number);
-
-                    // Check if the player is adjacent to this gate (verify intent)
-                    const dist = Math.abs(playerPos.x - gx) + Math.abs(playerPos.y - gy);
-                    if (dist !== 1) return null; // Logic check: only show if attempting to enter
-
-                    return (
-                      <div className="absolute inset-0 bg-black/80 z-20 flex items-center justify-center p-4">
-                        <div className="bg-white rounded-3xl p-6 max-w-lg w-full border-4 border-yellow-400 shadow-2xl animate-bounce-in">
-                          <h3 className="text-xl font-bold text-center mb-4">解開謎題以開啟道路！</h3>
-                          <div className="p-4 bg-yellow-50 rounded-xl mb-4 border-2 border-yellow-200">
-                            <p className="font-bold text-lg text-brand-brown">{selectedGame.questions[qIndex].question}</p>
-                          </div>
-                          <div className="grid grid-cols-1 gap-3">
-                            {[
-                              selectedGame.questions[qIndex].answer,
-                              ...(selectedGame.questions[qIndex].wrongOptions || [])
-                            ].sort(() => Math.random() - 0.5).map((opt, idx) => (
-                              <button
-                                key={idx}
-                                onClick={() => handleMazeAnswer(opt === selectedGame.questions[qIndex].answer, gx, gy)}
-                                className="p-3 bg-white border-2 border-gray-300 rounded-lg font-bold hover:bg-yellow-100 hover:border-yellow-400 text-left"
-                              >
-                                {String.fromCharCode(65 + idx)}. {opt}
-                              </button>
-                            ))}
-                          </div>
-                          <button onClick={() => setGameCurrentQuestionIndex(-1)} className="mt-4 text-gray-400 underline w-full text-center">暫時撤退</button>
-                        </div>
-                      </div>
-                    );
-                  })()}
-
-
-                  {/* Current Question Overlay - Tablet Friendly Big Card */}
-                  <div className="absolute inset-x-0 bottom-0 p-6 flex justify-center items-end pointer-events-none">
-                    <div className="bg-white/95 backdrop-blur-md border-4 border-brand-brown rounded-3xl p-6 w-full max-w-3xl shadow-[0_-10px_40px_rgba(0,0,0,0.2)] pointer-events-auto transform transition-transform duration-500 hover:scale-[1.01]">
-                      <div className="flex justify-between items-start mb-4">
-                        <span className="bg-yellow-400 text-yellow-900 px-4 py-1 rounded-full font-bold text-sm">
-                          關卡 {gameCurrentQuestionIndex + 1}
-                        </span>
-                      </div>
-
-                      <h3 className="text-2xl md:text-3xl font-black text-brand-brown mb-6 leading-tight">
-                        {selectedGame.questions[gameCurrentQuestionIndex]?.question}
-                      </h3>
-
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        {[
-                          selectedGame.questions[gameCurrentQuestionIndex]?.answer,
-                          ...(selectedGame.questions[gameCurrentQuestionIndex]?.wrongOptions || [])
-                        ].sort(() => Math.random() - 0.5).map((option, idx) => (
-                          <button
-                            key={idx}
-                            onClick={() => handleGameOptionSelect(option === selectedGame.questions[gameCurrentQuestionIndex].answer)}
-                            className="p-4 md:p-6 bg-white border-4 border-gray-200 text-gray-700 rounded-2xl text-xl font-bold hover:bg-yellow-50 hover:border-brand-brown hover:text-brand-brown transition-all active:scale-95 shadow-sm text-left flex items-center gap-3"
-                          >
-                            <div className="w-10 h-10 rounded-full bg-gray-100 flex items-center justify-center text-gray-500 font-black text-lg border-2 border-gray-300">
-                              {String.fromCharCode(65 + idx)}
-                            </div>
-                            {option}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                  </div>
-                </div>
+                <MazeGame
+                  questions={selectedGame.questions.map((q: any, i: number) => {
+                    const allOptions = [q.answer, ...(q.wrongOptions || [])];
+                    const shuffledOptions = [...allOptions].sort(() => Math.random() - 0.5);
+                    const correctIndex = shuffledOptions.indexOf(q.answer);
+                    return {
+                      id: `mz-q-${i}`,
+                      text: q.question,
+                      options: shuffledOptions,
+                      correctIndex: correctIndex
+                    };
+                  })}
+                  onExit={() => setShowGameModal(false)}
+                  onComplete={(finalScore) => {
+                    setGameScore(finalScore);
+                    handleGameComplete(true);
+                  }}
+                />
               )}
             </div>
 
             {/* Game Status Footer */}
-            {gameStatus === 'completed' && (
-              <div className="absolute inset-0 bg-black bg-opacity-90 flex flex-col items-center justify-center p-8 z-50">
-                <h1 className="text-6xl font-black text-[#A1D9AE] mb-4 animate-bounce">VICTORY!</h1>
-                <p className="text-2xl text-white mb-8">恭喜完成所有挑戰！</p>
-                <button
-                  onClick={() => setShowGameModal(false)}
-                  className="px-8 py-3 bg-[#A1D9AE] text-brand-brown font-bold text-xl rounded-full hover:bg-white transition-colors"
-                >
-                  返回任務列表
-                </button>
-              </div>
-            )}
+            {
+              gameStatus === 'completed' && (
+                <div className="absolute inset-0 bg-black bg-opacity-90 flex flex-col items-center justify-center p-8 z-50">
+                  <h1 className="text-6xl font-black text-[#A1D9AE] mb-4 animate-bounce">VICTORY!</h1>
+                  <p className="text-2xl text-white mb-8">恭喜完成所有挑戰！</p>
+                  <button
+                    onClick={() => setShowGameModal(false)}
+                    className="px-8 py-3 bg-[#A1D9AE] text-brand-brown font-bold text-xl rounded-full hover:bg-white transition-colors"
+                  >
+                    返回任務列表
+                  </button>
+                </div>
+              )
+            }
 
-          </div>
-        </div>
+          </div >
+        </div >
       )}
 
       {/* Quiz Taking Modal */}
-      {showQuizModal && selectedQuiz && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
-          <div className="bg-white border-4 border-brand-brown rounded-3xl w-full max-w-4xl max-h-[90vh] overflow-y-auto shadow-comic">
-            <div className="p-6 border-b-4 border-brand-brown bg-[#FDEEAD]">
-              <div className="flex justify-between items-center">
-                <div>
-                  <h2 className="text-3xl font-black text-brand-brown">{selectedQuiz.title}</h2>
-                  <p className="text-sm text-gray-600 mt-1">
-                    {selectedQuiz.description && `${selectedQuiz.description} • `}
-                    {selectedQuiz.subject} • 共 {selectedQuiz.questions?.length || 0} 題
-                    {selectedQuiz.timeLimit && selectedQuiz.timeLimit > 0 && ` • ${selectedQuiz.timeLimit} 分鐘限時`}
-                  </p>
+      {
+        showQuizModal && selectedQuiz && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
+            <div className="bg-white border-4 border-brand-brown rounded-3xl w-full max-w-4xl max-h-[90vh] overflow-y-auto shadow-comic">
+              <div className="p-6 border-b-4 border-brand-brown bg-[#FDEEAD]">
+                <div className="flex justify-between items-center">
+                  <div>
+                    <h2 className="text-3xl font-black text-brand-brown">{selectedQuiz.title}</h2>
+                    <p className="text-sm text-gray-600 mt-1">
+                      {selectedQuiz.description && `${selectedQuiz.description} • `}
+                      {selectedQuiz.subject} • 共 {selectedQuiz.questions?.length || 0} 題
+                      {selectedQuiz.timeLimit && selectedQuiz.timeLimit > 0 && ` • ${selectedQuiz.timeLimit} 分鐘限時`}
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => {
+                      if (confirm('確定要退出測驗嗎？已選擇的答案將不會保存。')) {
+                        setShowQuizModal(false);
+                        setSelectedQuiz(null);
+                        setQuizAnswers([]);
+                        setQuizStartTime(null);
+                      }
+                    }}
+                    className="w-10 h-10 rounded-full bg-white border-2 border-brand-brown hover:bg-gray-100 flex items-center justify-center flex-shrink-0"
+                  >
+                    <X className="w-6 h-6 text-brand-brown" />
+                  </button>
                 </div>
-                <button
-                  onClick={() => {
-                    if (confirm('確定要退出測驗嗎？已選擇的答案將不會保存。')) {
-                      setShowQuizModal(false);
-                      setSelectedQuiz(null);
-                      setQuizAnswers([]);
-                      setQuizStartTime(null);
-                    }
-                  }}
-                  className="w-10 h-10 rounded-full bg-white border-2 border-brand-brown hover:bg-gray-100 flex items-center justify-center flex-shrink-0"
-                >
-                  <X className="w-6 h-6 text-brand-brown" />
-                </button>
               </div>
-            </div>
 
-            <div className="p-6">
-              {/* 複習模式提示 */}
-              {viewingQuizResult && (
-                <div className="mb-6 bg-blue-100 border-l-4 border-blue-500 p-4 rounded-r-xl">
-                  <div className="flex justify-between items-center">
-                    <div>
-                      <p className="font-bold text-blue-900 text-lg">測驗結果回顧</p>
-                      <p className="text-blue-800">
-                        得分: <span className="text-2xl font-black">{Math.round(viewingQuizResult.score)}%</span> •
-                        正確: {viewingQuizResult.correctAnswers}/{viewingQuizResult.totalQuestions}
-                      </p>
+              <div className="p-6">
+                {/* 複習模式提示 */}
+                {viewingQuizResult && (
+                  <div className="mb-6 bg-blue-100 border-l-4 border-blue-500 p-4 rounded-r-xl">
+                    <div className="flex justify-between items-center">
+                      <div>
+                        <p className="font-bold text-blue-900 text-lg">測驗結果回顧</p>
+                        <p className="text-blue-800">
+                          得分: <span className="text-2xl font-black">{Math.round(viewingQuizResult.score)}%</span> •
+                          正確: {viewingQuizResult.correctAnswers}/{viewingQuizResult.totalQuestions}
+                        </p>
+                      </div>
                     </div>
                   </div>
-                </div>
-              )}
-              {/* 進度條 */}
-              <div className="mb-6">
-                <div className="flex justify-between items-center mb-2">
-                  <span className="text-sm font-bold text-brand-brown">
-                    答題進度: {quizAnswers.filter(a => a !== -1).length} / {selectedQuiz.questions?.length || 0}
-                  </span>
-                  {quizStartTime && selectedQuiz.timeLimit && selectedQuiz.timeLimit > 0 && (
-                    <span className="text-sm text-gray-600">
-                      剩餘時間: {Math.max(0, selectedQuiz.timeLimit * 60 - Math.floor((Date.now() - quizStartTime.getTime()) / 1000))} 秒
+                )}
+                {/* 進度條 */}
+                <div className="mb-6">
+                  <div className="flex justify-between items-center mb-2">
+                    <span className="text-sm font-bold text-brand-brown">
+                      答題進度: {quizAnswers.filter(a => a !== -1).length} / {selectedQuiz.questions?.length || 0}
                     </span>
-                  )}
+                    {quizStartTime && selectedQuiz.timeLimit && selectedQuiz.timeLimit > 0 && (
+                      <span className="text-sm text-gray-600">
+                        剩餘時間: {Math.max(0, selectedQuiz.timeLimit * 60 - Math.floor((Date.now() - quizStartTime.getTime()) / 1000))} 秒
+                      </span>
+                    )}
+                  </div>
+                  <div className="w-full bg-gray-200 rounded-full h-2">
+                    <div
+                      className="bg-[#FDEEAD] h-2 rounded-full transition-all duration-300"
+                      style={{ width: `${(quizAnswers.filter(a => a !== -1).length / (selectedQuiz.questions?.length || 1)) * 100}%` }}
+                    />
+                  </div>
                 </div>
-                <div className="w-full bg-gray-200 rounded-full h-2">
-                  <div
-                    className="bg-[#FDEEAD] h-2 rounded-full transition-all duration-300"
-                    style={{ width: `${(quizAnswers.filter(a => a !== -1).length / (selectedQuiz.questions?.length || 1)) * 100}%` }}
-                  />
-                </div>
-              </div>
 
-              {/* 問題列表 */}
-              <div className="space-y-6">
-                {selectedQuiz.questions?.map((question: any, questionIndex: number) => (
-                  <div key={questionIndex} className="bg-gray-50 border-4 border-gray-200 rounded-3xl p-6">
-                    <div className="mb-4">
-                      <h3 className="text-lg font-bold text-brand-brown mb-3">
-                        問題 {questionIndex + 1}: {question.question}
-                      </h3>
-                      {question.image && (
-                        <div className="mb-4">
-                          <img
-                            src={question.image}
-                            alt="Question"
-                            className="max-h-64 rounded-xl border-4 border-white shadow-md mx-auto"
-                          />
-                        </div>
-                      )}
-                    </div>
+                {/* 問題列表 */}
+                <div className="space-y-6">
+                  {selectedQuiz.questions?.map((question: any, questionIndex: number) => (
+                    <div key={questionIndex} className="bg-gray-50 border-4 border-gray-200 rounded-3xl p-6">
+                      <div className="mb-4">
+                        <h3 className="text-lg font-bold text-brand-brown mb-3">
+                          問題 {questionIndex + 1}: {question.question}
+                        </h3>
+                        {question.image && (
+                          <div className="mb-4">
+                            <img
+                              src={question.image}
+                              alt="Question"
+                              className="max-h-64 rounded-xl border-4 border-white shadow-md mx-auto"
+                            />
+                          </div>
+                        )}
+                      </div>
 
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                      {question.options?.map((option: string, optionIndex: number) => (
-                        <button
-                          key={optionIndex}
-                          onClick={() => !viewingQuizResult && handleAnswerSelect(questionIndex, optionIndex)}
-                          disabled={!!viewingQuizResult}
-                          className={`p-4 rounded-xl border-2 text-left font-medium transition-all duration-200 ${viewingQuizResult
-                            ? (() => {
-                              const studentSelection = viewingQuizResult.answers[questionIndex];
-                              const isCorrect = question.correctAnswer === optionIndex;
-                              const isSelected = studentSelection === optionIndex;
-
-                              if (isCorrect) return 'bg-green-100 border-green-500 text-green-900';
-                              if (isSelected && !isCorrect) return 'bg-red-100 border-red-500 text-red-900';
-                              return 'bg-white border-gray-200 opacity-60';
-                            })()
-                            : quizAnswers[questionIndex] === optionIndex
-                              ? 'bg-[#FDEEAD] border-brand-brown text-brand-brown shadow-comic'
-                              : 'bg-white border-gray-300 text-gray-700 hover:border-brand-brown hover:bg-yellow-50'
-                            }`}
-                        >
-                          <div className="flex items-center gap-3">
-                            <div className={`w-6 h-6 rounded-full border-2 flex items-center justify-center flex-shrink-0 ${viewingQuizResult
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                        {question.options?.map((option: string, optionIndex: number) => (
+                          <button
+                            key={optionIndex}
+                            onClick={() => !viewingQuizResult && handleAnswerSelect(questionIndex, optionIndex)}
+                            disabled={!!viewingQuizResult}
+                            className={`p-4 rounded-xl border-2 text-left font-medium transition-all duration-200 ${viewingQuizResult
                               ? (() => {
                                 const studentSelection = viewingQuizResult.answers[questionIndex];
                                 const isCorrect = question.correctAnswer === optionIndex;
                                 const isSelected = studentSelection === optionIndex;
 
-                                if (isCorrect) return 'border-green-600 bg-green-600 text-white';
-                                if (isSelected) return 'border-red-500 bg-red-500 text-white';
-                                return 'border-gray-300 text-gray-400';
+                                if (isCorrect) return 'bg-green-100 border-green-500 text-green-900';
+                                if (isSelected && !isCorrect) return 'bg-red-100 border-red-500 text-red-900';
+                                return 'bg-white border-gray-200 opacity-60';
                               })()
                               : quizAnswers[questionIndex] === optionIndex
-                                ? 'border-brand-brown bg-brand-brown text-white'
-                                : 'border-gray-400'
-                              }`}>
-                              <span className="text-sm font-bold">
-                                {String.fromCharCode(65 + optionIndex)}
-                              </span>
+                                ? 'bg-[#FDEEAD] border-brand-brown text-brand-brown shadow-comic'
+                                : 'bg-white border-gray-300 text-gray-700 hover:border-brand-brown hover:bg-yellow-50'
+                              }`}
+                          >
+                            <div className="flex items-center gap-3">
+                              <div className={`w-6 h-6 rounded-full border-2 flex items-center justify-center flex-shrink-0 ${viewingQuizResult
+                                ? (() => {
+                                  const studentSelection = viewingQuizResult.answers[questionIndex];
+                                  const isCorrect = question.correctAnswer === optionIndex;
+                                  const isSelected = studentSelection === optionIndex;
+
+                                  if (isCorrect) return 'border-green-600 bg-green-600 text-white';
+                                  if (isSelected) return 'border-red-500 bg-red-500 text-white';
+                                  return 'border-gray-300 text-gray-400';
+                                })()
+                                : quizAnswers[questionIndex] === optionIndex
+                                  ? 'border-brand-brown bg-brand-brown text-white'
+                                  : 'border-gray-400'
+                                }`}>
+                                <span className="text-sm font-bold">
+                                  {String.fromCharCode(65 + optionIndex)}
+                                </span>
+                              </div>
+                              <span className="flex-1">{option}</span>
+                              {viewingQuizResult && (
+                                <>
+                                  {question.correctAnswer === optionIndex && (
+                                    <span className="text-xs font-bold bg-green-200 text-green-800 px-2 py-1 rounded-full">正確答案</span>
+                                  )}
+                                  {viewingQuizResult.answers[questionIndex] === optionIndex && viewingQuizResult.answers[questionIndex] !== question.correctAnswer && (
+                                    <span className="text-xs font-bold bg-red-200 text-red-800 px-2 py-1 rounded-full">你的選擇</span>
+                                  )}
+                                </>
+                              )}
                             </div>
-                            <span className="flex-1">{option}</span>
-                            {viewingQuizResult && (
-                              <>
-                                {question.correctAnswer === optionIndex && (
-                                  <span className="text-xs font-bold bg-green-200 text-green-800 px-2 py-1 rounded-full">正確答案</span>
-                                )}
-                                {viewingQuizResult.answers[questionIndex] === optionIndex && viewingQuizResult.answers[questionIndex] !== question.correctAnswer && (
-                                  <span className="text-xs font-bold bg-red-200 text-red-800 px-2 py-1 rounded-full">你的選擇</span>
-                                )}
-                              </>
-                            )}
-                          </div>
-                        </button>
-                      ))}
+                          </button>
+                        ))}
+                      </div>
                     </div>
+                  ))}
+                </div>
+
+                {/* 提交按鈕 (只在非複習模式顯示) */}
+                {!viewingQuizResult && (
+                  <div className="flex justify-center mt-8 pt-6 border-t-4 border-gray-200">
+                    <button
+                      onClick={handleSubmitQuiz}
+                      disabled={submittingQuiz || quizAnswers.includes(-1)}
+                      className={`px-8 py-3 font-bold rounded-2xl border-4 text-lg transition-all duration-200 ${quizAnswers.includes(-1)
+                        ? 'bg-gray-300 border-gray-400 text-gray-600 cursor-not-allowed'
+                        : submittingQuiz
+                          ? 'bg-yellow-400 border-yellow-600 text-yellow-800 cursor-wait'
+                          : 'bg-[#FDEEAD] border-brand-brown text-brand-brown hover:bg-[#FCE690] shadow-comic active:translate-y-1 active:shadow-none'
+                        }`}
+                    >
+                      {submittingQuiz ? '提交中...' : '提交測驗'}
+                    </button>
                   </div>
-                ))}
+                )}
+
+                {/* 提示信息 */}
+                {quizAnswers.includes(-1) && (
+                  <div className="mt-4 p-4 bg-orange-100 border-2 border-orange-300 rounded-xl text-center">
+                    <p className="text-orange-700 font-medium">
+                      請回答所有問題後再提交測驗 (還有 {quizAnswers.filter(a => a === -1).length} 題未回答)
+                    </p>
+                  </div>
+                )}
               </div>
-
-              {/* 提交按鈕 (只在非複習模式顯示) */}
-              {!viewingQuizResult && (
-                <div className="flex justify-center mt-8 pt-6 border-t-4 border-gray-200">
-                  <button
-                    onClick={handleSubmitQuiz}
-                    disabled={submittingQuiz || quizAnswers.includes(-1)}
-                    className={`px-8 py-3 font-bold rounded-2xl border-4 text-lg transition-all duration-200 ${quizAnswers.includes(-1)
-                      ? 'bg-gray-300 border-gray-400 text-gray-600 cursor-not-allowed'
-                      : submittingQuiz
-                        ? 'bg-yellow-400 border-yellow-600 text-yellow-800 cursor-wait'
-                        : 'bg-[#FDEEAD] border-brand-brown text-brand-brown hover:bg-[#FCE690] shadow-comic active:translate-y-1 active:shadow-none'
-                      }`}
-                  >
-                    {submittingQuiz ? '提交中...' : '提交測驗'}
-                  </button>
-                </div>
-              )}
-
-              {/* 提示信息 */}
-              {quizAnswers.includes(-1) && (
-                <div className="mt-4 p-4 bg-orange-100 border-2 border-orange-300 rounded-xl text-center">
-                  <p className="text-orange-700 font-medium">
-                    請回答所有問題後再提交測驗 (還有 {quizAnswers.filter(a => a === -1).length} 題未回答)
-                  </p>
-                </div>
-              )}
             </div>
           </div>
-        </div>
-      )}
-    </div>
+        )
+      }
+    </div >
   );
 };
 
