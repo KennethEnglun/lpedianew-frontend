@@ -346,7 +346,7 @@ const StudentDashboard: React.FC = () => {
 
       setSelectedGame(game);
       setGameScore(0);
-      setGameStartTime(new Date());
+      setGameStartTime(game.gameType === 'tower-defense' ? null : new Date());
       setGameTimerTick(0);
       setGameStatus('playing');
       setGameCurrentQuestionIndex(0);
@@ -1482,16 +1482,17 @@ const StudentDashboard: React.FC = () => {
 	              )}
 
 	              {/* Tower Defense Game Layout */}
-	              {selectedGame.gameType === 'tower-defense' && (
-	                <TowerDefenseGame
-	                  questions={selectedGame.questions || []}
-	                  subject={selectedGame.subject as Subject}
-	                  difficulty={(selectedGame.difficulty || 'medium') as any}
-	                  onExit={() => setShowGameModal(false)}
-	                  onComplete={(result) => {
-	                    setGameScore(result.score);
-	                    handleGameComplete(result.success, {
-	                      score: result.score,
+		              {selectedGame.gameType === 'tower-defense' && (
+		                <TowerDefenseGame
+		                  questions={selectedGame.questions || []}
+		                  subject={selectedGame.subject as Subject}
+		                  difficulty={(selectedGame.difficulty || 'medium') as any}
+		                  onExit={() => setShowGameModal(false)}
+		                  onStart={() => { setGameStartTime(new Date()); setGameTimerTick(0); }}
+		                  onComplete={(result) => {
+		                    setGameScore(result.score);
+		                    handleGameComplete(result.success, {
+		                      score: result.score,
 	                      correctAnswers: result.correctAnswers,
 	                      totalQuestions: result.totalQuestions,
 	                      timeSpent: result.timeSpent

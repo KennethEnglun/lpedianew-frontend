@@ -3,6 +3,7 @@ import { Subject, SUBJECT_CONFIG } from '../types';
 
 type Difficulty = 'easy' | 'medium' | 'hard';
 type TowerType = 'soldier' | 'archer' | 'cannon';
+type EnemyKind = 'slime' | 'runner' | 'tank' | 'shooter';
 
 interface QuestionItem {
   question: string;
@@ -15,6 +16,7 @@ interface Props {
   subject: Subject;
   difficulty: Difficulty;
   onExit: () => void;
+  onStart?: () => void;
   onComplete: (result: {
     success: boolean;
     score: number;
@@ -34,11 +36,17 @@ interface GridCell {
 
 interface Enemy {
   id: number;
+  kind: EnemyKind;
   pathIndex: number;
   speed: number;
   maxHp: number;
   hp: number;
   size: number;
+  color: string;
+  attackDamage?: number;
+  attackRange?: number;
+  attackCooldown?: number;
+  lastAttackAt?: number;
 }
 
 interface Tower {
@@ -51,6 +59,8 @@ interface Tower {
   fireRate: number;
   lastShotAt: number;
   projectileSpeed: number;
+  maxHp: number;
+  hp: number;
 }
 
 interface Projectile {
@@ -82,6 +92,7 @@ const GRID_HEIGHT = 7;
 const TILE_W = 76;
 const TILE_H = 38;
 const TILE_DEPTH = 18;
+const GAME_DURATION_SECONDS = 60;
 
 const PATH_CELLS: Array<{ x: number; y: number }> = [
   { x: 0, y: 3 }, { x: 1, y: 3 }, { x: 2, y: 3 }, { x: 2, y: 2 }, { x: 2, y: 1 },
@@ -113,7 +124,7 @@ function shuffleArray<T>(items: T[]): T[] {
   return arr;
 }
 
-export const TowerDefenseGame: React.FC<Props> = ({ questions, subject, difficulty, onExit, onComplete }) => {
+export const TowerDefenseGame: React.FC<Props> = ({ questions, subject, difficulty, onExit, onStart, onComplete }) => {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
   const lastTimeRef = useRef<number>(0);
@@ -148,28 +159,40 @@ export const TowerDefenseGame: React.FC<Props> = ({ questions, subject, difficul
   const [correctAnswers, setCorrectAnswers] = useState(0);
   const [totalAnswered, setTotalAnswered] = useState(0);
   const [gameOver, setGameOver] = useState(false);
+  const [isRunning, setIsRunning] = useState(false);
+  const [speedMultiplier, setSpeedMultiplier] = useState(1);
+  const [timeLeft, setTimeLeft] = useState(GAME_DURATION_SECONDS);
+  const [endReason, setEndReason] = useState<'time' | 'lives' | null>(null);
+
   const startTimeRef = useRef<Date>(new Date());
+  const runStartAtMsRef = useRef<number | null>(null);
+  const lastTimeLeftRef = useRef<number>(GAME_DURATION_SECONDS);
+  const simTimeRef = useRef<number>(0);
 
   const enemiesRef = useRef<Enemy[]>([]);
   const towersRef = useRef<Tower[]>([]);
   const projectilesRef = useRef<Projectile[]>([]);
   const particlesRef = useRef<Particle[]>([]);
   const gameOverRef = useRef<boolean>(false);
+  const isRunningRef = useRef<boolean>(false);
+  const speedRef = useRef<number>(1);
 
   useEffect(() => { enemiesRef.current = enemies; }, [enemies]);
   useEffect(() => { towersRef.current = towers; }, [towers]);
   useEffect(() => { projectilesRef.current = projectiles; }, [projectiles]);
   useEffect(() => { particlesRef.current = particles; }, [particles]);
   useEffect(() => { gameOverRef.current = gameOver; }, [gameOver]);
+  useEffect(() => { isRunningRef.current = isRunning; }, [isRunning]);
+  useEffect(() => { speedRef.current = speedMultiplier; }, [speedMultiplier]);
 
   const requiredQuestions = questions.filter(q => q.question && q.answer);
   const hasQuestions = requiredQuestions.length > 0;
 
   const towerCatalog = useMemo(() => {
     return [
-      { type: 'soldier' as const, label: '劍士', cost: 25, range: 120, damage: 8, fireRate: 0.9, projectileSpeed: 320, color: '#60a5fa' },
-      { type: 'archer' as const, label: '弓箭手', cost: 35, range: 160, damage: 6, fireRate: 0.55, projectileSpeed: 420, color: '#34d399' },
-      { type: 'cannon' as const, label: '炮兵', cost: 50, range: 190, damage: 14, fireRate: 1.2, projectileSpeed: 260, color: '#f472b6' }
+      { type: 'soldier' as const, label: '劍士', cost: 25, range: 120, damage: 8, fireRate: 0.9, projectileSpeed: 320, maxHp: 36, color: '#60a5fa' },
+      { type: 'archer' as const, label: '弓箭手', cost: 35, range: 160, damage: 6, fireRate: 0.55, projectileSpeed: 420, maxHp: 30, color: '#34d399' },
+      { type: 'cannon' as const, label: '炮兵', cost: 50, range: 190, damage: 14, fireRate: 1.2, projectileSpeed: 260, maxHp: 44, color: '#f472b6' }
     ];
   }, []);
 
@@ -272,8 +295,37 @@ export const TowerDefenseGame: React.FC<Props> = ({ questions, subject, difficul
     return { x, y };
   }
 
+  function finishGame(reason: 'time' | 'lives') {
+    if (gameOverRef.current) return;
+    gameOverRef.current = true;
+    isRunningRef.current = false;
+    setEndReason(reason);
+    setGameOver(true);
+    setIsRunning(false);
+  }
+
+  function startGame() {
+    if (gameOverRef.current || isRunningRef.current) return;
+    gameOverRef.current = false;
+    isRunningRef.current = true;
+    setEndReason(null);
+    setGameOver(false);
+    setIsRunning(true);
+    onStart?.();
+
+    runStartAtMsRef.current = Date.now();
+    lastTimeLeftRef.current = GAME_DURATION_SECONDS;
+    setTimeLeft(GAME_DURATION_SECONDS);
+    simTimeRef.current = 0;
+    startTimeRef.current = new Date();
+
+    setWave(1);
+    setProjectiles([]);
+    spawnWave(1, true);
+  }
+
   function openNextQuestion() {
-    if (!hasQuestions || questionOpen || gameOver) return;
+    if (!hasQuestions || questionOpen || gameOver || !isRunningRef.current) return;
     const next = requiredQuestions[questionIndex % requiredQuestions.length];
     const wrongOptions = (next.wrongOptions || []).map(o => o.trim()).filter(Boolean);
     const options = shuffleArray([next.answer, ...wrongOptions]).slice(0, 4);
@@ -318,7 +370,9 @@ export const TowerDefenseGame: React.FC<Props> = ({ questions, subject, difficul
       damage: spec.damage,
       fireRate: spec.fireRate,
       lastShotAt: 0,
-      projectileSpeed: spec.projectileSpeed
+      projectileSpeed: spec.projectileSpeed,
+      maxHp: spec.maxHp,
+      hp: spec.maxHp
     };
     setTowers(prev => [...prev, newTower]);
     const pos = isoToScreen(gridX, gridY);
@@ -352,165 +406,243 @@ export const TowerDefenseGame: React.FC<Props> = ({ questions, subject, difficul
     }
   }
 
-  function spawnWave(currentWave: number) {
-    const baseHp = difficulty === 'easy' ? 22 : difficulty === 'medium' ? 28 : 34;
-    const hpMultiplier = 1 + currentWave * 0.09;
-    const speedBase = difficulty === 'easy' ? 0.55 : difficulty === 'medium' ? 0.65 : 0.75;
-    const enemyCount = Math.min(12, 3 + currentWave);
-    const list: Enemy[] = [];
-    for (let i = 0; i < enemyCount; i++) {
-      list.push({
-        id: Date.now() + Math.random(),
-        pathIndex: -i * 1.6,
-        speed: speedBase + currentWave * 0.02,
-        maxHp: baseHp * hpMultiplier,
-        hp: baseHp * hpMultiplier,
-        size: 16 + Math.min(8, currentWave * 0.6)
-      });
-    }
-    setEnemies(prev => [...prev, ...list]);
+  function pickEnemyKind(currentWave: number): EnemyKind {
+    const r = Math.random();
+    if (currentWave >= 7 && r < 0.22) return 'shooter';
+    if (currentWave >= 4 && r < 0.42) return 'tank';
+    if (currentWave >= 2 && r < 0.68) return 'runner';
+    return 'slime';
   }
 
-  function fireTower(tower: Tower, target: Enemy, now: number) {
+  function createEnemy(kind: EnemyKind, currentWave: number, initialPathIndex: number): Enemy {
+    const difficultyHp = difficulty === 'easy' ? 1.0 : difficulty === 'medium' ? 1.25 : 1.55;
+    const difficultySpeed = difficulty === 'easy' ? 1.0 : difficulty === 'medium' ? 1.08 : 1.16;
+    const hpMultiplier = (1 + currentWave * 0.16) * difficultyHp;
+    const speedMultiplier = (1 + currentWave * 0.02) * difficultySpeed;
+
+    const base = (() => {
+      switch (kind) {
+        case 'runner':
+          return { hp: 24, speed: 0.95, size: 14, color: '#FDE68A' };
+        case 'tank':
+          return { hp: 70, speed: 0.48, size: 20, color: '#C7D2FE' };
+        case 'shooter':
+          return { hp: 40, speed: 0.58, size: 16, color: '#FBCFE8' };
+        default:
+          return { hp: 42, speed: 0.68, size: 16, color: '#F8C5C5' };
+      }
+    })();
+
+    const maxHp = base.hp * hpMultiplier;
+    const speed = base.speed * speedMultiplier;
+    const enemy: Enemy = {
+      id: Date.now() + Math.random(),
+      kind,
+      pathIndex: initialPathIndex,
+      speed,
+      maxHp,
+      hp: maxHp,
+      size: base.size + Math.min(10, currentWave * 0.55),
+      color: base.color
+    };
+
+    if (kind === 'shooter') {
+      enemy.attackDamage = 7 + currentWave * 0.4;
+      enemy.attackRange = 150;
+      enemy.attackCooldown = 1.1;
+      enemy.lastAttackAt = -999;
+    }
+
+    return enemy;
+  }
+
+  function spawnWave(currentWave: number, replace = false) {
+    const enemyCount = Math.min(22, 6 + currentWave * 2);
+    const list: Enemy[] = [];
+    for (let i = 0; i < enemyCount; i++) {
+      const kind = pickEnemyKind(currentWave);
+      list.push(createEnemy(kind, currentWave, -i * 1.35));
+    }
+    setEnemies(prev => (replace ? list : [...prev, ...list]));
+  }
+
+  function createProjectile(tower: Tower, target: Enemy, now: number): Projectile | null {
     const towerPos = isoToScreen(tower.gridX, tower.gridY);
     const targetPos = getEnemyPosition(target);
     const dx = targetPos.x - towerPos.x;
     const dy = targetPos.y - towerPos.y;
     const dist = Math.hypot(dx, dy);
-    if (dist === 0) return;
+    if (dist === 0) return null;
     const vx = (dx / dist) * tower.projectileSpeed;
     const vy = (dy / dist) * tower.projectileSpeed;
     const color = tower.type === 'cannon' ? '#f472b6' : tower.type === 'archer' ? '#34d399' : '#60a5fa';
 
-    setProjectiles(prev => [
-      ...prev,
-      {
-        id: Date.now() + Math.random(),
-        x: towerPos.x,
-        y: towerPos.y - 8,
-        vx,
-        vy,
-        damage: tower.damage,
-        color,
-        life: 2.0,
-        targetId: target.id
-      }
-    ]);
-
     tower.lastShotAt = now;
+    return {
+      id: Date.now() + Math.random(),
+      x: towerPos.x,
+      y: towerPos.y - 8,
+      vx,
+      vy,
+      damage: tower.damage,
+      color,
+      life: 2.0,
+      targetId: target.id
+    };
   }
 
-	  function updateGame(deltaSeconds: number, now: number) {
-	    if (gameOverRef.current) return;
+  function updateGame(frameDeltaSeconds: number, simDeltaSeconds: number, simNow: number) {
+    if (gameOverRef.current) return;
 
-	    const enemiesSnapshot = enemiesRef.current;
-	    const towersSnapshot = towersRef.current;
-	    const projectilesSnapshot = projectilesRef.current;
-	    const particlesSnapshot = particlesRef.current;
+    const enemiesSnapshot = enemiesRef.current;
+    const towersSnapshot = towersRef.current;
+    const projectilesSnapshot = projectilesRef.current;
+    const particlesSnapshot = particlesRef.current;
 
-	    const movedEnemies: Enemy[] = [];
-	    for (const enemy of enemiesSnapshot) {
-	      const nextIndex = enemy.pathIndex + enemy.speed * deltaSeconds;
-	      if (nextIndex >= PATH_CELLS.length - 0.2) {
-	        setLives(v => {
-	          const newLives = v - 1;
-	          if (newLives <= 0) setGameOver(true);
-	          return newLives;
-	        });
-	        continue;
-	      }
-	      movedEnemies.push({ ...enemy, pathIndex: nextIndex });
-	    }
-
-	    if (particlesSnapshot.length > 0) {
-	      setParticles(() => {
-	        const updatedParticles: Particle[] = [];
+    if (particlesSnapshot.length > 0) {
+      setParticles(() => {
+        const updatedParticles: Particle[] = [];
         for (const particle of particlesSnapshot) {
-          const newLife = particle.life - deltaSeconds * 1.4;
+          const newLife = particle.life - frameDeltaSeconds * 1.4;
           if (newLife <= 0) continue;
           updatedParticles.push({
             ...particle,
-            x: particle.x + particle.vx * deltaSeconds * 60,
-            y: particle.y + particle.vy * deltaSeconds * 60,
-            vy: particle.vy + 0.03 * deltaSeconds * 60,
+            x: particle.x + particle.vx * frameDeltaSeconds * 60,
+            y: particle.y + particle.vy * frameDeltaSeconds * 60,
+            vy: particle.vy + 0.03 * frameDeltaSeconds * 60,
             life: newLife
           });
         }
-	        return updatedParticles;
-	      });
-	    }
+        return updatedParticles;
+      });
+    }
 
-	    let finalEnemies = movedEnemies;
-	    if (projectilesSnapshot.length > 0) {
-	      const updatedProjectiles: Projectile[] = [];
-	      for (const projectile of projectilesSnapshot) {
-	        const newX = projectile.x + projectile.vx * deltaSeconds;
-	        const newY = projectile.y + projectile.vy * deltaSeconds;
-	        const newLife = projectile.life - deltaSeconds;
-	        if (newLife <= 0) continue;
-	        updatedProjectiles.push({ ...projectile, x: newX, y: newY, life: newLife });
-	      }
+    if (simDeltaSeconds <= 0) return;
 
-	      let remainingProjectiles = updatedProjectiles;
-	      if (updatedProjectiles.length > 0 && movedEnemies.length > 0) {
-	        const enemyMap = new Map(movedEnemies.map(e => [e.id, { ...e }]));
-	        const updatedEnemies = movedEnemies.map(e => enemyMap.get(e.id)!);
-	        let anyHit = false;
+    const movedEnemies: Enemy[] = [];
+    for (const enemy of enemiesSnapshot) {
+      const nextIndex = enemy.pathIndex + enemy.speed * simDeltaSeconds;
+      if (nextIndex >= PATH_CELLS.length - 0.2) {
+        setLives(v => {
+          const newLives = v - 1;
+          if (newLives <= 0) finishGame('lives');
+          return newLives;
+        });
+        continue;
+      }
+      movedEnemies.push({ ...enemy, pathIndex: nextIndex });
+    }
 
-	        const afterCollision: Projectile[] = [];
-	        for (const projectile of updatedProjectiles) {
-	          const target = enemyMap.get(projectile.targetId);
-	          if (!target) {
-	            afterCollision.push(projectile);
-	            continue;
-	          }
-	          const targetPos = getEnemyPosition(target);
-	          const dist = Math.hypot(projectile.x - targetPos.x, projectile.y - targetPos.y);
-	          if (dist < target.size * 0.9) {
-	            target.hp -= projectile.damage;
-	            anyHit = true;
-	            spawnParticles(targetPos.x, targetPos.y - 6, 8, projectile.color);
-	            continue;
-	          }
-	          afterCollision.push(projectile);
-	        }
-	        remainingProjectiles = afterCollision;
+    const updatedProjectiles: Projectile[] = [];
+    for (const projectile of projectilesSnapshot) {
+      const newX = projectile.x + projectile.vx * simDeltaSeconds;
+      const newY = projectile.y + projectile.vy * simDeltaSeconds;
+      const newLife = projectile.life - simDeltaSeconds;
+      if (newLife <= 0) continue;
+      updatedProjectiles.push({ ...projectile, x: newX, y: newY, life: newLife });
+    }
 
-	        if (anyHit) {
-	          const survivors = updatedEnemies.filter(e => e.hp > 0);
-	          if (survivors.length !== updatedEnemies.length) {
-	            setScore(v => v + (updatedEnemies.length - survivors.length) * 3);
-	          }
-	          finalEnemies = survivors;
-	        } else {
-	          finalEnemies = updatedEnemies;
-	        }
-	      }
+    let finalEnemies: Enemy[] = movedEnemies;
+    let remainingProjectiles: Projectile[] = updatedProjectiles;
 
-	      setProjectiles(remainingProjectiles);
-	    }
+    if (updatedProjectiles.length > 0 && movedEnemies.length > 0) {
+      const enemyMap = new Map(movedEnemies.map(e => [e.id, { ...e }]));
+      const updatedEnemies = movedEnemies.map(e => enemyMap.get(e.id)!);
+      let anyHit = false;
 
-	    if (finalEnemies.length > 0) {
-	      const towersToUpdate = towersSnapshot.map(t => ({ ...t }));
-	      for (const tower of towersToUpdate) {
-	        const towerPos = isoToScreen(tower.gridX, tower.gridY);
-	        const inRange = finalEnemies
-	          .map(enemy => ({ enemy, pos: getEnemyPosition(enemy) }))
-	          .filter(item => Math.hypot(item.pos.x - towerPos.x, item.pos.y - towerPos.y) <= tower.range)
-	          .sort((a, b) => a.enemy.pathIndex - b.enemy.pathIndex);
+      const afterCollision: Projectile[] = [];
+      for (const projectile of updatedProjectiles) {
+        const target = enemyMap.get(projectile.targetId);
+        if (!target) {
+          afterCollision.push(projectile);
+          continue;
+        }
+        const targetPos = getEnemyPosition(target);
+        const dist = Math.hypot(projectile.x - targetPos.x, projectile.y - targetPos.y);
+        if (dist < target.size * 0.9) {
+          target.hp -= projectile.damage;
+          anyHit = true;
+          spawnParticles(targetPos.x, targetPos.y - 6, 8, projectile.color);
+          continue;
+        }
+        afterCollision.push(projectile);
+      }
 
-	        if (inRange.length > 0 && now - tower.lastShotAt >= tower.fireRate) {
-	          fireTower(tower, inRange[inRange.length - 1].enemy, now);
-	        }
-	      }
-	      setTowers(towersToUpdate);
-	    }
+      remainingProjectiles = afterCollision;
+      if (anyHit) {
+        const survivors = updatedEnemies.filter(e => e.hp > 0);
+        if (survivors.length !== updatedEnemies.length) {
+          setScore(v => v + (updatedEnemies.length - survivors.length) * 4);
+        }
+        finalEnemies = survivors;
+      } else {
+        finalEnemies = updatedEnemies;
+      }
+    }
 
-	    if (enemiesSnapshot.length > 0 || finalEnemies.length > 0) {
-	      setEnemies(finalEnemies);
-	    }
+    const enemiesToUpdate = finalEnemies.map(e => ({ ...e }));
+    let towersToUpdate = towersSnapshot.map(t => ({ ...t }));
 
-    if (finalEnemies.length === 0 && enemiesSnapshot.length > 0) {
+    // Shooter enemies can attack towers
+    if (enemiesToUpdate.length > 0 && towersToUpdate.length > 0) {
+      for (const enemy of enemiesToUpdate) {
+        if (enemy.kind !== 'shooter') continue;
+        const cooldown = enemy.attackCooldown ?? 1.1;
+        const lastAt = enemy.lastAttackAt ?? -999;
+        if (simNow - lastAt < cooldown) continue;
+        const range = enemy.attackRange ?? 150;
+        const dmg = enemy.attackDamage ?? 8;
+
+        const enemyPos = getEnemyPosition(enemy);
+        let bestTower: Tower | null = null;
+        let bestDist = Infinity;
+        for (const tower of towersToUpdate) {
+          const towerPos = isoToScreen(tower.gridX, tower.gridY);
+          const d = Math.hypot(towerPos.x - enemyPos.x, towerPos.y - enemyPos.y);
+          if (d <= range && d < bestDist) {
+            bestDist = d;
+            bestTower = tower;
+          }
+        }
+        if (!bestTower) continue;
+
+        enemy.lastAttackAt = simNow;
+        bestTower.hp = Math.max(0, bestTower.hp - dmg);
+        spawnParticles(enemyPos.x, enemyPos.y - 6, 6, '#FBCFE8');
+        if (bestTower.hp <= 0) {
+          const boom = isoToScreen(bestTower.gridX, bestTower.gridY);
+          spawnParticles(boom.x, boom.y - 10, 20, '#F8C5C5');
+        }
+      }
+      towersToUpdate = towersToUpdate.filter(t => t.hp > 0);
+    }
+
+    const newProjectiles: Projectile[] = [];
+    if (enemiesToUpdate.length > 0 && towersToUpdate.length > 0) {
+      for (const tower of towersToUpdate) {
+        const towerPos = isoToScreen(tower.gridX, tower.gridY);
+        const inRange = enemiesToUpdate
+          .map(enemy => ({ enemy, pos: getEnemyPosition(enemy) }))
+          .filter(item => Math.hypot(item.pos.x - towerPos.x, item.pos.y - towerPos.y) <= tower.range)
+          .sort((a, b) => a.enemy.pathIndex - b.enemy.pathIndex);
+
+        if (inRange.length > 0 && simNow - tower.lastShotAt >= tower.fireRate) {
+          const projectile = createProjectile(tower, inRange[inRange.length - 1].enemy, simNow);
+          if (projectile) newProjectiles.push(projectile);
+        }
+      }
+    }
+
+    if (remainingProjectiles.length > 0 || newProjectiles.length > 0 || projectilesSnapshot.length > 0) {
+      setProjectiles([...remainingProjectiles, ...newProjectiles]);
+    }
+
+    setTowers(towersToUpdate);
+    if (enemiesSnapshot.length > 0 || enemiesToUpdate.length > 0) {
+      setEnemies(enemiesToUpdate);
+    }
+
+    if (enemiesToUpdate.length === 0 && enemiesSnapshot.length > 0) {
       setWave(w => {
         const nextWave = w + 1;
         spawnWave(nextWave);
@@ -560,7 +692,7 @@ export const TowerDefenseGame: React.FC<Props> = ({ questions, subject, difficul
       ctx.ellipse(0, size * 0.8, size * 0.9, size * 0.4, 0, 0, Math.PI * 2);
       ctx.fill();
 
-      ctx.fillStyle = '#F8C5C5';
+      ctx.fillStyle = enemy.color;
       ctx.strokeStyle = COLORS.border;
       ctx.lineWidth = 3;
       ctx.beginPath();
@@ -573,6 +705,21 @@ export const TowerDefenseGame: React.FC<Props> = ({ questions, subject, difficul
       ctx.arc(-size * 0.35, -size * 0.15, size * 0.18, 0, Math.PI * 2);
       ctx.arc(size * 0.35, -size * 0.15, size * 0.18, 0, Math.PI * 2);
       ctx.fill();
+
+      if (enemy.kind === 'shooter') {
+        ctx.fillStyle = COLORS.border;
+        ctx.beginPath();
+        ctx.moveTo(0, -size * 1.05);
+        ctx.lineTo(size * 0.38, -size * 0.55);
+        ctx.lineTo(-size * 0.38, -size * 0.55);
+        ctx.closePath();
+        ctx.fill();
+      } else if (enemy.kind === 'tank') {
+        ctx.fillStyle = COLORS.border;
+        ctx.beginPath();
+        ctx.arc(0, size * 0.15, size * 0.18, 0, Math.PI * 2);
+        ctx.fill();
+      }
 
       const hpRatio = Math.max(0, enemy.hp / enemy.maxHp);
       ctx.fillStyle = '#ffefc2';
@@ -634,6 +781,15 @@ export const TowerDefenseGame: React.FC<Props> = ({ questions, subject, difficul
         ctx.fill();
       }
 
+      const towerHpRatio = Math.max(0, tower.hp / tower.maxHp);
+      ctx.fillStyle = '#ffefc2';
+      ctx.strokeStyle = COLORS.border;
+      ctx.lineWidth = 2;
+      ctx.fillRect(-20, -44, 40, 6);
+      ctx.strokeRect(-20, -44, 40, 6);
+      ctx.fillStyle = '#34d399';
+      ctx.fillRect(-20, -44, 40 * towerHpRatio, 6);
+
       ctx.restore();
     }
 
@@ -664,11 +820,6 @@ export const TowerDefenseGame: React.FC<Props> = ({ questions, subject, difficul
   }
 
   useEffect(() => {
-    if (!hasQuestions) return;
-    spawnWave(1);
-  }, [hasQuestions]);
-
-  useEffect(() => {
     const canvas = canvasRef.current;
     const container = containerRef.current;
     if (!canvas || !container) return;
@@ -690,10 +841,27 @@ export const TowerDefenseGame: React.FC<Props> = ({ questions, subject, difficul
 
     const loop = (timestamp: number) => {
       if (!lastTimeRef.current) lastTimeRef.current = timestamp;
-      const deltaSeconds = Math.min(0.05, (timestamp - lastTimeRef.current) / 1000);
+      const frameDeltaSeconds = Math.min(0.05, (timestamp - lastTimeRef.current) / 1000);
       lastTimeRef.current = timestamp;
 
-      updateGame(deltaSeconds, timestamp / 1000);
+      const running = isRunningRef.current && !gameOverRef.current;
+      const simDeltaSeconds = running ? frameDeltaSeconds * speedRef.current : 0;
+      if (running) simTimeRef.current += simDeltaSeconds;
+
+      if (running) {
+        const startMs = runStartAtMsRef.current;
+        if (startMs != null) {
+          const elapsedSeconds = (Date.now() - startMs) / 1000;
+          const remaining = Math.max(0, GAME_DURATION_SECONDS - Math.floor(elapsedSeconds));
+          if (remaining !== lastTimeLeftRef.current) {
+            lastTimeLeftRef.current = remaining;
+            setTimeLeft(remaining);
+          }
+          if (remaining <= 0) finishGame('time');
+        }
+      }
+
+      updateGame(frameDeltaSeconds, simDeltaSeconds, simTimeRef.current);
       render();
 
       animationRef.current = requestAnimationFrame(loop);
@@ -708,18 +876,21 @@ export const TowerDefenseGame: React.FC<Props> = ({ questions, subject, difficul
   }, [hasQuestions]);
 
   useEffect(() => {
-    if (!gameOver) return;
-    const timeSpent = Math.round((Date.now() - startTimeRef.current.getTime()) / 1000);
+    if (!gameOver || !endReason) return;
+    const success = endReason === 'time' && lives > 0;
+    const timeSpent = endReason === 'time'
+      ? GAME_DURATION_SECONDS
+      : Math.round((Date.now() - startTimeRef.current.getTime()) / 1000);
     const finalScore = Math.round(score + wave * 12 + correctAnswers * 4);
     onComplete({
-      success: false,
+      success,
       score: finalScore,
       correctAnswers,
       totalQuestions: totalAnswered,
       timeSpent,
       wavesSurvived: wave
     });
-  }, [gameOver]);
+  }, [gameOver, endReason, lives, score, wave, correctAnswers, totalAnswered, onComplete]);
 
   if (!hasQuestions) {
     return (
@@ -744,13 +915,16 @@ export const TowerDefenseGame: React.FC<Props> = ({ questions, subject, difficul
         <div className="bg-[#111] border-2 border-[#444] rounded-xl px-4 py-2 text-white font-bold">
           分數: {score}
         </div>
+        <div className="bg-[#111] border-2 border-[#444] rounded-xl px-4 py-2 text-white font-bold">
+          剩餘時間: <span className={`${timeLeft <= 10 ? 'text-red-300' : 'text-emerald-300'}`}>{timeLeft}s</span>
+        </div>
 
         <button
           onClick={openNextQuestion}
-          disabled={questionOpen || gameOver}
+          disabled={!isRunning || questionOpen || gameOver}
           className="ml-auto px-4 py-2 bg-yellow-400 hover:bg-yellow-300 text-brand-brown font-black rounded-xl border-2 border-brand-brown shadow-comic disabled:opacity-50"
         >
-          答下一題賺金幣
+          {isRunning ? '答下一題賺金幣' : '按開始後才能答題'}
         </button>
       </div>
 
@@ -770,9 +944,24 @@ export const TowerDefenseGame: React.FC<Props> = ({ questions, subject, difficul
             <div className="text-sm">💰 {spec.cost}</div>
           </button>
         ))}
-        <div className="ml-auto flex items-center gap-2 bg-[#111] border-2 border-[#444] rounded-xl px-3 py-2 text-white font-bold">
-          <span className="text-2xl">{SUBJECT_CONFIG[subject]?.icon}</span>
-          <span>{subject}</span>
+        <div className="ml-auto flex items-center gap-3">
+          <div className="flex items-center gap-2 bg-[#111] border-2 border-[#444] rounded-xl px-3 py-2 text-white font-bold">
+            <span className="text-xs opacity-80">速度</span>
+            <select
+              value={speedMultiplier}
+              onChange={(e) => setSpeedMultiplier(Number(e.target.value))}
+              className="bg-transparent border border-white/20 rounded-lg px-2 py-1 text-white font-bold"
+            >
+              <option value={0.5}>0.5x</option>
+              <option value={1}>1x</option>
+              <option value={1.5}>1.5x</option>
+              <option value={2}>2x</option>
+            </select>
+          </div>
+          <div className="flex items-center gap-2 bg-[#111] border-2 border-[#444] rounded-xl px-3 py-2 text-white font-bold">
+            <span className="text-2xl">{SUBJECT_CONFIG[subject]?.icon}</span>
+            <span>{subject}</span>
+          </div>
         </div>
       </div>
 
@@ -782,6 +971,22 @@ export const TowerDefenseGame: React.FC<Props> = ({ questions, subject, difficul
           className="w-full h-full"
           onPointerDown={handlePointerDown}
         />
+        {!isRunning && !gameOver && (
+          <div className="absolute inset-0 flex items-center justify-center bg-black/35">
+            <div className="bg-white/95 border-4 border-brand-brown rounded-3xl px-6 py-5 shadow-comic-xl text-center max-w-md">
+              <div className="text-2xl font-black text-brand-brown mb-2">準備階段</div>
+              <div className="text-sm text-gray-700 mb-4">
+                先用初始金幣放置士兵，準備好後按「開始」進入戰鬥。
+              </div>
+              <button
+                onClick={startGame}
+                className="px-6 py-3 bg-emerald-500 hover:bg-emerald-600 text-white font-black rounded-2xl border-2 border-brand-brown shadow-comic"
+              >
+                開始
+              </button>
+            </div>
+          </div>
+        )}
         {selectedTowerType && (
           <div className="absolute inset-x-0 bottom-3 flex justify-center pointer-events-none">
             <div className="bg-white/90 border-2 border-brand-brown rounded-full px-4 py-2 text-brand-brown font-black shadow-comic">

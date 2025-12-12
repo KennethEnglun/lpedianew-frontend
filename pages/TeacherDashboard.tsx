@@ -87,6 +87,12 @@ const TeacherDashboard: React.FC = () => {
     difficulty: 'medium' as 'easy' | 'medium' | 'hard'
   });
 
+  const [towerDefenseQuestions, setTowerDefenseQuestions] = useState<Array<{
+    question: string;
+    options: string[];
+    correctAnswer: number;
+  }>>([]);
+
   // 處理內容顯示的輔助函數
   const getDisplayContent = (content: any) => {
     if (!content) return '無內容';
@@ -522,6 +528,30 @@ const TeacherDashboard: React.FC = () => {
           : q
       )
     }));
+  };
+
+  // === 答題塔防題庫（四選一） ===
+  const addTowerDefenseQuestion = () => {
+    setTowerDefenseQuestions(prev => ([
+      ...prev,
+      { question: '', options: ['', '', '', ''], correctAnswer: 0 }
+    ]));
+  };
+
+  const removeTowerDefenseQuestion = (index: number) => {
+    setTowerDefenseQuestions(prev => prev.filter((_, i) => i !== index));
+  };
+
+  const updateTowerDefenseQuestion = (index: number, field: 'question' | 'correctAnswer', value: any) => {
+    setTowerDefenseQuestions(prev => prev.map((q, i) => i === index ? { ...q, [field]: value } : q));
+  };
+
+  const updateTowerDefenseOption = (questionIndex: number, optionIndex: number, value: string) => {
+    setTowerDefenseQuestions(prev => prev.map((q, i) =>
+      i === questionIndex
+        ? { ...q, options: q.options.map((opt, j) => j === optionIndex ? value : opt) }
+        : q
+    ));
   };
 
   // 提交小測驗
@@ -1295,10 +1325,10 @@ const TeacherDashboard: React.FC = () => {
 	                  <span className="text-3xl">🏰</span>
 	                  <h2 className="text-3xl font-black text-emerald-800">創建答題塔防遊戲</h2>
 	                </div>
-	                <button
-	                  onClick={() => { setShowGameModal(false); setGameType(null); }}
-	                  className="w-10 h-10 rounded-full bg-white border-2 border-emerald-400 hover:bg-emerald-50 flex items-center justify-center"
-	                >
+		                <button
+		                  onClick={() => { setShowGameModal(false); setGameType(null); setTowerDefenseQuestions([]); }}
+		                  className="w-10 h-10 rounded-full bg-white border-2 border-emerald-400 hover:bg-emerald-50 flex items-center justify-center"
+		                >
 	                  <X className="w-6 h-6 text-emerald-700" />
 	                </button>
 	              </div>
@@ -1409,68 +1439,92 @@ const TeacherDashboard: React.FC = () => {
 	                </select>
 	              </div>
 
-	              <div>
-	                <label className="block text-sm font-bold text-emerald-800 mb-2">題庫（答題賺金幣）</label>
-	                <div className="space-y-4">
-	                  {gameForm.questions.map((q, index) => (
-	                    <div key={index} className="bg-white p-4 rounded-xl border-2 border-emerald-200">
-	                      <div className="flex justify-between items-center mb-3">
-	                        <span className="font-bold text-emerald-700">題目 {index + 1}</span>
-	                        <button
-	                          onClick={() => setGameForm(prev => ({
-	                            ...prev,
-	                            questions: prev.questions.filter((_, i) => i !== index)
-	                          }))}
-	                          className="text-red-500 hover:text-red-700"
-	                        >
-	                          <Trash className="w-4 h-4" />
-	                        </button>
-	                      </div>
-	                      <Input
-	                        label="問題"
-	                        placeholder="輸入問題..."
-	                        value={q.question}
-	                        onChange={(e) => {
-	                          const newQuestions = [...gameForm.questions];
-	                          newQuestions[index].question = e.target.value;
-	                          setGameForm(prev => ({ ...prev, questions: newQuestions }));
-	                        }}
-	                      />
-	                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-3">
-	                        <Input
-	                          label="正確答案"
-	                          placeholder="正確答案..."
-	                          value={q.answer}
-	                          onChange={(e) => {
-	                            const newQuestions = [...gameForm.questions];
-	                            newQuestions[index].answer = e.target.value;
-	                            setGameForm(prev => ({ ...prev, questions: newQuestions }));
-	                          }}
-	                        />
-	                        <Input
-	                          label="錯誤選項（用逗號分隔）"
-	                          placeholder="錯誤答案1, 錯誤答案2..."
-	                          value={q.wrongOptions?.join(', ') || ''}
-	                          onChange={(e) => {
-	                            const newQuestions = [...gameForm.questions];
-	                            newQuestions[index].wrongOptions = e.target.value.split(',');
-	                            setGameForm(prev => ({ ...prev, questions: newQuestions }));
-	                          }}
-	                        />
-	                      </div>
-	                    </div>
-	                  ))}
-	                  <button
-	                    onClick={() => setGameForm(prev => ({
-	                      ...prev,
-	                      questions: [...prev.questions, { question: '', answer: '', wrongOptions: [] }]
-	                    }))}
-	                    className="w-full py-3 border-4 border-dashed border-emerald-300 rounded-2xl text-emerald-700 font-bold hover:bg-emerald-50"
-	                  >
-	                    + 新增題目
-	                  </button>
-	                </div>
-	              </div>
+		              <div>
+		                <label className="block text-sm font-bold text-emerald-800 mb-2">題庫（答題賺金幣）</label>
+		                <div className="border-2 border-emerald-200 rounded-2xl p-4 bg-white">
+		                  <div className="flex justify-between items-center mb-4">
+		                    <span className="font-bold text-emerald-800">問題列表（四選一）</span>
+		                    <button
+		                      type="button"
+		                      onClick={addTowerDefenseQuestion}
+		                      className="px-4 py-2 bg-emerald-100 text-emerald-800 border-2 border-emerald-300 rounded-2xl font-bold hover:bg-emerald-200 flex items-center gap-2"
+		                    >
+		                      <Plus className="w-4 h-4" />
+		                      新增問題
+		                    </button>
+		                  </div>
+
+		                  {towerDefenseQuestions.length === 0 ? (
+		                    <div className="text-center py-8 text-gray-400 font-bold border-4 border-dashed border-emerald-200 rounded-3xl">
+		                      還沒有問題，點擊上方「新增問題」開始創建 📝
+		                    </div>
+		                  ) : (
+		                    <div className="space-y-6">
+		                      {towerDefenseQuestions.map((q, questionIndex) => (
+		                        <div key={questionIndex} className="bg-emerald-50 border-4 border-emerald-200 rounded-3xl p-6">
+		                          <div className="flex justify-between items-start mb-4">
+		                            <h4 className="text-lg font-bold text-emerald-900">問題 {questionIndex + 1}</h4>
+		                            <button
+		                              type="button"
+		                              onClick={() => removeTowerDefenseQuestion(questionIndex)}
+		                              className="p-2 bg-red-100 text-red-700 rounded-xl hover:bg-red-200"
+		                            >
+		                              <Trash className="w-4 h-4" />
+		                            </button>
+		                          </div>
+
+		                          <div className="space-y-4">
+		                            <Input
+		                              label="問題內容"
+		                              placeholder="輸入問題..."
+		                              value={q.question}
+		                              onChange={(e) => updateTowerDefenseQuestion(questionIndex, 'question', e.target.value)}
+		                            />
+
+		                            <div>
+		                              <label className="block text-sm font-bold text-emerald-800 mb-2">選項</label>
+		                              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+		                                {q.options.map((option, optionIndex) => (
+		                                  <div key={optionIndex} className="relative">
+		                                    <div className={`flex items-center gap-3 p-3 rounded-2xl border-2 ${q.correctAnswer === optionIndex ? 'bg-emerald-100 border-emerald-400' : 'bg-white border-emerald-200'
+		                                      }`}>
+		                                      <input
+		                                        type="radio"
+		                                        name={`td-correct-${questionIndex}`}
+		                                        checked={q.correctAnswer === optionIndex}
+		                                        onChange={() => updateTowerDefenseQuestion(questionIndex, 'correctAnswer', optionIndex)}
+		                                        className="w-4 h-4 text-emerald-600"
+		                                      />
+		                                      <span className="font-bold text-emerald-900 min-w-[20px]">
+		                                        {String.fromCharCode(65 + optionIndex)}.
+		                                      </span>
+		                                      <input
+		                                        type="text"
+		                                        placeholder={`選項 ${String.fromCharCode(65 + optionIndex)}`}
+		                                        value={option}
+		                                        onChange={(e) => updateTowerDefenseOption(questionIndex, optionIndex, e.target.value)}
+		                                        className="flex-1 px-3 py-2 border-2 border-emerald-200 rounded-xl focus:border-emerald-400 font-medium"
+		                                      />
+		                                    </div>
+		                                    {q.correctAnswer === optionIndex && (
+		                                      <div className="absolute -top-1 -right-1 w-6 h-6 bg-emerald-500 text-white rounded-full flex items-center justify-center text-xs font-bold">
+		                                        ✓
+		                                      </div>
+		                                    )}
+		                                  </div>
+		                                ))}
+		                              </div>
+		                              <p className="text-xs text-gray-500 mt-2">
+		                                ☑️ 點擊左側圓圈選擇正確答案
+		                              </p>
+		                            </div>
+		                          </div>
+		                        </div>
+		                      ))}
+		                    </div>
+		                  )}
+		                </div>
+		              </div>
 
 	              <div className="flex gap-4 pt-4 border-t-4 border-emerald-200">
 	                <button
@@ -1490,17 +1544,20 @@ const TeacherDashboard: React.FC = () => {
 	                        alert('請選擇至少一個班級或分組');
 	                        return;
 	                      }
-	                      const cleanedQuestions = gameForm.questions
-	                        .map(q => ({
-	                          question: q.question.trim(),
-	                          answer: q.answer.trim(),
-	                          wrongOptions: (q.wrongOptions || []).map(o => o.trim()).filter(Boolean)
-	                        }))
-	                        .filter(q => q.question && q.answer);
-	                      if (cleanedQuestions.length === 0) {
-	                        alert('請至少新增一個完整題目');
-	                        return;
-	                      }
+		                      const cleanedQuestions = towerDefenseQuestions
+		                        .map(q => {
+		                          const question = q.question.trim();
+		                          const options = (q.options || []).map(o => o.trim());
+		                          const correctIndex = q.correctAnswer ?? 0;
+		                          const answer = options[correctIndex] || '';
+		                          const wrongOptions = options.filter((_, i) => i !== correctIndex).filter(Boolean);
+		                          return { question, answer, wrongOptions };
+		                        })
+		                        .filter(q => q.question && q.answer && q.wrongOptions.length >= 3);
+		                      if (cleanedQuestions.length === 0) {
+		                        alert('請至少新增一個完整題目（四個選項都要填，且需選擇正確答案）');
+		                        return;
+		                      }
 
 	                      await authService.createGame({
 	                        title: gameForm.title.trim(),
@@ -1513,18 +1570,19 @@ const TeacherDashboard: React.FC = () => {
 	                        difficulty: gameForm.difficulty
 	                      });
 
-	                      alert('答題塔防遊戲創建成功！');
-	                      setShowGameModal(false);
-	                      setGameType(null);
-	                      setGameForm({
-	                        title: '',
-	                        description: '',
-	                        subject: Subject.CHINESE,
-	                        targetClasses: [],
-	                        targetGroups: [],
-	                        questions: [],
-	                        difficulty: 'medium'
-	                      });
+		                      alert('答題塔防遊戲創建成功！');
+		                      setShowGameModal(false);
+		                      setGameType(null);
+		                      setTowerDefenseQuestions([]);
+		                      setGameForm({
+		                        title: '',
+		                        description: '',
+		                        subject: Subject.CHINESE,
+		                        targetClasses: [],
+		                        targetGroups: [],
+		                        questions: [],
+		                        difficulty: 'medium'
+		                      });
 	                    } catch (error) {
 	                      alert('創建遊戲失敗：' + (error instanceof Error ? error.message : '未知錯誤'));
 	                    }
@@ -1974,22 +2032,36 @@ const TeacherDashboard: React.FC = () => {
                                         </span>
                                       )}
                                     </div>
-                                    <div className="flex items-center gap-2 text-sm text-gray-500">
-                                      <span className={`px-2 py-1 rounded text-xs font-bold ${isQuiz ? 'bg-yellow-200 text-yellow-800' : 'bg-purple-200 text-purple-800'
-                                        }`}>
-                                        {isQuiz ? '小測驗' : '討論串'}
-                                      </span>
-                                      <span>創建時間: {new Date(assignment.createdAt).toLocaleString()}</span>
-                                    </div>
+	                                    <div className="flex items-center gap-2 text-sm text-gray-500">
+	                                      <span className={`px-2 py-1 rounded text-xs font-bold ${isQuiz
+	                                        ? 'bg-yellow-200 text-yellow-800'
+	                                        : isGame
+	                                          ? 'bg-emerald-200 text-emerald-900'
+	                                          : 'bg-purple-200 text-purple-800'
+	                                        }`}>
+	                                        {isQuiz
+	                                          ? '小測驗'
+	                                          : isGame
+	                                            ? (assignment.gameType === 'maze'
+	                                              ? '迷宮闖關'
+	                                              : assignment.gameType === 'matching'
+	                                                ? '翻牌記憶'
+	                                                : assignment.gameType === 'tower-defense'
+	                                                  ? '答題塔防'
+	                                                  : '小遊戲')
+	                                            : '討論串'}
+	                                      </span>
+	                                      <span>創建時間: {new Date(assignment.createdAt).toLocaleString()}</span>
+	                                    </div>
                                   </div>
                                   <div className="flex gap-2 ml-4">
-                                    <button
-                                      onClick={() => viewAssignmentDetails(assignment)}
-                                      className="flex items-center gap-1 px-4 py-2 bg-blue-100 text-blue-700 rounded-xl hover:bg-blue-200 font-bold"
-                                    >
-                                      <Eye className="w-4 h-4" />
-                                      {isQuiz ? '查看結果' : '查看回應'}
-                                    </button>
+	                                    <button
+	                                      onClick={() => viewAssignmentDetails(assignment)}
+	                                      className="flex items-center gap-1 px-4 py-2 bg-blue-100 text-blue-700 rounded-xl hover:bg-blue-200 font-bold"
+	                                    >
+	                                      <Eye className="w-4 h-4" />
+	                                      {(isQuiz || isGame) ? '查看結果' : '查看回應'}
+	                                    </button>
                                     <button
                                       onClick={() => handleDeleteAssignment(assignment)}
                                       className="flex items-center gap-1 px-4 py-2 bg-red-100 text-red-700 rounded-xl hover:bg-red-200 font-bold"
