@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Settings, LogOut, MessageSquare, HelpCircle, Bot, RefreshCw, X } from 'lucide-react';
 import { Subject, SUBJECT_CONFIG, Task } from '../types';
 import { useNavigate } from 'react-router-dom';
@@ -17,6 +17,29 @@ interface Discussion {
   teacherName: string;
   createdAt: string;
   updatedAt: string;
+}
+
+interface MatchingCard {
+  id: string;
+  content: string;
+  type: 'question' | 'answer';
+  pairId: number;
+  isFlipped: boolean;
+  isMatched: boolean;
+}
+
+interface MatchParticle {
+  id: number;
+  x: number;
+  y: number;
+  vx: number;
+  vy: number;
+  life: number;
+  size: number;
+  color: string;
+  shape: 'circle' | 'star' | 'confetti';
+  rotation: number;
+  spin: number;
 }
 
 // Maze Generation Helper
@@ -118,9 +141,11 @@ const StudentDashboard: React.FC = () => {
   const [gameScore, setGameScore] = useState(0);
   const [gameStartTime, setGameStartTime] = useState<Date | null>(null);
   const [gameCurrentQuestionIndex, setGameCurrentQuestionIndex] = useState(0);
-  const [gameMatchingCards, setGameMatchingCards] = useState<any[]>([]);
+  const [gameMatchingCards, setGameMatchingCards] = useState<MatchingCard[]>([]);
   const [gameSelectedCards, setGameSelectedCards] = useState<number[]>([]);
   const [gameMatchedPairs, setGameMatchedPairs] = useState<string[]>([]);
+  const [mismatchIndices, setMismatchIndices] = useState<number[]>([]);
+  const [matchPulseIndices, setMatchPulseIndices] = useState<number[]>([]);
   const [submittingGame, setSubmittingGame] = useState(false);
 
   // Maze Only Logic
@@ -129,8 +154,184 @@ const StudentDashboard: React.FC = () => {
   const [gameQuestionMap, setGameQuestionMap] = useState<Record<string, number>>({});
   const [mazeSteps, setMazeSteps] = useState(0);
 
+  // Matching Game Visual Refs / Particles
+  const matchingAreaRef = useRef<HTMLDivElement | null>(null);
+  const matchingCanvasRef = useRef<HTMLCanvasElement | null>(null);
+  const matchingParticlesRef = useRef<MatchParticle[]>([]);
+  const matchingAnimFrameRef = useRef<number | null>(null);
+  const matchingLastTimeRef = useRef<number>(0);
+  const cardRefs = useRef<(HTMLDivElement | null)[]>([]);
+
   const navigate = useNavigate();
   const { logout, user } = useAuth();
+
+  const PARTICLE_COLORS = ['#F8B5E0', '#B5D8F8', '#B5F8CE', '#F8E2B5', '#D2B5F8', '#A1D9AE'];
+
+  const spawnBurstAt = useCallback((x: number, y: number, count = 24) => {
+    for (let i = 0; i < count; i++) {
+      const angle = Math.random() * Math.PI * 2;
+      const speed = Math.random() * 6 + 2;
+      matchingParticlesRef.current.push({
+        id: Date.now() + Math.random(),
+        x,
+        y,
+        vx: Math.cos(angle) * speed,
+        vy: Math.sin(angle) * speed - 2,
+        life: 1,
+        size: Math.random() * 5 + 3,
+        color: PARTICLE_COLORS[Math.floor(Math.random() * PARTICLE_COLORS.length)],
+        shape: Math.random() > 0.7 ? 'star' : 'circle',
+        rotation: Math.random() * Math.PI * 2,
+        spin: (Math.random() - 0.5) * 0.25
+      });
+    }
+  }, []);
+
+  const spawnConfettiRain = useCallback((count = 140) => {
+    const area = matchingAreaRef.current;
+    if (!area) return;
+    const rect = area.getBoundingClientRect();
+
+    for (let i = 0; i < count; i++) {
+      matchingParticlesRef.current.push({
+        id: Date.now() + Math.random(),
+        x: Math.random() * rect.width,
+        y: -20 - Math.random() * rect.height * 0.2,
+        vx: (Math.random() - 0.5) * 2.5,
+        vy: Math.random() * 2 + 1.5,
+        life: 1,
+        size: Math.random() * 6 + 4,
+        color: PARTICLE_COLORS[Math.floor(Math.random() * PARTICLE_COLORS.length)],
+        shape: 'confetti',
+        rotation: Math.random() * Math.PI * 2,
+        spin: (Math.random() - 0.5) * 0.35
+      });
+    }
+  }, []);
+
+  const burstAtIndices = useCallback((indices: number[]) => {
+    const area = matchingAreaRef.current;
+    if (!area) return;
+    const areaRect = area.getBoundingClientRect();
+
+    indices.forEach(idx => {
+      const el = cardRefs.current[idx];
+      if (!el) return;
+      const rect = el.getBoundingClientRect();
+      const x = rect.left - areaRect.left + rect.width / 2;
+      const y = rect.top - areaRect.top + rect.height / 2;
+      spawnBurstAt(x, y);
+    });
+  }, [spawnBurstAt]);
+
+  // Matching particle canvas loop
+  useEffect(() => {
+    if (!showGameModal || selectedGame?.gameType !== 'matching') return;
+    const canvas = matchingCanvasRef.current;
+    const area = matchingAreaRef.current;
+    if (!canvas || !area) return;
+
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    const resizeCanvas = () => {
+      const rect = area.getBoundingClientRect();
+      const dpr = window.devicePixelRatio || 1;
+      canvas.style.width = `${rect.width}px`;
+      canvas.style.height = `${rect.height}px`;
+      canvas.width = Math.max(1, Math.floor(rect.width * dpr));
+      canvas.height = Math.max(1, Math.floor(rect.height * dpr));
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    };
+
+    resizeCanvas();
+    let ro: ResizeObserver | null = null;
+    if (typeof ResizeObserver !== 'undefined') {
+      ro = new ResizeObserver(resizeCanvas);
+      ro.observe(area);
+    } else {
+      window.addEventListener('resize', resizeCanvas);
+    }
+
+    const drawStar = (cx: number, cy: number, spikes: number, outerR: number, innerR: number, rotation: number) => {
+      let rot = Math.PI / 2 * 3 + rotation;
+      let x = cx;
+      let y = cy;
+      const step = Math.PI / spikes;
+      ctx.beginPath();
+      ctx.moveTo(cx, cy - outerR);
+      for (let i = 0; i < spikes; i++) {
+        x = cx + Math.cos(rot) * outerR;
+        y = cy + Math.sin(rot) * outerR;
+        ctx.lineTo(x, y);
+        rot += step;
+        x = cx + Math.cos(rot) * innerR;
+        y = cy + Math.sin(rot) * innerR;
+        ctx.lineTo(x, y);
+        rot += step;
+      }
+      ctx.lineTo(cx, cy - outerR);
+      ctx.closePath();
+      ctx.fill();
+    };
+
+    const loop = (ts: number) => {
+      if (!matchingLastTimeRef.current) matchingLastTimeRef.current = ts;
+      const dt = Math.min(32, ts - matchingLastTimeRef.current) / 16.666;
+      matchingLastTimeRef.current = ts;
+
+      const rect = area.getBoundingClientRect();
+      ctx.clearRect(0, 0, rect.width, rect.height);
+
+      const particles = matchingParticlesRef.current;
+      for (let i = particles.length - 1; i >= 0; i--) {
+        const p = particles[i];
+        p.x += p.vx * dt;
+        p.y += p.vy * dt;
+        p.vy += 0.22 * dt;
+        p.vx *= 0.985;
+        p.life -= 0.018 * dt;
+        p.rotation += p.spin * dt;
+
+        if (p.life <= 0 || p.y > rect.height + 60) {
+          particles.splice(i, 1);
+          continue;
+        }
+
+        const alpha = Math.max(0, Math.min(1, p.life));
+        ctx.globalAlpha = alpha;
+        ctx.fillStyle = p.color;
+
+        if (p.shape === 'circle') {
+          ctx.beginPath();
+          ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+          ctx.fill();
+        } else if (p.shape === 'star') {
+          drawStar(p.x, p.y, 5, p.size, p.size / 2.2, p.rotation);
+        } else {
+          ctx.save();
+          ctx.translate(p.x, p.y);
+          ctx.rotate(p.rotation);
+          ctx.fillRect(-p.size, -p.size / 2, p.size * 2, p.size);
+          ctx.restore();
+        }
+      }
+      ctx.globalAlpha = 1;
+
+      matchingAnimFrameRef.current = requestAnimationFrame(loop);
+    };
+
+    matchingAnimFrameRef.current = requestAnimationFrame(loop);
+
+    return () => {
+      if (ro) ro.disconnect();
+      else window.removeEventListener('resize', resizeCanvas);
+      if (matchingAnimFrameRef.current) cancelAnimationFrame(matchingAnimFrameRef.current);
+      matchingAnimFrameRef.current = null;
+      matchingParticlesRef.current = [];
+      matchingLastTimeRef.current = 0;
+    };
+  }, [showGameModal, selectedGame?.gameType, selectedGame?.id]);
 
   // ... (Keep existing refs/functions)
 
@@ -149,8 +350,7 @@ const StudentDashboard: React.FC = () => {
 
       // 初始化遊戲狀態
       if (game.gameType === 'matching') {
-        // ... (Matching logic remains same)
-        const cards: any[] = [];
+        const cards: MatchingCard[] = [];
         game.questions.forEach((q: any, index: number) => {
           cards.push({ id: `q-${index}`, content: q.question, type: 'question', pairId: index, isFlipped: false, isMatched: false });
           cards.push({ id: `a-${index}`, content: q.answer, type: 'answer', pairId: index, isFlipped: false, isMatched: false });
@@ -158,6 +358,10 @@ const StudentDashboard: React.FC = () => {
         setGameMatchingCards(cards.sort(() => Math.random() - 0.5));
         setGameSelectedCards([]);
         setGameMatchedPairs([]);
+        setMismatchIndices([]);
+        setMatchPulseIndices([]);
+        cardRefs.current = [];
+        matchingParticlesRef.current = [];
       } else if (game.gameType === 'maze') {
         // Generate Maze Grid
         const mazeW = 15; // Must be odd for DFS
@@ -514,7 +718,7 @@ const StudentDashboard: React.FC = () => {
     }
 
     const newCards = [...gameMatchingCards];
-    newCards[index].isFlipped = true;
+    newCards[index] = { ...newCards[index], isFlipped: true };
     setGameMatchingCards(newCards);
 
     const newSelected = [...gameSelectedCards, index];
@@ -526,6 +730,10 @@ const StudentDashboard: React.FC = () => {
 
       if (card1.pairId === card2.pairId && card1.type !== card2.type) {
         // 配對成功
+        burstAtIndices(newSelected);
+        setMatchPulseIndices(newSelected);
+        setTimeout(() => setMatchPulseIndices([]), 500);
+
         setTimeout(() => {
           const matchedCards = [...newCards];
           matchedCards[newSelected[0]].isMatched = true;
@@ -536,18 +744,23 @@ const StudentDashboard: React.FC = () => {
 
           // 檢查是否所有都配對完成
           if (matchedCards.every(c => c.isMatched)) {
-            handleGameComplete(true);
+            // 讓學生先看到完成動畫
+            spawnConfettiRain();
+            setTimeout(() => handleGameComplete(true), 900);
           }
-        }, 1000);
+        }, 800);
       } else {
         // 配對失敗
+        setMismatchIndices(newSelected);
+        setTimeout(() => setMismatchIndices([]), 600);
+
         setTimeout(() => {
           const resetCards = [...newCards];
           resetCards[newSelected[0]].isFlipped = false;
           resetCards[newSelected[1]].isFlipped = false;
           setGameMatchingCards(resetCards);
           setGameSelectedCards([]);
-        }, 1500);
+        }, 1100);
       }
     }
   };
@@ -1127,56 +1340,125 @@ const StudentDashboard: React.FC = () => {
             {/* Game Canvas / Area */}
             <div className="flex-1 bg-[#222] p-8 overflow-y-auto relative">
 
-              {/* Matching Game Layout */}
-              {selectedGame.gameType === 'matching' && (
-                <div className="flex flex-col items-center h-full">
-                  <div className="flex justify-between w-full max-w-4xl mb-6 px-4">
-                    <div className="text-white text-xl font-bold bg-[#333] px-6 py-2 rounded-full border border-[#555]">
-                      配對進度: {gameMatchedPairs.length} / {selectedGame.questions.length}
-                    </div>
-                    <div className="text-white text-xl font-bold bg-[#333] px-6 py-2 rounded-full border border-[#555]">
-                      步數: {gameSelectedCards.length + gameMatchedPairs.length * 2}
-                    </div>
-                  </div>
+	              {/* Matching Game Layout */}
+	              {selectedGame.gameType === 'matching' && (
+	                <div className="flex flex-col items-center h-full">
+	                  <style>{`
+	                    @keyframes lp-card-pop {
+	                      0% { transform: translateZ(0) scale(1); }
+	                      40% { transform: translateZ(20px) scale(1.12) rotateZ(1deg); }
+	                      100% { transform: translateZ(0) scale(1); }
+	                    }
+	                    @keyframes lp-card-shake {
+	                      0%, 100% { transform: translateX(0) rotateZ(0); }
+	                      20% { transform: translateX(-6px) rotateZ(-2deg); }
+	                      40% { transform: translateX(6px) rotateZ(2deg); }
+	                      60% { transform: translateX(-4px) rotateZ(-1deg); }
+	                      80% { transform: translateX(4px) rotateZ(1deg); }
+	                    }
+	                  `}</style>
+	                  <div className="flex justify-between w-full max-w-4xl mb-6 px-4">
+	                    <div className="text-white text-xl font-bold bg-[#333] px-6 py-2 rounded-full border border-[#555]">
+	                      配對進度: {gameMatchedPairs.length} / {selectedGame.questions.length}
+	                    </div>
+	                    <div className="text-white text-xl font-bold bg-[#333] px-6 py-2 rounded-full border border-[#555]">
+	                      步數: {gameSelectedCards.length + gameMatchedPairs.length * 2}
+	                    </div>
+	                  </div>
 
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4 max-w-5xl w-full mx-auto p-4 content-start overflow-y-auto">
-                    {gameMatchingCards.map((card, index) => (
-                      <div
-                        key={card.id}
-                        className="group relative aspect-[3/4] cursor-pointer [perspective:1000px]"
-                        onClick={() => handleCardClick(index)}
-                      >
-                        <div
-                          className={`w-full h-full duration-500 [transform-style:preserve-3d] absolute inset-0 transition-all ${card.isFlipped || card.isMatched ? '[transform:rotateY(180deg)]' : ''
-                            } ${card.isMatched ? 'opacity-0 scale-0' : 'opacity-100 scale-100'}`}
-                        >
-                          {/* Card Back (Hidden state) */}
-                          <div className="absolute inset-0 [backface-visibility:hidden] w-full h-full bg-gradient-to-br from-indigo-500 to-purple-600 rounded-xl shadow-xl flex items-center justify-center border-4 border-indigo-300 group-hover:scale-105 transition-transform">
-                            <span className="text-5xl text-white/50 font-black">?</span>
-                          </div>
+	                  <div
+	                    ref={matchingAreaRef}
+	                    className="relative grid grid-cols-2 md:grid-cols-4 gap-5 max-w-5xl w-full mx-auto p-4 content-start overflow-y-auto"
+	                  >
+	                    <canvas
+	                      ref={matchingCanvasRef}
+	                      className="absolute inset-0 w-full h-full pointer-events-none z-20"
+	                    />
+	                    {gameMatchingCards.map((card, index) => (
+	                      <div
+	                        key={card.id}
+	                        className={`group relative aspect-[3/4] [perspective:1400px] transition-transform duration-300 ${card.isMatched ? 'cursor-default' : 'cursor-pointer'}
+	                          ${!card.isFlipped && !card.isMatched ? 'hover:[transform:translateY(-6px)_rotateX(8deg)_rotateZ(-1deg)] active:scale-95' : ''}
+	                          ${mismatchIndices.includes(index) ? 'animate-[lp-card-shake_0.6s_ease-in-out]' : ''}
+	                          ${matchPulseIndices.includes(index) ? 'animate-[lp-card-pop_0.45s_ease-out]' : ''}
+	                        `}
+	                        ref={(el) => { cardRefs.current[index] = el; }}
+	                        onClick={() => handleCardClick(index)}
+	                      >
+	                        <div
+	                          className={`w-full h-full duration-700 ease-[cubic-bezier(0.2,0.8,0.2,1)] [transform-style:preserve-3d] absolute inset-0 transition-all will-change-transform
+	                            ${card.isFlipped || card.isMatched ? '[transform:rotateY(180deg)]' : ''}
+	                            ${card.isMatched ? 'opacity-0 scale-0 [transform:rotateY(180deg)_scale(0.2)]' : 'opacity-100 scale-100'}`}
+	                        >
+	                          {/* Card Back (Hidden state) */}
+	                          <div className="absolute inset-0 [backface-visibility:hidden] w-full h-full rounded-2xl shadow-[0_18px_0_rgba(0,0,0,0.25)] border-[5px] border-indigo-200 overflow-hidden bg-gradient-to-br from-indigo-500 via-purple-500 to-pink-500">
+	                            <svg viewBox="0 0 200 260" className="absolute inset-0 w-full h-full opacity-25">
+	                              <defs>
+	                                <pattern id="dots" width="18" height="18" patternUnits="userSpaceOnUse">
+	                                  <circle cx="3" cy="3" r="3" fill="white" />
+	                                </pattern>
+	                              </defs>
+	                              <rect width="200" height="260" fill="url(#dots)" />
+	                              <path d="M0 210 C40 180 70 230 110 205 C150 180 170 235 200 210 L200 260 L0 260 Z" fill="rgba(255,255,255,0.6)" />
+	                            </svg>
+	                            <div className="relative z-10 w-full h-full flex flex-col items-center justify-center p-4 text-center">
+	                              <svg viewBox="0 0 120 120" className="w-20 h-20 drop-shadow-md mb-2">
+	                                <circle cx="60" cy="60" r="46" fill="#FDEFCB" stroke="#5E4C40" strokeWidth="6" />
+	                                <circle cx="44" cy="52" r="7" fill="#5E4C40" />
+	                                <circle cx="76" cy="52" r="7" fill="#5E4C40" />
+	                                <path d="M38 72 Q60 88 82 72" stroke="#5E4C40" strokeWidth="6" fill="none" strokeLinecap="round" />
+	                                <circle cx="30" cy="40" r="8" fill="#F8B5E0" opacity="0.9" />
+	                                <circle cx="90" cy="40" r="8" fill="#F8B5E0" opacity="0.9" />
+	                                <path d="M60 12 V4" stroke="#5E4C40" strokeWidth="6" strokeLinecap="round" />
+	                                <circle cx="60" cy="2" r="6" fill="#B5D8F8" stroke="#5E4C40" strokeWidth="4" />
+	                              </svg>
+	                              <div className="text-white font-black tracking-widest text-xl drop-shadow">
+	                                翻牌記憶
+	                              </div>
+	                              <div className="mt-1 text-white/90 text-sm font-bold">
+	                                {selectedGame.subject}
+	                              </div>
+	                            </div>
+	                          </div>
 
-                          {/* Card Front (Revealed state) */}
-                          <div className="absolute inset-0 [backface-visibility:hidden] w-full h-full [transform:rotateY(180deg)] bg-white rounded-xl shadow-2xl flex flex-col items-center justify-center p-4 border-4 border-yellow-400">
-                            <span className={`text-xs font-bold uppercase mb-2 px-2 py-1 rounded-full ${card.type === 'question' ? 'bg-blue-100 text-blue-800' : 'bg-green-100 text-green-800'
-                              }`}>
-                              {card.type === 'question' ? '問題' : '答案'}
-                            </span>
-                            <p className="text-center font-bold text-gray-800 text-lg md:text-xl leading-tight line-clamp-4">
-                              {card.content}
-                            </p>
-                          </div>
-                        </div>
+	                          {/* Card Front (Revealed state) */}
+	                          <div className="absolute inset-0 [backface-visibility:hidden] w-full h-full [transform:rotateY(180deg)] rounded-2xl shadow-[0_14px_0_rgba(0,0,0,0.25)] flex flex-col items-center justify-center p-4 border-[5px] border-yellow-400 bg-gradient-to-br from-white via-yellow-50 to-white overflow-hidden">
+	                            <div className="absolute -top-6 -right-6 w-24 h-24 rounded-full bg-yellow-200/60 blur-xl" />
+	                            <div className="absolute -bottom-8 -left-8 w-28 h-28 rounded-full bg-blue-200/50 blur-xl" />
+	                            <div className="absolute inset-0 opacity-10 flex items-center justify-center text-7xl">
+	                              {SUBJECT_CONFIG[selectedGame.subject as Subject]?.icon || '⭐'}
+	                            </div>
+	                            <div className="relative z-10 flex items-center gap-2 mb-2">
+	                              <span className={`text-xs font-black uppercase px-3 py-1 rounded-full border-2 shadow-sm ${card.type === 'question' ? 'bg-blue-100 text-blue-800 border-blue-300' : 'bg-green-100 text-green-800 border-green-300'
+	                                }`}>
+	                                {card.type === 'question' ? '問題' : '答案'}
+	                              </span>
+	                              {card.type === 'question' ? (
+	                                <svg viewBox="0 0 64 64" className="w-6 h-6">
+	                                  <path d="M30 4 L12 36 H30 L24 60 L52 24 H34 L40 4 Z" fill="#F8E2B5" stroke="#5E4C40" strokeWidth="4" strokeLinejoin="round" />
+	                                </svg>
+	                              ) : (
+	                                <svg viewBox="0 0 64 64" className="w-6 h-6">
+	                                  <path d="M32 56 C16 44 8 34 8 24 C8 14 16 8 24 8 C28 8 32 10 32 14 C32 10 36 8 40 8 C48 8 56 14 56 24 C56 34 48 44 32 56 Z" fill="#F8B5E0" stroke="#5E4C40" strokeWidth="4" strokeLinejoin="round" />
+	                                </svg>
+	                              )}
+	                            </div>
+	                            <p className="relative z-10 text-center font-black text-gray-800 text-lg md:text-xl leading-tight line-clamp-4 drop-shadow-[0_1px_0_rgba(255,255,255,0.9)]">
+	                              {card.content}
+	                            </p>
+	                          </div>
+	                        </div>
 
-                        {/* Placeholder for matched cards to keep grid stability */}
-                        {card.isMatched && (
-                          <div className="w-full h-full rounded-xl border-4 border-dashed border-gray-600 flex items-center justify-center opacity-30">
-                            <span className="text-4xl">✨</span>
-                          </div>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                </div>
+	                        {/* Placeholder for matched cards to keep grid stability */}
+	                        {card.isMatched && (
+	                          <div className="w-full h-full rounded-2xl border-4 border-dashed border-gray-600 flex items-center justify-center opacity-30 bg-[#111]">
+	                            <span className="text-4xl">🌟</span>
+	                          </div>
+	                        )}
+	                      </div>
+	                    ))}
+	                  </div>
+	                </div>
               )}
 
               {/* Maze / Quiz Game Layout - New 3D Implementation */}
