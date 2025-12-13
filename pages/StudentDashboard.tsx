@@ -8,6 +8,7 @@ import { sanitizeHtml } from '../services/sanitizeHtml';
 import { MazeGame } from '../components/MazeGame';
 import TowerDefenseGame from '../components/TowerDefenseGame';
 import UiSettingsModal from '../components/UiSettingsModal';
+import AiChatModal from '../components/AiChatModal';
 import { loadHiddenTaskKeys, makeTaskKey, saveHiddenTaskKeys } from '../services/taskVisibility';
 
 interface Discussion {
@@ -131,6 +132,7 @@ const StudentDashboard: React.FC = () => {
   const [showUiSettings, setShowUiSettings] = useState(false);
   const [hiddenTaskKeys, setHiddenTaskKeys] = useState<Set<string>>(() => new Set());
   const [showHiddenTasks, setShowHiddenTasks] = useState(false);
+  const [showAiChat, setShowAiChat] = useState(false);
 
   // 小测验相关状态
   const [showQuizModal, setShowQuizModal] = useState(false);
@@ -1057,6 +1059,13 @@ const StudentDashboard: React.FC = () => {
         </div>
         <div className="flex gap-3">
           <button
+            onClick={() => setShowAiChat(true)}
+            className="w-10 h-10 bg-brand-cream rounded-full border-2 border-brand-brown flex items-center justify-center hover:bg-white"
+            title="AI對話"
+          >
+            <Bot className="w-6 h-6 text-brand-brown" />
+          </button>
+          <button
             onClick={() => setShowUiSettings(true)}
             className="w-10 h-10 bg-brand-cream rounded-full border-2 border-brand-brown flex items-center justify-center hover:bg-white"
             title="介面顯示設定"
@@ -1078,6 +1087,11 @@ const StudentDashboard: React.FC = () => {
       </div>
 
       <UiSettingsModal open={showUiSettings} onClose={() => setShowUiSettings(false)} />
+      <AiChatModal
+        open={showAiChat}
+        onClose={() => setShowAiChat(false)}
+        defaultSubject={String(selectedSubject)}
+      />
 
       {/* Main Layout */}
       <div className="flex-1 relative z-10 p-4 md:p-8 flex flex-col md:flex-row gap-6 max-w-7xl mx-auto w-full">

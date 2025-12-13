@@ -5,6 +5,7 @@ import Select from '../components/Select';
 import Input from '../components/Input';
 import AiQuestionGeneratorModal from '../components/AiQuestionGeneratorModal';
 import UiSettingsModal from '../components/UiSettingsModal';
+import AiChatModal from '../components/AiChatModal';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { authService } from '../services/authService';
@@ -25,6 +26,7 @@ const TeacherDashboard: React.FC = () => {
   const [aiSaving, setAiSaving] = useState(false);
   const [showUiSettings, setShowUiSettings] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [showAiChat, setShowAiChat] = useState(false);
 
   const [teacherSettingsDraft, setTeacherSettingsDraft] = useState<{
     homeroomClass: string;
@@ -1231,6 +1233,11 @@ const TeacherDashboard: React.FC = () => {
       </header>
 
       <UiSettingsModal open={showUiSettings} onClose={() => setShowUiSettings(false)} />
+      <AiChatModal
+        open={showAiChat}
+        onClose={() => setShowAiChat(false)}
+        defaultSubject={filterSubject || String(Subject.CHINESE)}
+      />
 
       {/* Student Progress Modal */}
       {showStudentProgressModal && (
@@ -1415,7 +1422,10 @@ const TeacherDashboard: React.FC = () => {
                 <Button
                   fullWidth
                   className="bg-[#D2EFFF] hover:bg-[#BCE0FF]"
-                  onClick={closeSidebar}
+                  onClick={() => {
+                    setShowAiChat(true);
+                    closeSidebar();
+                  }}
                 >
                   AI對話
                 </Button>
@@ -1511,6 +1521,7 @@ const TeacherDashboard: React.FC = () => {
           <Button
             fullWidth
             className="bg-[#D2EFFF] hover:bg-[#BCE0FF] text-lg"
+            onClick={() => setShowAiChat(true)}
           >
             AI對話
           </Button>

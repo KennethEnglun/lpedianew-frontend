@@ -226,6 +226,65 @@ class AuthService {
     return nextUser;
   }
 
+  // === AI 對話（通用 Bot）===
+  async sendChatMessage(payload: {
+    subject: string;
+    threadId?: string | null;
+    message: string;
+  }): Promise<{
+    threadId: string;
+    userMessage: any;
+    assistantMessage: any;
+  }> {
+    const response = await fetch(`${this.API_BASE}/chats/send`, {
+      method: 'POST',
+      headers: this.getAuthHeaders(),
+      body: JSON.stringify(payload)
+    });
+    return this.handleResponse(response);
+  }
+
+  async getMyChatThreads(params?: { subject?: string }): Promise<{ threads: any[] }> {
+    const searchParams = new URLSearchParams();
+    if (params?.subject) searchParams.append('subject', params.subject);
+    const query = searchParams.toString() ? `?${searchParams.toString()}` : '';
+    const response = await fetch(`${this.API_BASE}/chats/me/threads${query}`, {
+      headers: this.getAuthHeaders()
+    });
+    return this.handleResponse(response);
+  }
+
+  async getMyChatMessages(threadId: string, params?: { limit?: number }): Promise<{ thread: any; messages: any[] }> {
+    const searchParams = new URLSearchParams();
+    if (params?.limit) searchParams.append('limit', String(params.limit));
+    const query = searchParams.toString() ? `?${searchParams.toString()}` : '';
+    const response = await fetch(`${this.API_BASE}/chats/me/threads/${threadId}/messages${query}`, {
+      headers: this.getAuthHeaders()
+    });
+    return this.handleResponse(response);
+  }
+
+  async getTeacherChatThreads(params: { subject: string; class?: string; search?: string }): Promise<{ threads: any[] }> {
+    const searchParams = new URLSearchParams();
+    searchParams.append('subject', params.subject);
+    if (params.class) searchParams.append('class', params.class);
+    if (params.search) searchParams.append('search', params.search);
+    const response = await fetch(`${this.API_BASE}/chats/teacher/threads?${searchParams.toString()}`, {
+      headers: this.getAuthHeaders()
+    });
+    return this.handleResponse(response);
+  }
+
+  async getTeacherChatMessages(threadId: string, params?: { limit?: number }): Promise<{ thread: any; student: any; messages: any[] }> {
+    const searchParams = new URLSearchParams();
+    if (params?.limit) searchParams.append('limit', String(params.limit));
+    const query = searchParams.toString() ? `?${searchParams.toString()}` : '';
+    const response = await fetch(`${this.API_BASE}/chats/teacher/threads/${threadId}/messages${query}`, {
+      headers: this.getAuthHeaders()
+    });
+    return this.handleResponse(response);
+  }
+
   // 創建用戶（管理員專用）
   async createUser(userData: {
     username: string;
