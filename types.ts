@@ -19,6 +19,7 @@ export interface Task {
   subject: Subject;
   teacherName: string;
   teacherAvatar: string;
+  createdAt?: string;
   completed?: boolean;
   score?: number | null;
 }

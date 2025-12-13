@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { Settings, LogOut, MessageSquare, HelpCircle, Bot, RefreshCw, X } from 'lucide-react';
+import React, { useMemo, useState, useEffect, useRef, useCallback } from 'react';
+import { Settings, LogOut, MessageSquare, HelpCircle, Bot, RefreshCw, X, Eye, EyeOff } from 'lucide-react';
 import { Subject, SUBJECT_CONFIG, Task } from '../types';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
@@ -8,6 +8,7 @@ import { sanitizeHtml } from '../services/sanitizeHtml';
 import { MazeGame } from '../components/MazeGame';
 import TowerDefenseGame from '../components/TowerDefenseGame';
 import UiSettingsModal from '../components/UiSettingsModal';
+import { loadHiddenTaskKeys, makeTaskKey, saveHiddenTaskKeys } from '../services/taskVisibility';
 
 interface Discussion {
   id: string;
@@ -128,6 +129,8 @@ const StudentDashboard: React.FC = () => {
   const [responseStatus, setResponseStatus] = useState<Record<string, { hasResponded: boolean, response?: any }>>({});
   const [allResponses, setAllResponses] = useState<Record<string, any[]>>({});
   const [showUiSettings, setShowUiSettings] = useState(false);
+  const [hiddenTaskKeys, setHiddenTaskKeys] = useState<Set<string>>(() => new Set());
+  const [showHiddenTasks, setShowHiddenTasks] = useState(false);
 
   // 小测验相关状态
   const [showQuizModal, setShowQuizModal] = useState(false);
@@ -586,7 +589,8 @@ const StudentDashboard: React.FC = () => {
         type: 'discussion' as const,
         subject: discussion.subject,
         teacherName: discussion.teacherName,
-        teacherAvatar: '/teacher_login.png'
+        teacherAvatar: '/teacher_login.png',
+        createdAt: discussion.createdAt
       }));
 
       // 轉換小測驗為任務格式
@@ -597,6 +601,7 @@ const StudentDashboard: React.FC = () => {
         subject: quiz.subject,
         teacherName: quiz.teacherName || '系統',
         teacherAvatar: '/teacher_login.png',
+        createdAt: quiz.createdAt || quiz.updatedAt || quiz.assignedAt,
         completed: quiz.completed || false,
         score: quiz.score || null
       }));
@@ -609,6 +614,7 @@ const StudentDashboard: React.FC = () => {
         subject: game.subject,
         teacherName: '系統',
         teacherAvatar: '/teacher_login.png',
+        createdAt: game.createdAt || game.updatedAt || game.assignedAt,
         completed: game.completed || false,
         score: game.bestScore || null
       }));
@@ -907,6 +913,52 @@ const StudentDashboard: React.FC = () => {
     loadDiscussions();
   }, [user]);
 
+  useEffect(() => {
+    if (!user?.id) return;
+    setHiddenTaskKeys(loadHiddenTaskKeys(user.id, 'student'));
+  }, [user?.id]);
+
+  const AUTO_HIDE_DAYS = 14;
+  const isAutoHidden = (createdAt?: string) => {
+    if (!createdAt) return false;
+    const createdMs = new Date(createdAt).getTime();
+    if (!Number.isFinite(createdMs)) return false;
+    return Date.now() - createdMs >= AUTO_HIDE_DAYS * 24 * 60 * 60 * 1000;
+  };
+
+  const isTaskHidden = (task: Task) => {
+    const key = makeTaskKey(task.type, task.id);
+    return isAutoHidden(task.createdAt) || hiddenTaskKeys.has(key);
+  };
+
+  const selectedSubjectTasks = useMemo(
+    () => tasks.filter(task => task.subject === selectedSubject),
+    [tasks, selectedSubject]
+  );
+
+  const visibleTasks = useMemo(
+    () => selectedSubjectTasks.filter(task => !isTaskHidden(task)),
+    [hiddenTaskKeys, selectedSubjectTasks]
+  );
+
+  const hiddenTasks = useMemo(
+    () => selectedSubjectTasks.filter(task => isTaskHidden(task)),
+    [hiddenTaskKeys, selectedSubjectTasks]
+  );
+
+  const setManualHidden = (task: Task, hidden: boolean) => {
+    if (!user?.id) return;
+    if (isAutoHidden(task.createdAt)) return;
+    const key = makeTaskKey(task.type, task.id);
+    setHiddenTaskKeys(prev => {
+      const next = new Set(prev);
+      if (hidden) next.add(key);
+      else next.delete(key);
+      saveHiddenTaskKeys(user.id, 'student', next);
+      return next;
+    });
+  };
+
   // 設置自動刷新，每5秒檢查一次新的討論串
   useEffect(() => {
     if (!user || user.role !== 'student') return;
@@ -918,7 +970,6 @@ const StudentDashboard: React.FC = () => {
     return () => clearInterval(interval);
   }, [user]);
 
-  const filteredTasks = tasks.filter(task => task.subject === selectedSubject);
   const subjectConfig = SUBJECT_CONFIG[selectedSubject];
 
   return (
@@ -1055,8 +1106,8 @@ const StudentDashboard: React.FC = () => {
                 <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-brand-brown mx-auto mb-4"></div>
                 <p className="text-brand-brown font-bold">載入中...</p>
               </div>
-            ) : filteredTasks.length > 0 ? (
-              filteredTasks.map(task => {
+            ) : visibleTasks.length > 0 ? (
+              visibleTasks.map(task => {
                 const getTaskIcon = () => {
                   switch (task.type) {
                     case 'quiz': return <HelpCircle className="w-5 h-5 text-blue-600" />;
@@ -1120,7 +1171,7 @@ const StudentDashboard: React.FC = () => {
                 };
 
                 return (
-                  <div key={task.id} className="bg-white border-4 border-brand-brown rounded-3xl p-4 flex items-center shadow-comic hover:-translate-y-1 transition-transform cursor-pointer">
+                  <div key={makeTaskKey(task.type, task.id)} className="bg-white border-4 border-brand-brown rounded-3xl p-4 flex items-center shadow-comic hover:-translate-y-1 transition-transform">
                     <div className="w-14 h-14 rounded-full border-2 border-brand-brown overflow-hidden flex-shrink-0 bg-gray-100">
                       <img src={task.teacherAvatar} alt={task.teacherName} className="w-full h-full object-cover" />
                     </div>
@@ -1131,6 +1182,17 @@ const StudentDashboard: React.FC = () => {
                       </div>
                       <p className="text-gray-500 text-sm">- {task.teacherName}</p>
                     </div>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setManualHidden(task, true);
+                      }}
+                      className="mr-3 w-10 h-10 rounded-2xl border-4 border-brand-brown bg-gray-100 hover:bg-gray-200 shadow-comic active:translate-y-1 active:shadow-none flex items-center justify-center"
+                      title="隱藏（14天內可取消）"
+                      aria-label="隱藏"
+                    >
+                      <EyeOff className="w-5 h-5 text-brand-brown" />
+                    </button>
                     <button
                       onClick={() => {
                         if (task.type === 'discussion') {
@@ -1155,6 +1217,79 @@ const StudentDashboard: React.FC = () => {
               </div>
             )}
           </div>
+
+          {hiddenTasks.length > 0 && (
+            <div className="mt-6">
+              <button
+                onClick={() => setShowHiddenTasks(v => !v)}
+                className="w-full flex items-center justify-between px-4 py-3 bg-gray-100 hover:bg-gray-200 border-2 border-gray-300 rounded-2xl font-bold text-gray-700"
+              >
+                <span>已隱藏 ({hiddenTasks.length})</span>
+                <span className="text-sm">{showHiddenTasks ? '收起' : '展開'}</span>
+              </button>
+
+              {showHiddenTasks && (
+                <div className="mt-4 space-y-4">
+                  {hiddenTasks.map((task) => {
+                    const autoHidden = isAutoHidden(task.createdAt);
+                    const taskKey = makeTaskKey(task.type, task.id);
+                    const manuallyHidden = hiddenTaskKeys.has(taskKey) && !autoHidden;
+
+                    const openTask = () => {
+                      if (task.type === 'discussion') handleDiscussionClick(task.id);
+                      else if (task.type === 'quiz') handleQuizClick(task.id);
+                      else if (task.type === 'game') handleGameClick(task.id);
+                    };
+
+                    return (
+                      <div key={taskKey} className="bg-gray-50 border-4 border-gray-300 rounded-3xl p-4 flex items-center shadow-comic">
+                        <div className="w-14 h-14 rounded-full border-2 border-brand-brown overflow-hidden flex-shrink-0 bg-gray-100">
+                          <img src={task.teacherAvatar} alt={task.teacherName} className="w-full h-full object-cover" />
+                        </div>
+                        <div className="ml-4 flex-1">
+                          <div className="flex items-center gap-2 mb-1">
+                            {task.type === 'game'
+                              ? <span className="text-xl">🎮</span>
+                              : task.type === 'quiz'
+                                ? <HelpCircle className="w-5 h-5 text-blue-600" />
+                                : task.type === 'ai-bot'
+                                  ? <Bot className="w-5 h-5 text-green-600" />
+                                  : <MessageSquare className="w-5 h-5 text-purple-600" />
+                            }
+                            <h5 className="text-xl font-bold text-brand-brown">{task.title}</h5>
+                            {autoHidden && (
+                              <span className="ml-2 text-xs font-bold px-2 py-1 rounded bg-gray-200 text-gray-700">
+                                超過14天自動隱藏
+                              </span>
+                            )}
+                          </div>
+                          <p className="text-gray-500 text-sm">- {task.teacherName}</p>
+                        </div>
+
+                        {manuallyHidden && (
+                          <button
+                            onClick={() => setManualHidden(task, false)}
+                            className="mr-3 w-10 h-10 rounded-2xl border-4 border-brand-brown bg-white hover:bg-gray-100 shadow-comic active:translate-y-1 active:shadow-none flex items-center justify-center"
+                            title="取消隱藏"
+                            aria-label="顯示"
+                          >
+                            <Eye className="w-5 h-5 text-brand-brown" />
+                          </button>
+                        )}
+
+                        <button
+                          onClick={openTask}
+                          className="bg-[#FDEEAD] hover:bg-[#FCE690] text-brand-brown font-bold px-6 py-2 rounded-2xl border-4 border-brand-brown shadow-comic active:translate-y-1 active:shadow-none"
+                        >
+                          開啟
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          )}
 
         </main>
 

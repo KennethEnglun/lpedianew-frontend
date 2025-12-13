@@ -1,5 +1,5 @@
-import React, { useRef, useState, useEffect } from 'react';
-import { Menu, Settings, SlidersHorizontal, User, LogOut, MessageSquare, Plus, X, Image, Link, Code, Bold, Italic, Underline, Type, Palette, Upload, Trash, Filter, Eye, HelpCircle, Clock } from 'lucide-react';
+import React, { useMemo, useRef, useState, useEffect } from 'react';
+import { Menu, Settings, SlidersHorizontal, User, LogOut, MessageSquare, Plus, X, Image, Link, Code, Bold, Italic, Underline, Type, Palette, Upload, Trash, Filter, Eye, EyeOff, HelpCircle, Clock } from 'lucide-react';
 import Button from '../components/Button';
 import Select from '../components/Select';
 import Input from '../components/Input';
@@ -9,6 +9,7 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { authService } from '../services/authService';
 import { sanitizeHtml } from '../services/sanitizeHtml';
+import { loadHiddenTaskKeys, makeTaskKey, parseTaskKey, saveHiddenTaskKeys } from '../services/taskVisibility';
 import { Subject, Discussion } from '../types';
 
 const TeacherDashboard: React.FC = () => {
@@ -87,6 +88,8 @@ const TeacherDashboard: React.FC = () => {
   // 多選刪除狀態
   const [isSelectMode, setIsSelectMode] = useState(false);
   const [selectedAssignments, setSelectedAssignments] = useState<string[]>([]);
+  const [hiddenTaskKeys, setHiddenTaskKeys] = useState<Set<string>>(() => new Set());
+  const [showHiddenAssignments, setShowHiddenAssignments] = useState(false);
 
   // 小遊戲相關狀態
   const [showGameModal, setShowGameModal] = useState(false);
@@ -474,15 +477,13 @@ const TeacherDashboard: React.FC = () => {
 
   // 刪除整個作業或小測驗
   const handleDeleteAssignment = async (assignment: any) => {
-    const itemType = assignment.type === 'quiz' ? '小測驗' : '作業';
+    const itemType = assignment.type === 'quiz' ? '小測驗' : assignment.type === 'game' ? '遊戲' : '作業';
     if (!confirm(`確定要刪除整個${itemType}及其所有回應嗎？此操作無法復原！`)) return;
 
     try {
-      if (assignment.type === 'quiz') {
-        await authService.deleteQuiz(assignment.id);
-      } else {
-        await authService.deleteAssignment(assignment.id);
-      }
+      if (assignment.type === 'quiz') await authService.deleteQuiz(assignment.id);
+      else if (assignment.type === 'game') await authService.deleteGame(assignment.id);
+      else await authService.deleteAssignment(assignment.id);
 
       alert(`${itemType}已刪除`);
 
@@ -503,6 +504,7 @@ const TeacherDashboard: React.FC = () => {
 	  // 開啟作業管理模態框
 	  const openAssignmentManagement = async () => {
 	    setShowAssignmentModal(true);
+      setShowHiddenAssignments(false);
 	    await loadFilterOptions();
 	    await loadAssignments();
     // Fetch all students for completion tracking
@@ -513,6 +515,47 @@ const TeacherDashboard: React.FC = () => {
       console.error('Failed to load students list', err);
 	    }
 	  };
+
+  useEffect(() => {
+    if (!showAssignmentModal) return;
+    if (!user?.id) return;
+    setHiddenTaskKeys(loadHiddenTaskKeys(user.id, 'teacher'));
+  }, [showAssignmentModal, user?.id]);
+
+  const AUTO_HIDE_DAYS = 14;
+  const isAutoHidden = (createdAt?: string) => {
+    if (!createdAt) return false;
+    const createdMs = new Date(createdAt).getTime();
+    if (!Number.isFinite(createdMs)) return false;
+    const ageMs = Date.now() - createdMs;
+    return ageMs >= AUTO_HIDE_DAYS * 24 * 60 * 60 * 1000;
+  };
+
+  const isItemHidden = (item: any) => {
+    const key = makeTaskKey(item.type, item.id);
+    return isAutoHidden(item.createdAt) || hiddenTaskKeys.has(key);
+  };
+
+  const visibleAssignments = useMemo(() => assignments.filter((a) => !isItemHidden(a)), [assignments, hiddenTaskKeys]);
+  const hiddenAssignments = useMemo(() => assignments.filter((a) => isItemHidden(a)), [assignments, hiddenTaskKeys]);
+
+  const displayedAssignmentKeys = useMemo(() => {
+    const items = showHiddenAssignments ? [...visibleAssignments, ...hiddenAssignments] : visibleAssignments;
+    return items.map((a) => makeTaskKey(a.type, a.id));
+  }, [hiddenAssignments, showHiddenAssignments, visibleAssignments]);
+
+  const setManualHidden = (item: any, hidden: boolean) => {
+    if (!user?.id) return;
+    if (isAutoHidden(item.createdAt)) return;
+    const key = makeTaskKey(item.type, item.id);
+    setHiddenTaskKeys((prev) => {
+      const next = new Set(prev);
+      if (hidden) next.add(key);
+      else next.delete(key);
+      saveHiddenTaskKeys(user.id, 'teacher', next);
+      return next;
+    });
+  };
 
 	  // 開啟小遊戲建立入口（確保每次從選單開始）
 	  const openGameCreator = () => {
@@ -2189,18 +2232,33 @@ const TeacherDashboard: React.FC = () => {
                           >
                             {isSelectMode ? '取消選取' : '多選刪除'}
                           </button>
+                          {isSelectMode && (
+                            <>
+                              <button
+                                onClick={() => setSelectedAssignments(displayedAssignmentKeys)}
+                                className="px-4 py-2 bg-white text-gray-700 rounded-xl font-bold border-2 border-gray-300 hover:border-blue-500"
+                              >
+                                全選
+                              </button>
+                              <button
+                                onClick={() => setSelectedAssignments([])}
+                                className="px-4 py-2 bg-white text-gray-700 rounded-xl font-bold border-2 border-gray-300 hover:border-blue-500"
+                              >
+                                全不選
+                              </button>
+                            </>
+                          )}
                           {isSelectMode && selectedAssignments.length > 0 && (
                             <button
                               onClick={async () => {
                                 if (confirm(`確定要刪除選取的 ${selectedAssignments.length} 個項目嗎？`)) {
                                   try {
-                                    for (const id of selectedAssignments) {
-                                      const item = assignments.find(a => a.id === id);
-                                      if (item?.type === 'quiz') {
-                                        await authService.deleteQuiz(id);
-                                      } else {
-                                        await authService.deleteAssignment(id);
-                                      }
+                                    for (const key of selectedAssignments) {
+                                      const parsed = parseTaskKey(key);
+                                      if (!parsed) continue;
+                                      if (parsed.type === 'quiz') await authService.deleteQuiz(parsed.id);
+                                      else if (parsed.type === 'game') await authService.deleteGame(parsed.id);
+                                      else await authService.deleteAssignment(parsed.id);
                                     }
                                     alert('刪除成功！');
                                     setSelectedAssignments([]);
@@ -2286,13 +2344,14 @@ const TeacherDashboard: React.FC = () => {
                           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-brand-brown mx-auto mb-4"></div>
                           <p className="text-brand-brown font-bold">載入中...</p>
                         </div>
-                      ) : assignments.length > 0 ? (
-                        assignments.map(assignment => {
+                      ) : visibleAssignments.length > 0 ? (
+                        visibleAssignments.map(assignment => {
                           const isQuiz = assignment.type === 'quiz';
                           const isGame = assignment.type === 'game';
-                          const isSelected = selectedAssignments.includes(assignment.id);
+                          const assignmentKey = makeTaskKey(assignment.type, assignment.id);
+                          const isSelected = selectedAssignments.includes(assignmentKey);
                           return (
-                            <div key={assignment.id} className={`bg-white border-4 rounded-3xl p-6 shadow-comic ${isSelected ? 'border-blue-500 bg-blue-50' : 'border-brand-brown'}`}>
+                            <div key={assignmentKey} className={`bg-white border-4 rounded-3xl p-6 shadow-comic ${isSelected ? 'border-blue-500 bg-blue-50' : 'border-brand-brown'}`}>
                               <div className="flex justify-between items-start">
                                 <div className="flex-1 flex items-start gap-3">
                                   {isSelectMode && (
@@ -2301,9 +2360,9 @@ const TeacherDashboard: React.FC = () => {
                                       checked={isSelected}
                                       onChange={(e) => {
                                         if (e.target.checked) {
-                                          setSelectedAssignments(prev => [...prev, assignment.id]);
+                                          setSelectedAssignments(prev => [...prev, assignmentKey]);
                                         } else {
-                                          setSelectedAssignments(prev => prev.filter(id => id !== assignment.id));
+                                          setSelectedAssignments(prev => prev.filter(key => key !== assignmentKey));
                                         }
                                       }}
                                       className="w-6 h-6 mt-1 rounded border-2 border-gray-400 text-blue-600 focus:ring-blue-500"
@@ -2376,6 +2435,16 @@ const TeacherDashboard: React.FC = () => {
 	                                      <Eye className="w-4 h-4" />
 	                                      {(isQuiz || isGame) ? '查看結果' : '查看回應'}
 	                                    </button>
+                                    {!isSelectMode && (
+                                      <button
+                                        onClick={() => setManualHidden(assignment, true)}
+                                        className="flex items-center gap-1 px-4 py-2 bg-gray-100 text-gray-700 rounded-xl hover:bg-gray-200 font-bold"
+                                        title="隱藏（14天內可取消）"
+                                      >
+                                        <EyeOff className="w-4 h-4" />
+                                        隱藏
+                                      </button>
+                                    )}
                                     <button
                                       onClick={() => handleDeleteAssignment(assignment)}
                                       className="flex items-center gap-1 px-4 py-2 bg-red-100 text-red-700 rounded-xl hover:bg-red-200 font-bold"
@@ -2395,6 +2464,117 @@ const TeacherDashboard: React.FC = () => {
                         </div>
                       )}
                     </div>
+
+                    {hiddenAssignments.length > 0 && (
+                      <div className="mt-6">
+                        <button
+                          onClick={() => setShowHiddenAssignments(v => !v)}
+                          className="w-full flex items-center justify-between px-4 py-3 bg-gray-100 hover:bg-gray-200 border-2 border-gray-300 rounded-2xl font-bold text-gray-700"
+                        >
+                          <span>已隱藏 ({hiddenAssignments.length})</span>
+                          <span className="text-sm">{showHiddenAssignments ? '收起' : '展開'}</span>
+                        </button>
+                        {showHiddenAssignments && (
+                          <div className="mt-4 space-y-4">
+                            {hiddenAssignments.map((assignment) => {
+                              const isQuiz = assignment.type === 'quiz';
+                              const isGame = assignment.type === 'game';
+                              const assignmentKey = makeTaskKey(assignment.type, assignment.id);
+                              const autoHidden = isAutoHidden(assignment.createdAt);
+                              const manuallyHidden = hiddenTaskKeys.has(assignmentKey) && !autoHidden;
+                              const isSelected = selectedAssignments.includes(assignmentKey);
+
+                              return (
+                                <div
+                                  key={assignmentKey}
+                                  className={`bg-gray-50 border-4 rounded-3xl p-6 shadow-comic ${isSelected ? 'border-blue-500 bg-blue-50' : 'border-gray-300'}`}
+                                >
+                                  <div className="flex justify-between items-start">
+                                    <div className="flex-1 flex items-start gap-3">
+                                      {isSelectMode && (
+                                        <input
+                                          type="checkbox"
+                                          checked={isSelected}
+                                          onChange={(e) => {
+                                            if (e.target.checked) setSelectedAssignments(prev => [...prev, assignmentKey]);
+                                            else setSelectedAssignments(prev => prev.filter(key => key !== assignmentKey));
+                                          }}
+                                          className="w-6 h-6 mt-1 rounded border-2 border-gray-400 text-blue-600 focus:ring-blue-500"
+                                        />
+                                      )}
+                                      <div className="flex-1">
+                                        <div className="flex items-center gap-2 mb-2">
+                                          {isGame ? (
+                                            <span className="text-2xl">🎮</span>
+                                          ) : isQuiz ? (
+                                            <HelpCircle className="w-5 h-5 text-yellow-600" />
+                                          ) : (
+                                            <MessageSquare className="w-5 h-5 text-purple-600" />
+                                          )}
+                                          <h4 className="text-xl font-bold text-brand-brown">{assignment.title}</h4>
+                                          {autoHidden && (
+                                            <span className="ml-2 text-xs font-bold px-2 py-1 rounded bg-gray-200 text-gray-700">
+                                              超過14天自動隱藏
+                                            </span>
+                                          )}
+                                        </div>
+                                        <div className="flex items-center gap-2 text-sm text-gray-500">
+                                          <span className={`px-2 py-1 rounded text-xs font-bold ${isQuiz
+                                            ? 'bg-yellow-200 text-yellow-800'
+                                            : isGame
+                                              ? 'bg-emerald-200 text-emerald-900'
+                                              : 'bg-purple-200 text-purple-800'
+                                            }`}>
+                                            {isQuiz
+                                              ? '小測驗'
+                                              : isGame
+                                                ? (assignment.gameType === 'maze'
+                                                  ? '迷宮闖關'
+                                                  : assignment.gameType === 'matching'
+                                                    ? '翻牌記憶'
+                                                    : assignment.gameType === 'tower-defense'
+                                                      ? '答題塔防'
+                                                      : '小遊戲')
+                                                : '討論串'}
+                                          </span>
+                                          <span>創建時間: {new Date(assignment.createdAt).toLocaleString()}</span>
+                                        </div>
+                                      </div>
+                                      <div className="flex gap-2 ml-4">
+                                        <button
+                                          onClick={() => viewAssignmentDetails(assignment)}
+                                          className="flex items-center gap-1 px-4 py-2 bg-blue-100 text-blue-700 rounded-xl hover:bg-blue-200 font-bold"
+                                        >
+                                          <Eye className="w-4 h-4" />
+                                          {(isQuiz || isGame) ? '查看結果' : '查看回應'}
+                                        </button>
+                                        {manuallyHidden && !isSelectMode && (
+                                          <button
+                                            onClick={() => setManualHidden(assignment, false)}
+                                            className="flex items-center gap-1 px-4 py-2 bg-white text-gray-700 rounded-xl hover:bg-gray-100 font-bold border-2 border-gray-200"
+                                            title="取消隱藏"
+                                          >
+                                            <Eye className="w-4 h-4" />
+                                            顯示
+                                          </button>
+                                        )}
+                                        <button
+                                          onClick={() => handleDeleteAssignment(assignment)}
+                                          className="flex items-center gap-1 px-4 py-2 bg-red-100 text-red-700 rounded-xl hover:bg-red-200 font-bold"
+                                        >
+                                          <Trash className="w-4 h-4" />
+                                          刪除
+                                        </button>
+                                      </div>
+                                    </div>
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </div>
                 ) : (
                   // 作業詳情和回應視圖
