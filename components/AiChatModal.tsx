@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Bot, Search, X } from 'lucide-react';
+import { Bot, Check, Copy, Search, X } from 'lucide-react';
 import Button from './Button';
 import Input from './Input';
 import { useAuth } from '../contexts/AuthContext';
@@ -164,6 +164,7 @@ const AiChatModal: React.FC<{
   const [myLoading, setMyLoading] = useState(false);
   const [myError, setMyError] = useState('');
   const abortRef = useRef<AbortController | null>(null);
+  const [copiedMessageId, setCopiedMessageId] = useState<string | null>(null);
 
   // Teacher view
   const [studentSearch, setStudentSearch] = useState('');
@@ -269,6 +270,30 @@ const AiChatModal: React.FC<{
       setStudentError(message);
     } finally {
       setStudentLoading(false);
+    }
+  };
+
+  const copyToClipboard = async (text: string, messageId: string) => {
+    const value = String(text || '');
+    try {
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(value);
+      } else {
+        const textarea = document.createElement('textarea');
+        textarea.value = value;
+        textarea.style.position = 'fixed';
+        textarea.style.left = '-9999px';
+        textarea.style.top = '0';
+        document.body.appendChild(textarea);
+        textarea.focus();
+        textarea.select();
+        document.execCommand('copy');
+        document.body.removeChild(textarea);
+      }
+      setCopiedMessageId(messageId);
+      window.setTimeout(() => setCopiedMessageId((prev) => (prev === messageId ? null : prev)), 1200);
+    } catch (error) {
+      console.error('Copy failed', error);
     }
   };
 
@@ -507,6 +532,18 @@ const AiChatModal: React.FC<{
                         : 'bg-[#E0D2F8] border-purple-300 text-gray-800'
                         }`}
                     >
+                      <div className="flex justify-end mb-2">
+                        <button
+                          type="button"
+                          onClick={() => copyToClipboard(m.content, m.id)}
+                          className="inline-flex items-center gap-1 px-2 py-1 rounded-lg border border-gray-300 bg-white/70 hover:bg-white text-xs font-bold text-gray-700"
+                          aria-label="複製"
+                          title={copiedMessageId === m.id ? '已複製' : '複製'}
+                        >
+                          {copiedMessageId === m.id ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
+                          {copiedMessageId === m.id ? '已複製' : '複製'}
+                        </button>
+                      </div>
                       <div dangerouslySetInnerHTML={{ __html: markdownToSafeHtml(m.content) }} />
                       {m.createdAt && (
                         <div className="text-[10px] text-gray-500 mt-2">
@@ -545,6 +582,18 @@ const AiChatModal: React.FC<{
                           : 'bg-[#E0D2F8] border-purple-300 text-gray-800'
                           }`}
                       >
+                        <div className="flex justify-end mb-2">
+                          <button
+                            type="button"
+                            onClick={() => copyToClipboard(m.content, m.id)}
+                            className="inline-flex items-center gap-1 px-2 py-1 rounded-lg border border-gray-300 bg-white/70 hover:bg-white text-xs font-bold text-gray-700"
+                            aria-label="複製"
+                            title={copiedMessageId === m.id ? '已複製' : '複製'}
+                          >
+                            {copiedMessageId === m.id ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
+                            {copiedMessageId === m.id ? '已複製' : '複製'}
+                          </button>
+                        </div>
                         <div dangerouslySetInnerHTML={{ __html: markdownToSafeHtml(m.content) }} />
                         {m.createdAt && (
                           <div className="text-[10px] text-gray-500 mt-2">
