@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Bot, Check, Copy, Search, X } from 'lucide-react';
+import { Bot, Check, Copy, Folder, FolderPlus, Pencil, Search, Trash2, X } from 'lucide-react';
 import Button from './Button';
 import Input from './Input';
 import { useAuth } from '../contexts/AuthContext';
@@ -160,6 +160,14 @@ const AiChatModal: React.FC<{
   const [myThreadId, setMyThreadId] = useState<string | null>(null);
   const [myThreads, setMyThreads] = useState<any[]>([]);
   const [myThreadSearch, setMyThreadSearch] = useState('');
+  const [myFolders, setMyFolders] = useState<any[]>([]);
+  const [selectedFolderId, setSelectedFolderId] = useState<string>('all'); // 'all' | 'unfiled' | folderId
+  const [creatingFolder, setCreatingFolder] = useState(false);
+  const [newFolderName, setNewFolderName] = useState('');
+  const [editingFolderId, setEditingFolderId] = useState<string | null>(null);
+  const [editingFolderName, setEditingFolderName] = useState('');
+  const [editingThreadId, setEditingThreadId] = useState<string | null>(null);
+  const [editingThreadTitle, setEditingThreadTitle] = useState('');
   const [myMessages, setMyMessages] = useState<ChatMessage[]>([]);
   const [draft, setDraft] = useState('');
   const [sending, setSending] = useState(false);
@@ -200,6 +208,13 @@ const AiChatModal: React.FC<{
       setMyLoading(true);
       setMyError('');
       setMyMessages([]);
+      if (isTeacher) {
+        const foldersResp = await authService.getMyChatFolders();
+        setMyFolders(Array.isArray(foldersResp.folders) ? foldersResp.folders : []);
+      } else {
+        const foldersResp = await authService.getMyChatFolders();
+        setMyFolders(Array.isArray(foldersResp.folders) ? foldersResp.folders : []);
+      }
       const threadsResp = isTeacher
         ? await authService.getMyChatThreads()
         : await authService.getMyChatThreads({ subject: nextSubject });
@@ -346,6 +361,58 @@ const AiChatModal: React.FC<{
     } catch (error) {
       console.error('Copy failed', error);
     }
+  };
+
+  const renameThread = async (threadId: string, title: string) => {
+    const nextTitle = String(title || '').trim();
+    if (!nextTitle) return;
+    const resp = await authService.updateMyChatThread(threadId, { title: nextTitle });
+    const updated = resp.thread;
+    setMyThreads((prev) => prev.map((t) => (String(t.id) === String(threadId) ? updated : t)));
+    setEditingThreadId(null);
+    setEditingThreadTitle('');
+  };
+
+  const deleteThread = async (threadId: string) => {
+    if (!confirm('確定要刪除這個對話嗎？此操作無法復原。')) return;
+    await authService.deleteMyChatThread(threadId);
+    setMyThreads((prev) => prev.filter((t) => String(t.id) !== String(threadId)));
+    if (String(myThreadId) === String(threadId)) {
+      setMyThreadId(null);
+      setMyMessages([]);
+    }
+  };
+
+  const moveThreadToFolder = async (threadId: string, folderId: string | null) => {
+    const resp = await authService.updateMyChatThread(threadId, { folderId: folderId || null });
+    const updated = resp.thread;
+    setMyThreads((prev) => prev.map((t) => (String(t.id) === String(threadId) ? updated : t)));
+  };
+
+  const createFolder = async () => {
+    const name = newFolderName.trim();
+    if (!name) return;
+    const resp = await authService.createMyChatFolder({ name });
+    setMyFolders((prev) => [...prev, resp.folder].sort((a, b) => String(a.name).localeCompare(String(b.name), 'zh-Hant')));
+    setCreatingFolder(false);
+    setNewFolderName('');
+  };
+
+  const renameFolder = async (folderId: string, name: string) => {
+    const next = name.trim();
+    if (!next) return;
+    const resp = await authService.updateMyChatFolder(folderId, { name: next });
+    setMyFolders((prev) => prev.map((f) => (String(f.id) === String(folderId) ? resp.folder : f)).sort((a, b) => String(a.name).localeCompare(String(b.name), 'zh-Hant')));
+    setEditingFolderId(null);
+    setEditingFolderName('');
+  };
+
+  const deleteFolder = async (folderId: string) => {
+    if (!confirm('確定要刪除此資料夾嗎？資料夾內的對話會移到「未分類」。')) return;
+    await authService.deleteMyChatFolder(folderId);
+    setMyFolders((prev) => prev.filter((f) => String(f.id) !== String(folderId)));
+    setMyThreads((prev) => prev.map((t) => (t.folderId === folderId ? { ...t, folderId: null } : t)));
+    if (selectedFolderId === folderId) setSelectedFolderId('all');
   };
 
   const send = async () => {
@@ -649,13 +716,133 @@ const AiChatModal: React.FC<{
                 <div className="px-3 py-2 rounded-2xl bg-white border-2 border-gray-200 text-gray-400 font-black">專案（開發中）</div>
               </div>
 
+              <div className="mb-4">
+                <div className="flex items-center justify-between mb-2">
+                  <div className="text-xs font-black text-gray-600">資料夾</div>
+                  <button
+                    type="button"
+                    onClick={() => setCreatingFolder((v) => !v)}
+                    className="inline-flex items-center gap-1 px-2 py-1 rounded-lg border border-gray-200 bg-white hover:border-brand-brown text-xs font-black text-gray-700"
+                    title="新增資料夾"
+                  >
+                    <FolderPlus className="w-4 h-4" />
+                    新增
+                  </button>
+                </div>
+
+                {creatingFolder && (
+                  <div className="flex gap-2 mb-2">
+                    <input
+                      value={newFolderName}
+                      onChange={(e) => setNewFolderName(e.target.value)}
+                      placeholder="資料夾名稱"
+                      className="flex-1 px-3 py-2 border-2 border-gray-300 rounded-xl"
+                    />
+                    <button
+                      type="button"
+                      onClick={createFolder}
+                      className="px-3 py-2 rounded-xl border-2 border-brand-brown bg-[#FDEEAD] font-black text-brand-brown"
+                    >
+                      建立
+                    </button>
+                  </div>
+                )}
+
+                <div className="space-y-2">
+                  <button
+                    type="button"
+                    onClick={() => setSelectedFolderId('all')}
+                    className={`w-full flex items-center gap-2 px-3 py-2 rounded-2xl border-2 font-black ${selectedFolderId === 'all'
+                      ? 'bg-[#FDEEAD] border-brand-brown text-brand-brown'
+                      : 'bg-white border-gray-200 text-gray-700 hover:border-brand-brown'
+                      }`}
+                  >
+                    <Folder className="w-4 h-4" />
+                    全部
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setSelectedFolderId('unfiled')}
+                    className={`w-full flex items-center gap-2 px-3 py-2 rounded-2xl border-2 font-black ${selectedFolderId === 'unfiled'
+                      ? 'bg-[#FDEEAD] border-brand-brown text-brand-brown'
+                      : 'bg-white border-gray-200 text-gray-700 hover:border-brand-brown'
+                      }`}
+                  >
+                    <Folder className="w-4 h-4" />
+                    未分類
+                  </button>
+                  {myFolders.map((f: any) => (
+                    <div key={f.id} className={`w-full px-3 py-2 rounded-2xl border-2 ${selectedFolderId === f.id ? 'bg-[#FDEEAD] border-brand-brown' : 'bg-white border-gray-200'} group`}>
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setSelectedFolderId(String(f.id))}
+                          className={`flex-1 flex items-center gap-2 text-left font-black ${selectedFolderId === f.id ? 'text-brand-brown' : 'text-gray-800'}`}
+                        >
+                          <Folder className="w-4 h-4" />
+                          {editingFolderId === f.id ? (
+                            <input
+                              value={editingFolderName}
+                              onChange={(e) => setEditingFolderName(e.target.value)}
+                              className="flex-1 px-2 py-1 border border-gray-300 rounded"
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter') renameFolder(String(f.id), editingFolderName);
+                                if (e.key === 'Escape') { setEditingFolderId(null); setEditingFolderName(''); }
+                              }}
+                              autoFocus
+                            />
+                          ) : (
+                            <span className="flex-1">{f.name}</span>
+                          )}
+                        </button>
+                        {editingFolderId !== f.id && (
+                          <>
+                            <button
+                              type="button"
+                              onClick={() => { setEditingFolderId(String(f.id)); setEditingFolderName(String(f.name || '')); }}
+                              className="opacity-0 group-hover:opacity-100 p-1 rounded hover:bg-gray-100"
+                              title="改名"
+                            >
+                              <Pencil className="w-4 h-4 text-gray-700" />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => deleteFolder(String(f.id))}
+                              className="opacity-0 group-hover:opacity-100 p-1 rounded hover:bg-gray-100"
+                              title="刪除"
+                            >
+                              <Trash2 className="w-4 h-4 text-red-600" />
+                            </button>
+                          </>
+                        )}
+                        {editingFolderId === f.id && (
+                          <button
+                            type="button"
+                            onClick={() => renameFolder(String(f.id), editingFolderName)}
+                            className="p-1 rounded hover:bg-gray-100"
+                            title="儲存"
+                          >
+                            <Check className="w-4 h-4 text-green-700" />
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
               <div className="text-xs font-black text-gray-600 mb-2">歷史</div>
               <div className="space-y-2">
                 {(() => {
                   const q = myThreadSearch.trim().toLowerCase();
                   const filtered = myThreads.filter((t: any) => {
                     const title = String(t?.title || '新對話').toLowerCase();
-                    return !q || title.includes(q);
+                    const folderOk = (() => {
+                      if (selectedFolderId === 'all') return true;
+                      if (selectedFolderId === 'unfiled') return !t.folderId;
+                      return String(t.folderId || '') === String(selectedFolderId);
+                    })();
+                    return folderOk && (!q || title.includes(q));
                   });
 
                   if (filtered.length === 0) {
@@ -694,10 +881,70 @@ const AiChatModal: React.FC<{
                                 : 'bg-gray-50 border-gray-200 hover:border-brand-brown'
                                 }`}
                             >
-                              <div className="font-black text-gray-800 line-clamp-2">{t.title || '新對話'}</div>
+                              <div className="flex items-start gap-2 group">
+                                {editingThreadId === String(t.id) ? (
+                                  <input
+                                    value={editingThreadTitle}
+                                    onChange={(e) => setEditingThreadTitle(e.target.value)}
+                                    className="flex-1 px-2 py-1 border border-gray-300 rounded"
+                                    onKeyDown={(e) => {
+                                      if (e.key === 'Enter') renameThread(String(t.id), editingThreadTitle);
+                                      if (e.key === 'Escape') { setEditingThreadId(null); setEditingThreadTitle(''); }
+                                    }}
+                                    autoFocus
+                                  />
+                                ) : (
+                                  <div className="flex-1 font-black text-gray-800 line-clamp-2">{t.title || '新對話'}</div>
+                                )}
+                                {editingThreadId !== String(t.id) && (
+                                  <>
+                                    <button
+                                      type="button"
+                                      onClick={(e) => { e.stopPropagation(); setEditingThreadId(String(t.id)); setEditingThreadTitle(String(t.title || '新對話')); }}
+                                      className="opacity-0 group-hover:opacity-100 p-1 rounded hover:bg-white"
+                                      title="改名"
+                                    >
+                                      <Pencil className="w-4 h-4 text-gray-700" />
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={(e) => { e.stopPropagation(); deleteThread(String(t.id)); }}
+                                      className="opacity-0 group-hover:opacity-100 p-1 rounded hover:bg-white"
+                                      title="刪除"
+                                    >
+                                      <Trash2 className="w-4 h-4 text-red-600" />
+                                    </button>
+                                  </>
+                                )}
+                                {editingThreadId === String(t.id) && (
+                                  <button
+                                    type="button"
+                                    onClick={(e) => { e.stopPropagation(); renameThread(String(t.id), editingThreadTitle); }}
+                                    className="p-1 rounded hover:bg-white"
+                                    title="儲存"
+                                  >
+                                    <Check className="w-4 h-4 text-green-700" />
+                                  </button>
+                                )}
+                              </div>
                               <div className="text-[11px] text-gray-500 mt-1">
                                 {t.lastMessageAt ? new Date(t.lastMessageAt).toLocaleString() : ''}
                               </div>
+                              {String(t.id) === String(myThreadId) && (
+                                <div className="mt-2">
+                                  <label className="block text-[11px] font-black text-gray-600 mb-1">放入資料夾</label>
+                                  <select
+                                    value={t.folderId || ''}
+                                    onChange={(e) => moveThreadToFolder(String(t.id), e.target.value ? e.target.value : null)}
+                                    className="w-full px-2 py-2 border-2 border-gray-300 rounded-xl bg-white text-sm"
+                                  >
+                                    <option value="">未分類</option>
+                                    {myFolders.map((f: any) => (
+                                      <option key={f.id} value={f.id}>{f.name}</option>
+                                    ))}
+                                  </select>
+                                </div>
+                              )}
                             </button>
                           ))}
                         </div>

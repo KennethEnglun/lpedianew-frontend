@@ -279,6 +279,56 @@ class AuthService {
     return this.handleResponse(response);
   }
 
+  async updateMyChatThread(threadId: string, patch: { title?: string; folderId?: string | null }): Promise<{ thread: any }> {
+    const response = await fetch(`${this.API_BASE}/chats/me/threads/${threadId}`, {
+      method: 'PATCH',
+      headers: this.getAuthHeaders(),
+      body: JSON.stringify(patch || {})
+    });
+    return this.handleResponse(response);
+  }
+
+  async deleteMyChatThread(threadId: string): Promise<void> {
+    const response = await fetch(`${this.API_BASE}/chats/me/threads/${threadId}`, {
+      method: 'DELETE',
+      headers: this.getAuthHeaders()
+    });
+    await this.handleResponse(response);
+  }
+
+  async getMyChatFolders(): Promise<{ folders: any[] }> {
+    const response = await fetch(`${this.API_BASE}/chats/me/folders`, {
+      headers: this.getAuthHeaders()
+    });
+    return this.handleResponse(response);
+  }
+
+  async createMyChatFolder(payload: { name: string }): Promise<{ folder: any }> {
+    const response = await fetch(`${this.API_BASE}/chats/me/folders`, {
+      method: 'POST',
+      headers: this.getAuthHeaders(),
+      body: JSON.stringify(payload)
+    });
+    return this.handleResponse(response);
+  }
+
+  async updateMyChatFolder(folderId: string, payload: { name: string }): Promise<{ folder: any }> {
+    const response = await fetch(`${this.API_BASE}/chats/me/folders/${folderId}`, {
+      method: 'PATCH',
+      headers: this.getAuthHeaders(),
+      body: JSON.stringify(payload)
+    });
+    return this.handleResponse(response);
+  }
+
+  async deleteMyChatFolder(folderId: string): Promise<void> {
+    const response = await fetch(`${this.API_BASE}/chats/me/folders/${folderId}`, {
+      method: 'DELETE',
+      headers: this.getAuthHeaders()
+    });
+    await this.handleResponse(response);
+  }
+
   async getMyChatMessages(threadId: string, params?: { limit?: number }): Promise<{ thread: any; messages: any[] }> {
     const searchParams = new URLSearchParams();
     if (params?.limit) searchParams.append('limit', String(params.limit));
