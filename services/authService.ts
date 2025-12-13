@@ -367,6 +367,15 @@ class AuthService {
     await this.handleResponse(response);
   }
 
+  async generateImage(payload: { prompt: string; n?: number; size?: '256x256' | '512x512' | '1024x1024' }): Promise<{ images: string[] }> {
+    const response = await fetch(`${this.API_BASE}/ai/image-generate`, {
+      method: 'POST',
+      headers: this.getAuthHeaders(),
+      body: JSON.stringify(payload || {})
+    });
+    return this.handleResponse(response);
+  }
+
   // === Pedia 任務（派發自建 Pedia）===
   async createBotTask(payload: { botId: string; subject: string; targetClasses?: string[]; targetGroups?: string[]; targetClass?: string }): Promise<{ task: any }> {
     const response = await fetch(`${this.API_BASE}/bot-tasks`, {

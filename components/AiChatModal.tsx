@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Bot, Check, Copy, Folder, FolderPlus, Pencil, Search, Trash2, X } from 'lucide-react';
+import { Bot, Check, Copy, Folder, FolderPlus, Image as ImageIcon, Pencil, Search, Trash2, X } from 'lucide-react';
 import Button from './Button';
 import Input from './Input';
 import { useAuth } from '../contexts/AuthContext';
@@ -157,7 +157,7 @@ const AiChatModal: React.FC<{
   const [subject, setSubject] = useState<string>(defaultSubject || String(Subject.CHINESE)); // student: active subject; teacher: optional filter for students tab ('' = all)
 
   // My chat
-  const [mySidebarView, setMySidebarView] = useState<'chat' | 'bot'>('chat');
+  const [mySidebarView, setMySidebarView] = useState<'chat' | 'bot' | 'image'>('chat');
   const [myChatBotId, setMyChatBotId] = useState<string>('global'); // teacher-only: 'global' = 自由聊天
   const [myBots, setMyBots] = useState<any[]>([]);
   const [myThreadId, setMyThreadId] = useState<string | null>(null);
@@ -184,6 +184,14 @@ const AiChatModal: React.FC<{
   const [editingBotId, setEditingBotId] = useState<string | null>(null);
   const [editingBotName, setEditingBotName] = useState('');
   const [editingBotPrompt, setEditingBotPrompt] = useState('');
+
+  // Image generation
+  const [imagePrompt, setImagePrompt] = useState('');
+  const [imageSize, setImageSize] = useState<'256x256' | '512x512' | '1024x1024'>('1024x1024');
+  const [imageCount, setImageCount] = useState<1 | 2 | 3 | 4>(1);
+  const [imageUrls, setImageUrls] = useState<string[]>([]);
+  const [imageLoading, setImageLoading] = useState(false);
+  const [imageError, setImageError] = useState('');
 
   // Teacher view
   const [studentSearch, setStudentSearch] = useState('');
@@ -399,6 +407,26 @@ const AiChatModal: React.FC<{
       window.setTimeout(() => setCopiedMessageId((prev) => (prev === messageId ? null : prev)), 1200);
     } catch (error) {
       console.error('Copy failed', error);
+    }
+  };
+
+  const generateImage = async () => {
+    const prompt = String(imagePrompt || '').trim();
+    if (!prompt) {
+      setImageError('請輸入圖片描述');
+      return;
+    }
+    try {
+      setImageLoading(true);
+      setImageError('');
+      setImageUrls([]);
+      const resp = await authService.generateImage({ prompt, n: imageCount, size: imageSize });
+      setImageUrls(Array.isArray(resp.images) ? resp.images : []);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : '圖片生成失敗';
+      setImageError(message);
+    } finally {
+      setImageLoading(false);
     }
   };
 
@@ -775,24 +803,28 @@ const AiChatModal: React.FC<{
         ) : (
 	          <div className="flex-1 min-h-0 flex flex-col md:flex-row bg-gray-50">
 	            {/* Left Sidebar (My chat) */}
-	            <aside className="hidden md:flex w-80 border-r-2 border-gray-200 bg-white p-4 overflow-y-auto flex-col">
-	              <div className="mb-3">
-	                <label className="block text-xs font-black text-gray-600 mb-1">搜尋</label>
-	                <input
-	                  value={myThreadSearch}
-	                  onChange={(e) => setMyThreadSearch(e.target.value)}
-	                  placeholder="搜尋對話..."
-	                  className="w-full px-3 py-2 border-2 border-gray-300 rounded-xl"
-	                />
-	              </div>
+		            <aside className="hidden md:flex w-80 border-r-2 border-gray-200 bg-white p-4 overflow-y-auto flex-col">
+		              {mySidebarView !== 'image' && (
+		                <>
+		                  <div className="mb-3">
+		                    <label className="block text-xs font-black text-gray-600 mb-1">搜尋</label>
+		                    <input
+		                      value={myThreadSearch}
+		                      onChange={(e) => setMyThreadSearch(e.target.value)}
+		                      placeholder="搜尋對話..."
+		                      className="w-full px-3 py-2 border-2 border-gray-300 rounded-xl"
+		                    />
+		                  </div>
 
-	              <button
-	                type="button"
-	                onClick={createNewMyThread}
-	                className="mb-4 w-full px-4 py-3 rounded-2xl border-2 border-gray-200 bg-gray-50 hover:border-brand-brown font-black text-gray-800 text-left"
-	              >
-	                + 新對話
-	              </button>
+		                  <button
+		                    type="button"
+		                    onClick={createNewMyThread}
+		                    className="mb-4 w-full px-4 py-3 rounded-2xl border-2 border-gray-200 bg-gray-50 hover:border-brand-brown font-black text-gray-800 text-left"
+		                  >
+		                    + 新對話
+		                  </button>
+		                </>
+		              )}
 
 	              <div className="space-y-2 mb-4">
 	                <button
@@ -808,15 +840,30 @@ const AiChatModal: React.FC<{
 	                    ? 'bg-[#FDEEAD] border-brand-brown text-brand-brown'
 	                    : 'bg-white border-gray-200 text-gray-700 hover:border-brand-brown'
 	                    }`}
-	                >
-	                  自由聊天
-	                </button>
-	                <div className="px-3 py-2 rounded-2xl bg-white border-2 border-gray-200 text-gray-400 font-black">語音（開發中）</div>
-	                <div className="px-3 py-2 rounded-2xl bg-white border-2 border-gray-200 text-gray-400 font-black">Imagine（開發中）</div>
-	                {isTeacher ? (
-	                  <button
-	                    type="button"
-	                    onClick={() => { setSelectedFolderId('all'); setMySidebarView('bot'); }}
+		                >
+		                  自由聊天
+		                </button>
+		                <button
+		                  type="button"
+		                  onClick={() => {
+		                    abortRef.current?.abort();
+		                    setImageError('');
+		                    setMyError('');
+		                    setMyThreadSearch('');
+		                    setSelectedFolderId('all');
+		                    setMySidebarView('image');
+		                  }}
+		                  className={`w-full px-3 py-2 rounded-2xl border-2 font-black text-left ${mySidebarView === 'image'
+		                    ? 'bg-[#FDEEAD] border-brand-brown text-brand-brown'
+		                    : 'bg-white border-gray-200 text-gray-700 hover:border-brand-brown'
+		                    }`}
+		                >
+		                  圖片生成
+		                </button>
+		                {isTeacher ? (
+		                  <button
+		                    type="button"
+		                    onClick={() => { setSelectedFolderId('all'); setMySidebarView('bot'); }}
 	                    className={`w-full px-3 py-2 rounded-2xl border-2 font-black text-left ${mySidebarView === 'bot'
 	                      ? 'bg-[#FDEEAD] border-brand-brown text-brand-brown'
 	                      : 'bg-white border-gray-200 text-gray-700 hover:border-brand-brown'
@@ -1106,12 +1153,14 @@ const AiChatModal: React.FC<{
               </div>
               )}
 
-              <div className="text-xs font-black text-gray-600 mb-2">歷史</div>
-              <div className="space-y-2">
-	                {(() => {
-	                  const q = myThreadSearch.trim().toLowerCase();
-	                  const filtered = myThreads.filter((t: any) => {
-	                    const title = String(t?.title || '新對話').toLowerCase();
+	              {mySidebarView !== 'image' && (
+	                <>
+	                  <div className="text-xs font-black text-gray-600 mb-2">歷史</div>
+	                  <div className="space-y-2">
+		                {(() => {
+		                  const q = myThreadSearch.trim().toLowerCase();
+		                  const filtered = myThreads.filter((t: any) => {
+		                    const title = String(t?.title || '新對話').toLowerCase();
 	                    const folderOk = (() => {
 	                      if (selectedFolderId === 'all') return true;
 	                      if (selectedFolderId === 'filed') return !!t.folderId;
@@ -1226,92 +1275,179 @@ const AiChatModal: React.FC<{
                         </div>
                       </div>
                     );
-                  });
-                })()}
-              </div>
+	                  });
+	                })()}
+	                  </div>
+	                </>
+	              )}
             </aside>
 
-            {/* Right Chat */}
-            <div className="flex-1 min-h-0 flex flex-col">
-              <div className="flex-1 min-h-0 overflow-y-auto p-4 space-y-3">
-                {myError && (
-                  <div className="text-sm font-bold text-red-700 bg-red-50 border-2 border-red-200 rounded-2xl p-3">
-                    {myError}
-                  </div>
-                )}
-                {myLoading ? (
-                  <div className="text-center py-10 text-brand-brown font-bold">載入中...</div>
-                ) : (
-                  <>
-                    {myMessages.length === 0 && (
-                      <div className="text-center py-10 text-gray-400 font-bold border-4 border-dashed border-gray-200 rounded-2xl">
-                        開始跟 AI 對話吧
-                      </div>
-                    )}
-                    {myMessages.map((m) => (
-                      <div key={m.id} className={`flex ${m.sender === 'user' ? 'justify-end' : 'justify-start'}`}>
-                        <div
-                          className={`${bubbleBase} ${m.sender === 'user'
-                            ? 'bg-white border-brand-brown text-gray-800'
-                            : 'bg-[#E0D2F8] border-purple-300 text-gray-800'
-                            }`}
-                        >
-                          <div className="flex justify-end mb-2">
-                            <button
-                              type="button"
-                              onClick={() => copyToClipboard(m.content, m.id)}
-                              className="inline-flex items-center gap-1 px-2 py-1 rounded-lg border border-gray-300 bg-white/70 hover:bg-white text-xs font-bold text-gray-700"
-                              aria-label="複製"
-                              title={copiedMessageId === m.id ? '已複製' : '複製'}
-                            >
-                              {copiedMessageId === m.id ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
-                              {copiedMessageId === m.id ? '已複製' : '複製'}
-                            </button>
-                          </div>
-                          <div dangerouslySetInnerHTML={{ __html: markdownToSafeHtml(m.content) }} />
-                          {m.createdAt && (
-                            <div className="text-[10px] text-gray-500 mt-2">
-                              {new Date(m.createdAt).toLocaleString()}
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    ))}
-                  </>
-                )}
-                <div ref={endRef} />
-              </div>
+	            {/* Right Chat */}
+	            <div className="flex-1 min-h-0 flex flex-col">
+	              {mySidebarView === 'image' ? (
+	                <div className="flex-1 min-h-0 overflow-y-auto p-6 space-y-4">
+	                  <div className="flex items-center gap-2">
+	                    <ImageIcon className="w-5 h-5 text-brand-brown" />
+	                    <div className="text-xl font-black text-brand-brown">圖片生成</div>
+	                  </div>
 
-              <div className="p-4 border-t-2 border-gray-200 bg-white">
-                <div className="flex gap-3 items-end">
-                  <div className="flex-1">
-                    <label className="block text-xs font-black text-gray-600 mb-1">輸入訊息</label>
-                    <textarea
-                      value={draft}
-                      onChange={(e) => setDraft(e.target.value)}
-                      className="w-full min-h-[44px] max-h-40 px-3 py-2 border-2 border-gray-300 rounded-2xl focus:outline-none focus:border-brand-brown"
-                      placeholder="輸入你的問題..."
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter' && !e.shiftKey) {
-                          e.preventDefault();
-                          if (!sending) send();
-                        }
-                      }}
-                    />
-                  </div>
-                  <Button
-                    className={`border-brand-brown ${sending ? 'bg-gray-300 text-gray-600 cursor-wait' : 'bg-[#FDEEAD] text-brand-brown hover:bg-[#FCE690]'}`}
-                    onClick={send}
-                    disabled={sending}
-                  >
-                    {sending ? '發送中...' : '送出'}
-                  </Button>
-                </div>
-                <div className="text-[11px] text-gray-500 mt-2">
-                  提示：Enter 送出、Shift+Enter 換行。
-                </div>
-              </div>
-            </div>
+	                  <div>
+	                    <label className="block text-xs font-black text-gray-600 mb-1">描述</label>
+	                    <textarea
+	                      value={imagePrompt}
+	                      onChange={(e) => setImagePrompt(e.target.value)}
+	                      className="w-full min-h-[80px] max-h-56 px-3 py-2 border-2 border-gray-300 rounded-2xl focus:outline-none focus:border-brand-brown"
+	                      placeholder="例如：一隻可愛的貓咪在教室裡寫作業，卡通風格，色彩明亮"
+	                    />
+	                  </div>
+
+	                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+	                    <div>
+	                      <label className="block text-xs font-black text-gray-600 mb-1">尺寸</label>
+	                      <select
+	                        value={imageSize}
+	                        onChange={(e) => setImageSize(e.target.value as any)}
+	                        className="w-full px-3 py-2 border-2 border-gray-300 rounded-2xl bg-white"
+	                      >
+	                        <option value="256x256">256×256</option>
+	                        <option value="512x512">512×512</option>
+	                        <option value="1024x1024">1024×1024</option>
+	                      </select>
+	                    </div>
+	                    <div>
+	                      <label className="block text-xs font-black text-gray-600 mb-1">張數</label>
+	                      <select
+	                        value={String(imageCount)}
+	                        onChange={(e) => setImageCount(Number(e.target.value) as any)}
+	                        className="w-full px-3 py-2 border-2 border-gray-300 rounded-2xl bg-white"
+	                      >
+	                        <option value="1">1</option>
+	                        <option value="2">2</option>
+	                        <option value="3">3</option>
+	                        <option value="4">4</option>
+	                      </select>
+	                    </div>
+	                    <div className="flex items-end">
+	                      <Button
+	                        className={`w-full border-brand-brown ${imageLoading ? 'bg-gray-300 text-gray-600 cursor-wait' : 'bg-[#FDEEAD] text-brand-brown hover:bg-[#FCE690]'}`}
+	                        onClick={generateImage}
+	                        disabled={imageLoading}
+	                      >
+	                        {imageLoading ? '生成中...' : '生成'}
+	                      </Button>
+	                    </div>
+	                  </div>
+
+	                  {imageError && (
+	                    <div className="text-sm font-bold text-red-700 bg-red-50 border-2 border-red-200 rounded-2xl p-3">
+	                      {imageError}
+	                    </div>
+	                  )}
+
+	                  {imageUrls.length > 0 && (
+	                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+	                      {imageUrls.map((src, idx) => (
+	                        <div key={`${idx}-${src.slice(0, 24)}`} className="bg-white border-2 border-gray-200 rounded-2xl p-3">
+	                          <img src={src} alt={`generated-${idx + 1}`} className="w-full h-auto rounded-xl border border-gray-200" />
+	                          <div className="mt-3 flex justify-end">
+	                            <a
+	                              href={src}
+	                              download={`pedia-image-${idx + 1}.png`}
+	                              target="_blank"
+	                              rel="noreferrer"
+	                              className="inline-flex items-center gap-1 px-3 py-2 rounded-xl border-2 border-brand-brown bg-white text-brand-brown font-black hover:bg-[#FDEEAD]"
+	                            >
+	                              下載
+	                            </a>
+	                          </div>
+	                        </div>
+	                      ))}
+	                    </div>
+	                  )}
+	                </div>
+	              ) : (
+	                <>
+	                  <div className="flex-1 min-h-0 overflow-y-auto p-4 space-y-3">
+	                    {myError && (
+	                      <div className="text-sm font-bold text-red-700 bg-red-50 border-2 border-red-200 rounded-2xl p-3">
+	                        {myError}
+	                      </div>
+	                    )}
+	                    {myLoading ? (
+	                      <div className="text-center py-10 text-brand-brown font-bold">載入中...</div>
+	                    ) : (
+	                      <>
+	                        {myMessages.length === 0 && (
+	                          <div className="text-center py-10 text-gray-400 font-bold border-4 border-dashed border-gray-200 rounded-2xl">
+	                            開始跟 AI 對話吧
+	                          </div>
+	                        )}
+	                        {myMessages.map((m) => (
+	                          <div key={m.id} className={`flex ${m.sender === 'user' ? 'justify-end' : 'justify-start'}`}>
+	                            <div
+	                              className={`${bubbleBase} ${m.sender === 'user'
+	                                ? 'bg-white border-brand-brown text-gray-800'
+	                                : 'bg-[#E0D2F8] border-purple-300 text-gray-800'
+	                                }`}
+	                            >
+	                              <div className="flex justify-end mb-2">
+	                                <button
+	                                  type="button"
+	                                  onClick={() => copyToClipboard(m.content, m.id)}
+	                                  className="inline-flex items-center gap-1 px-2 py-1 rounded-lg border border-gray-300 bg-white/70 hover:bg-white text-xs font-bold text-gray-700"
+	                                  aria-label="複製"
+	                                  title={copiedMessageId === m.id ? '已複製' : '複製'}
+	                                >
+	                                  {copiedMessageId === m.id ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
+	                                  {copiedMessageId === m.id ? '已複製' : '複製'}
+	                                </button>
+	                              </div>
+	                              <div dangerouslySetInnerHTML={{ __html: markdownToSafeHtml(m.content) }} />
+	                              {m.createdAt && (
+	                                <div className="text-[10px] text-gray-500 mt-2">
+	                                  {new Date(m.createdAt).toLocaleString()}
+	                                </div>
+	                              )}
+	                            </div>
+	                          </div>
+	                        ))}
+	                      </>
+	                    )}
+	                    <div ref={endRef} />
+	                  </div>
+
+	                  <div className="p-4 border-t-2 border-gray-200 bg-white">
+	                    <div className="flex gap-3 items-end">
+	                      <div className="flex-1">
+	                        <label className="block text-xs font-black text-gray-600 mb-1">輸入訊息</label>
+	                        <textarea
+	                          value={draft}
+	                          onChange={(e) => setDraft(e.target.value)}
+	                          className="w-full min-h-[44px] max-h-40 px-3 py-2 border-2 border-gray-300 rounded-2xl focus:outline-none focus:border-brand-brown"
+	                          placeholder="輸入你的問題..."
+	                          onKeyDown={(e) => {
+	                            if (e.key === 'Enter' && !e.shiftKey) {
+	                              e.preventDefault();
+	                              if (!sending) send();
+	                            }
+	                          }}
+	                        />
+	                      </div>
+	                      <Button
+	                        className={`border-brand-brown ${sending ? 'bg-gray-300 text-gray-600 cursor-wait' : 'bg-[#FDEEAD] text-brand-brown hover:bg-[#FCE690]'}`}
+	                        onClick={send}
+	                        disabled={sending}
+	                      >
+	                        {sending ? '發送中...' : '送出'}
+	                      </Button>
+	                    </div>
+	                    <div className="text-[11px] text-gray-500 mt-2">
+	                      提示：Enter 送出、Shift+Enter 換行。
+	                    </div>
+	                  </div>
+	                </>
+	              )}
+	            </div>
           </div>
         )}
       </div>
