@@ -511,6 +511,7 @@ class AuthService {
       wrongOptions?: string[];
     }>;
     difficulty?: 'easy' | 'medium' | 'hard';
+    timeLimitSeconds?: number;
   }): Promise<{ message: string; game: any }> {
     const response = await fetch(`${this.API_BASE}/games`, {
       method: 'POST',

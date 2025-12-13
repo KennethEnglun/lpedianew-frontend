@@ -15,6 +15,7 @@ interface Props {
   questions: QuestionItem[];
   subject: Subject;
   difficulty: Difficulty;
+  durationSeconds?: number;
   onExit: () => void;
   onStart?: () => void;
   onComplete: (result: {
@@ -92,15 +93,64 @@ const GRID_HEIGHT = 7;
 const TILE_W = 76;
 const TILE_H = 38;
 const TILE_DEPTH = 18;
-const GAME_DURATION_SECONDS = 60;
-
-const PATH_CELLS: Array<{ x: number; y: number }> = [
+const DEFAULT_GAME_DURATION_SECONDS = 60;
+const DEFAULT_PATH: Array<{ x: number; y: number }> = [
   { x: 0, y: 3 }, { x: 1, y: 3 }, { x: 2, y: 3 }, { x: 2, y: 2 }, { x: 2, y: 1 },
   { x: 3, y: 1 }, { x: 4, y: 1 }, { x: 4, y: 2 }, { x: 4, y: 3 }, { x: 5, y: 3 },
   { x: 6, y: 3 }, { x: 6, y: 4 }, { x: 6, y: 5 }, { x: 7, y: 5 }, { x: 8, y: 5 }
 ];
 
-const BUILDABLE_CELLS = new Set(PATH_CELLS.map(p => `${p.x},${p.y}`));
+function randInt(min: number, max: number) {
+  return Math.floor(Math.random() * (max - min + 1)) + min;
+}
+
+function generateRandomPath(): Array<{ x: number; y: number }> {
+  const maxAttempts = 60;
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    let x = 0;
+    let y = randInt(0, GRID_HEIGHT - 1);
+    const visited = new Set<string>();
+    visited.add(`${x},${y}`);
+    const path: Array<{ x: number; y: number }> = [{ x, y }];
+
+    const maxSteps = GRID_WIDTH * GRID_HEIGHT * 3;
+    for (let step = 0; step < maxSteps; step++) {
+      if (x === GRID_WIDTH - 1) return path;
+
+      const candidates: Array<{ x: number; y: number; w: number }> = [];
+      const tryAdd = (nx: number, ny: number, w: number) => {
+        if (nx < 0 || nx >= GRID_WIDTH || ny < 0 || ny >= GRID_HEIGHT) return;
+        const key = `${nx},${ny}`;
+        if (visited.has(key)) return;
+        candidates.push({ x: nx, y: ny, w });
+      };
+
+      tryAdd(x + 1, y, 5); // bias to the right
+      tryAdd(x, y - 1, 2);
+      tryAdd(x, y + 1, 2);
+
+      if (candidates.length === 0) break;
+
+      const total = candidates.reduce((sum, c) => sum + c.w, 0);
+      let r = Math.random() * total;
+      let chosen = candidates[0];
+      for (const c of candidates) {
+        r -= c.w;
+        if (r <= 0) {
+          chosen = c;
+          break;
+        }
+      }
+
+      x = chosen.x;
+      y = chosen.y;
+      visited.add(`${x},${y}`);
+      path.push({ x, y });
+    }
+  }
+
+  return DEFAULT_PATH;
+}
 
 const COLORS = {
   grassTop: '#CFEFCA',
@@ -124,23 +174,29 @@ function shuffleArray<T>(items: T[]): T[] {
   return arr;
 }
 
-export const TowerDefenseGame: React.FC<Props> = ({ questions, subject, difficulty, onExit, onStart, onComplete }) => {
+export const TowerDefenseGame: React.FC<Props> = ({ questions, subject, difficulty, durationSeconds, onExit, onStart, onComplete }) => {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
   const lastTimeRef = useRef<number>(0);
   const animationRef = useRef<number | null>(null);
 
-  const [grid] = useState<GridCell[]>(() => {
-    const pathSet = new Set(PATH_CELLS.map(p => `${p.x},${p.y}`));
+  const [pathCells, setPathCells] = useState<Array<{ x: number; y: number }>>(() => generateRandomPath());
+  const pathCellsRef = useRef(pathCells);
+  useEffect(() => { pathCellsRef.current = pathCells; }, [pathCells]);
+
+  const grid = useMemo<GridCell[]>(() => {
+    const pathSet = new Set(pathCells.map(p => `${p.x},${p.y}`));
     const cells: GridCell[] = [];
-    for (let y = 0; y < GRID_HEIGHT; y++) {
-      for (let x = 0; x < GRID_WIDTH; x++) {
-        const isPath = pathSet.has(`${x},${y}`);
-        cells.push({ x, y, isPath, isBuildable: !isPath });
+    for (let yy = 0; yy < GRID_HEIGHT; yy++) {
+      for (let xx = 0; xx < GRID_WIDTH; xx++) {
+        const isPath = pathSet.has(`${xx},${yy}`);
+        cells.push({ x: xx, y: yy, isPath, isBuildable: !isPath });
       }
     }
     return cells;
-  });
+  }, [pathCells]);
+
+  const pathSet = useMemo(() => new Set(pathCells.map(p => `${p.x},${p.y}`)), [pathCells]);
 
   const [gold, setGold] = useState(difficulty === 'easy' ? 80 : difficulty === 'medium' ? 60 : 45);
   const [lives, setLives] = useState(10);
@@ -161,12 +217,29 @@ export const TowerDefenseGame: React.FC<Props> = ({ questions, subject, difficul
   const [gameOver, setGameOver] = useState(false);
   const [isRunning, setIsRunning] = useState(false);
   const [speedMultiplier, setSpeedMultiplier] = useState(1);
-  const [timeLeft, setTimeLeft] = useState(GAME_DURATION_SECONDS);
+  const durationSecondsValue = useMemo(() => {
+    const n = Number(durationSeconds);
+    if (!Number.isFinite(n)) return DEFAULT_GAME_DURATION_SECONDS;
+    return Math.max(10, Math.min(600, Math.floor(n)));
+  }, [durationSeconds]);
+
+  const durationSecondsRef = useRef<number>(durationSecondsValue);
+  useEffect(() => { durationSecondsRef.current = durationSecondsValue; }, [durationSecondsValue]);
+
+  const [timeLeft, setTimeLeft] = useState(durationSecondsValue);
   const [endReason, setEndReason] = useState<'time' | 'lives' | null>(null);
+  const completedOnceRef = useRef(false);
+  const reportedResultRef = useRef(false);
 
   const startTimeRef = useRef<Date>(new Date());
   const runStartAtMsRef = useRef<number | null>(null);
-  const lastTimeLeftRef = useRef<number>(GAME_DURATION_SECONDS);
+  const lastTimeLeftRef = useRef<number>(durationSecondsValue);
+
+  useEffect(() => {
+    if (isRunningRef.current || gameOverRef.current) return;
+    lastTimeLeftRef.current = durationSecondsValue;
+    setTimeLeft(durationSecondsValue);
+  }, [durationSecondsValue]);
   const simTimeRef = useRef<number>(0);
 
   const enemiesRef = useRef<Enemy[]>([]);
@@ -269,13 +342,14 @@ export const TowerDefenseGame: React.FC<Props> = ({ questions, subject, difficul
   }
 
   function getEnemyPosition(enemy: Enemy) {
-    const maxIndex = PATH_CELLS.length - 1;
+    const path = pathCellsRef.current;
+    const maxIndex = path.length - 1;
     const pathIndex = enemy.pathIndex;
     const clampedIndex = Math.min(pathIndex, maxIndex);
 
     if (pathIndex < 0) {
-      const startCell = PATH_CELLS[0];
-      const nextCell = PATH_CELLS[1];
+      const startCell = path[0] || DEFAULT_PATH[0];
+      const nextCell = path[1] || DEFAULT_PATH[1];
       const start = isoToScreen(startCell.x, startCell.y);
       const next = isoToScreen(nextCell.x, nextCell.y);
       const vx = next.x - start.x;
@@ -286,8 +360,8 @@ export const TowerDefenseGame: React.FC<Props> = ({ questions, subject, difficul
     const nextIndex = Math.min(baseIndex + 1, maxIndex);
     const t = clampedIndex - baseIndex;
 
-    const cell0 = PATH_CELLS[baseIndex];
-    const cell1 = PATH_CELLS[nextIndex];
+    const cell0 = path[baseIndex] || DEFAULT_PATH[baseIndex] || DEFAULT_PATH[0];
+    const cell1 = path[nextIndex] || DEFAULT_PATH[nextIndex] || DEFAULT_PATH[1];
     const p0 = isoToScreen(cell0.x, cell0.y);
     const p1 = isoToScreen(cell1.x, cell1.y);
     const x = p0.x + (p1.x - p0.x) * t;
@@ -299,6 +373,7 @@ export const TowerDefenseGame: React.FC<Props> = ({ questions, subject, difficul
     if (gameOverRef.current) return;
     gameOverRef.current = true;
     isRunningRef.current = false;
+    completedOnceRef.current = true;
     setEndReason(reason);
     setGameOver(true);
     setIsRunning(false);
@@ -308,14 +383,17 @@ export const TowerDefenseGame: React.FC<Props> = ({ questions, subject, difficul
     if (gameOverRef.current || isRunningRef.current) return;
     gameOverRef.current = false;
     isRunningRef.current = true;
+    completedOnceRef.current = false;
+    reportedResultRef.current = false;
     setEndReason(null);
     setGameOver(false);
     setIsRunning(true);
     onStart?.();
 
     runStartAtMsRef.current = Date.now();
-    lastTimeLeftRef.current = GAME_DURATION_SECONDS;
-    setTimeLeft(GAME_DURATION_SECONDS);
+    const dur = durationSecondsRef.current;
+    lastTimeLeftRef.current = dur;
+    setTimeLeft(dur);
     simTimeRef.current = 0;
     startTimeRef.current = new Date();
 
@@ -353,7 +431,7 @@ export const TowerDefenseGame: React.FC<Props> = ({ questions, subject, difficul
 
   function tryPlaceTower(gridX: number, gridY: number) {
     if (!selectedTowerType || gameOver) return;
-    if (BUILDABLE_CELLS.has(`${gridX},${gridY}`)) return;
+    if (pathSet.has(`${gridX},${gridY}`)) return;
     if (towers.some(t => t.gridX === gridX && t.gridY === gridY)) return;
 
     const spec = towerCatalog.find(t => t.type === selectedTowerType);
@@ -520,9 +598,10 @@ export const TowerDefenseGame: React.FC<Props> = ({ questions, subject, difficul
     if (simDeltaSeconds <= 0) return;
 
     const movedEnemies: Enemy[] = [];
+    const pathLen = pathCellsRef.current.length || DEFAULT_PATH.length;
     for (const enemy of enemiesSnapshot) {
       const nextIndex = enemy.pathIndex + enemy.speed * simDeltaSeconds;
-      if (nextIndex >= PATH_CELLS.length - 0.2) {
+      if (nextIndex >= pathLen - 0.2) {
         setLives(v => {
           const newLives = v - 1;
           if (newLives <= 0) finishGame('lives');
@@ -852,7 +931,7 @@ export const TowerDefenseGame: React.FC<Props> = ({ questions, subject, difficul
         const startMs = runStartAtMsRef.current;
         if (startMs != null) {
           const elapsedSeconds = (Date.now() - startMs) / 1000;
-          const remaining = Math.max(0, GAME_DURATION_SECONDS - Math.floor(elapsedSeconds));
+          const remaining = Math.max(0, durationSecondsRef.current - Math.floor(elapsedSeconds));
           if (remaining !== lastTimeLeftRef.current) {
             lastTimeLeftRef.current = remaining;
             setTimeLeft(remaining);
@@ -876,10 +955,11 @@ export const TowerDefenseGame: React.FC<Props> = ({ questions, subject, difficul
   }, [hasQuestions]);
 
   useEffect(() => {
-    if (!gameOver || !endReason) return;
+    if (!gameOver || !endReason || reportedResultRef.current) return;
+    reportedResultRef.current = true;
     const success = endReason === 'time' && lives > 0;
     const timeSpent = endReason === 'time'
-      ? GAME_DURATION_SECONDS
+      ? durationSecondsRef.current
       : Math.round((Date.now() - startTimeRef.current.getTime()) / 1000);
     const finalScore = Math.round(score + wave * 12 + correctAnswers * 4);
     onComplete({

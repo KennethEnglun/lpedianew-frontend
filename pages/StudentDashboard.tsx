@@ -149,12 +149,29 @@ const StudentDashboard: React.FC = () => {
   const [mismatchIndices, setMismatchIndices] = useState<number[]>([]);
   const [matchPulseIndices, setMatchPulseIndices] = useState<number[]>([]);
   const [submittingGame, setSubmittingGame] = useState(false);
+  const gameCompleteOnceRef = useRef(false);
 
   // Maze Only Logic
   const [mazeGrid, setMazeGrid] = useState<number[][]>([]);
   const [playerPos, setPlayerPos] = useState({ x: 1, y: 1 });
   const [gameQuestionMap, setGameQuestionMap] = useState<Record<string, number>>({});
   const [mazeSteps, setMazeSteps] = useState(0);
+
+  const mazeQuestions = React.useMemo(() => {
+    if (!selectedGame || selectedGame.gameType !== 'maze') return [];
+    const source = Array.isArray(selectedGame.questions) ? selectedGame.questions : [];
+    return source.map((q: any, i: number) => {
+      const allOptions = [q.answer, ...(q.wrongOptions || [])].filter(Boolean);
+      const shuffledOptions = [...allOptions].sort(() => Math.random() - 0.5).slice(0, 4);
+      const correctIndex = shuffledOptions.indexOf(q.answer);
+      return {
+        id: `mz-q-${selectedGame.id}-${i}`,
+        text: q.question,
+        options: shuffledOptions,
+        correctIndex: correctIndex >= 0 ? correctIndex : 0
+      };
+    });
+  }, [selectedGame?.id]);
 
   // Matching Game Visual Refs / Particles
   const matchingAreaRef = useRef<HTMLDivElement | null>(null);
@@ -350,6 +367,7 @@ const StudentDashboard: React.FC = () => {
       setGameTimerTick(0);
       setGameStatus('playing');
       setGameCurrentQuestionIndex(0);
+      gameCompleteOnceRef.current = false;
 
       // 初始化遊戲狀態
       if (game.gameType === 'matching') {
@@ -802,9 +820,12 @@ const StudentDashboard: React.FC = () => {
       timeSpent: number;
     }
   ) => {
+    if (gameCompleteOnceRef.current) return;
+    gameCompleteOnceRef.current = true;
     setGameStatus(success ? 'completed' : 'lost');
 
     try {
+      if (submittingGame) return;
       setSubmittingGame(true);
       const timeSpent = override?.timeSpent ?? (gameStartTime ? Math.round((Date.now() - gameStartTime.getTime()) / 1000) : 0);
       const totalQuestions = override?.totalQuestions ?? (selectedGame?.questions?.length || 0);
@@ -1482,16 +1503,17 @@ const StudentDashboard: React.FC = () => {
 	              )}
 
 	              {/* Tower Defense Game Layout */}
-		              {selectedGame.gameType === 'tower-defense' && (
-		                <TowerDefenseGame
-		                  questions={selectedGame.questions || []}
-		                  subject={selectedGame.subject as Subject}
-		                  difficulty={(selectedGame.difficulty || 'medium') as any}
-		                  onExit={() => setShowGameModal(false)}
-		                  onStart={() => { setGameStartTime(new Date()); setGameTimerTick(0); }}
-		                  onComplete={(result) => {
-		                    setGameScore(result.score);
-		                    handleGameComplete(result.success, {
+			              {selectedGame.gameType === 'tower-defense' && (
+			                <TowerDefenseGame
+			                  questions={selectedGame.questions || []}
+			                  subject={selectedGame.subject as Subject}
+			                  difficulty={(selectedGame.difficulty || 'medium') as any}
+			                  durationSeconds={Number(selectedGame.timeLimitSeconds) || 60}
+			                  onExit={() => setShowGameModal(false)}
+			                  onStart={() => { setGameStartTime(new Date()); setGameTimerTick(0); }}
+			                  onComplete={(result) => {
+			                    setGameScore(result.score);
+			                    handleGameComplete(result.success, {
 		                      score: result.score,
 	                      correctAnswers: result.correctAnswers,
 	                      totalQuestions: result.totalQuestions,
@@ -1502,26 +1524,16 @@ const StudentDashboard: React.FC = () => {
 	              )}
 
 	              {/* Maze / Quiz Game Layout - New 3D Implementation */}
-	              {selectedGame.gameType === 'maze' && (
-	                <MazeGame
-                  questions={selectedGame.questions.map((q: any, i: number) => {
-                    const allOptions = [q.answer, ...(q.wrongOptions || [])];
-                    const shuffledOptions = [...allOptions].sort(() => Math.random() - 0.5);
-                    const correctIndex = shuffledOptions.indexOf(q.answer);
-                    return {
-                      id: `mz-q-${i}`,
-                      text: q.question,
-                      options: shuffledOptions,
-                      correctIndex: correctIndex
-                    };
-                  })}
-                  onExit={() => setShowGameModal(false)}
-                  onComplete={(finalScore) => {
-                    setGameScore(finalScore);
-                    handleGameComplete(true);
-                  }}
-                />
-              )}
+		              {selectedGame.gameType === 'maze' && (
+		                <MazeGame
+	                  questions={mazeQuestions}
+	                  onExit={() => setShowGameModal(false)}
+	                  onComplete={(finalScore) => {
+	                    setGameScore(finalScore);
+	                    handleGameComplete(true);
+	                  }}
+	                />
+	              )}
             </div>
 
 	            {/* Game Status Footer */}

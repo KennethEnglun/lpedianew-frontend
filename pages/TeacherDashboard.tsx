@@ -107,6 +107,7 @@ const TeacherDashboard: React.FC = () => {
     options: string[];
     correctAnswer: number;
   }>>([]);
+  const [towerDefenseTimeSeconds, setTowerDefenseTimeSeconds] = useState(60);
 
   // 處理內容顯示的輔助函數
   const getDisplayContent = (content: any) => {
@@ -1443,12 +1444,12 @@ const TeacherDashboard: React.FC = () => {
 	                  <span className="text-3xl">🏰</span>
 	                  <h2 className="text-3xl font-black text-emerald-800">創建答題塔防遊戲</h2>
 	                </div>
-		                <button
-		                  onClick={() => { setShowGameModal(false); setGameType(null); setTowerDefenseQuestions([]); }}
-		                  className="w-10 h-10 rounded-full bg-white border-2 border-emerald-400 hover:bg-emerald-50 flex items-center justify-center"
-		                >
-	                  <X className="w-6 h-6 text-emerald-700" />
-	                </button>
+			                <button
+			                  onClick={() => { setShowGameModal(false); setGameType(null); setTowerDefenseQuestions([]); setTowerDefenseTimeSeconds(60); }}
+			                  className="w-10 h-10 rounded-full bg-white border-2 border-emerald-400 hover:bg-emerald-50 flex items-center justify-center"
+			                >
+		                  <X className="w-6 h-6 text-emerald-700" />
+		                </button>
 	              </div>
 	            </div>
 
@@ -1544,18 +1545,32 @@ const TeacherDashboard: React.FC = () => {
 	                </div>
 	              )}
 
-	              <div>
-	                <label className="block text-sm font-bold text-emerald-800 mb-2">難度（影響起始金幣與怪物強度）</label>
-	                <select
-	                  className="w-full px-4 py-2 border-4 border-emerald-300 rounded-2xl bg-white font-bold"
-	                  value={gameForm.difficulty}
-	                  onChange={(e) => setGameForm(prev => ({ ...prev, difficulty: e.target.value as 'easy' | 'medium' | 'hard' }))}
-	                >
-	                  <option value="easy">簡單 (起始金幣多 / 怪物弱)</option>
-	                  <option value="medium">中等</option>
-	                  <option value="hard">困難 (起始金幣少 / 怪物強)</option>
-	                </select>
-	              </div>
+		              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+		                <div>
+		                  <label className="block text-sm font-bold text-emerald-800 mb-2">難度（影響起始金幣與怪物強度）</label>
+		                  <select
+		                    className="w-full px-4 py-2 border-4 border-emerald-300 rounded-2xl bg-white font-bold"
+		                    value={gameForm.difficulty}
+		                    onChange={(e) => setGameForm(prev => ({ ...prev, difficulty: e.target.value as 'easy' | 'medium' | 'hard' }))}
+		                  >
+		                    <option value="easy">簡單 (起始金幣多 / 怪物弱)</option>
+		                    <option value="medium">中等</option>
+		                    <option value="hard">困難 (起始金幣少 / 怪物強)</option>
+		                  </select>
+		                </div>
+		                <div>
+		                  <label className="block text-sm font-bold text-emerald-800 mb-2">遊戲時間（秒）</label>
+		                  <input
+		                    type="number"
+		                    min={10}
+		                    max={600}
+		                    value={towerDefenseTimeSeconds}
+		                    onChange={(e) => setTowerDefenseTimeSeconds(Math.max(10, Math.min(600, parseInt(e.target.value) || 60)))}
+		                    className="w-full px-4 py-2 border-4 border-emerald-300 rounded-2xl bg-white font-bold"
+		                  />
+		                  <p className="text-xs text-gray-500 mt-1">建議 30–180 秒；預設 60 秒</p>
+		                </div>
+		              </div>
 
 		              <div>
 		                <label className="block text-sm font-bold text-emerald-800 mb-2">題庫（答題賺金幣）</label>
@@ -1700,30 +1715,32 @@ const TeacherDashboard: React.FC = () => {
 		                        return;
 		                      }
 
-	                      await authService.createGame({
-	                        title: gameForm.title.trim(),
-	                        description: gameForm.description,
-	                        gameType: 'tower-defense',
-	                        subject: gameForm.subject,
-	                        targetClasses: gameForm.targetClasses,
-	                        targetGroups: gameForm.targetGroups,
-	                        questions: cleanedQuestions,
-	                        difficulty: gameForm.difficulty
-	                      });
+		                      await authService.createGame({
+		                        title: gameForm.title.trim(),
+		                        description: gameForm.description,
+		                        gameType: 'tower-defense',
+		                        subject: gameForm.subject,
+		                        targetClasses: gameForm.targetClasses,
+		                        targetGroups: gameForm.targetGroups,
+		                        questions: cleanedQuestions,
+		                        difficulty: gameForm.difficulty,
+		                        timeLimitSeconds: towerDefenseTimeSeconds
+		                      });
 
 		                      alert('答題塔防遊戲創建成功！');
 		                      setShowGameModal(false);
 		                      setGameType(null);
-		                      setTowerDefenseQuestions([]);
-		                      setGameForm({
-		                        title: '',
-		                        description: '',
-		                        subject: Subject.CHINESE,
-		                        targetClasses: [],
-		                        targetGroups: [],
-		                        questions: [],
-		                        difficulty: 'medium'
-		                      });
+			                      setTowerDefenseQuestions([]);
+			                      setTowerDefenseTimeSeconds(60);
+			                      setGameForm({
+			                        title: '',
+			                        description: '',
+			                        subject: Subject.CHINESE,
+			                        targetClasses: [],
+			                        targetGroups: [],
+			                        questions: [],
+			                        difficulty: 'medium'
+			                      });
 	                    } catch (error) {
 	                      alert('創建遊戲失敗：' + (error instanceof Error ? error.message : '未知錯誤'));
 	                    }
