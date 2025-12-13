@@ -959,6 +959,34 @@ const StudentDashboard: React.FC = () => {
     });
   };
 
+  const isTaskCompleted = (task: Task) => {
+    if (task.type === 'discussion') return !!responseStatus[task.id]?.hasResponded;
+    if (task.type === 'quiz' || task.type === 'game') return !!task.completed;
+    return false;
+  };
+
+  const visibleAllTasks = useMemo(() => tasks.filter(task => !isTaskHidden(task)), [hiddenTaskKeys, tasks]);
+
+  const overallProgress = useMemo(() => {
+    const total = visibleAllTasks.length;
+    const completed = visibleAllTasks.filter(isTaskCompleted).length;
+    return { total, completed, pending: Math.max(0, total - completed) };
+  }, [responseStatus, visibleAllTasks]);
+
+  const subjectProgress = useMemo(() => {
+    const map = new Map<Subject, { total: number; completed: number }>();
+    for (const subject of Object.values(Subject)) {
+      map.set(subject, { total: 0, completed: 0 });
+    }
+    for (const task of visibleAllTasks) {
+      const row = map.get(task.subject) ?? { total: 0, completed: 0 };
+      row.total += 1;
+      if (isTaskCompleted(task)) row.completed += 1;
+      map.set(task.subject, row);
+    }
+    return map;
+  }, [responseStatus, visibleAllTasks]);
+
   // 設置自動刷新，每5秒檢查一次新的討論串
   useEffect(() => {
     if (!user || user.role !== 'student') return;
@@ -1044,6 +1072,29 @@ const StudentDashboard: React.FC = () => {
             )}
           </div>
 
+          {/* Progress Summary */}
+          <div className="mb-6 bg-white/90 border-4 border-brand-brown rounded-3xl p-4 shadow-comic">
+            <div className="flex items-center justify-between mb-2">
+              <div className="text-sm font-black text-brand-brown">我的進度</div>
+              <div className="text-xs font-bold text-gray-600">
+                {overallProgress.total > 0 ? Math.round((overallProgress.completed / overallProgress.total) * 100) : 0}%
+              </div>
+            </div>
+            <div className="h-3 bg-gray-200 rounded-full border-2 border-brand-brown overflow-hidden">
+              <div
+                className="h-full bg-[#93C47D]"
+                style={{
+                  width: `${overallProgress.total > 0 ? Math.round((overallProgress.completed / overallProgress.total) * 100) : 0}%`
+                }}
+              />
+            </div>
+            <div className="mt-2 flex justify-between text-xs font-bold text-gray-700">
+              <span>收到 {overallProgress.total}</span>
+              <span>完成 {overallProgress.completed}</span>
+              <span>未完成 {overallProgress.pending}</span>
+            </div>
+          </div>
+          
           <div className="text-center mb-4 border-b-4 border-brand-brown pb-2">
             <h3 className="text-xl font-bold text-brand-brown">我的學科</h3>
           </div>
@@ -1052,6 +1103,7 @@ const StudentDashboard: React.FC = () => {
             {Object.values(Subject).map((subject) => {
               const config = SUBJECT_CONFIG[subject];
               const isSelected = selectedSubject === subject;
+              const stats = subjectProgress.get(subject) ?? { total: 0, completed: 0 };
               return (
                 <button
                   key={subject}
@@ -1063,7 +1115,12 @@ const StudentDashboard: React.FC = () => {
                   style={{ backgroundColor: config.color }}
                 >
                   <span className="text-2xl">{config.icon}</span>
-                  <span className="text-lg font-bold text-brand-brown">{subject}</span>
+                  <span className="text-lg font-bold text-brand-brown flex-1 text-left">{subject}</span>
+                  {stats.total > 0 && (
+                    <span className="text-xs font-black text-brand-brown bg-white/70 border-2 border-brand-brown rounded-xl px-2 py-1">
+                      {stats.completed}/{stats.total}
+                    </span>
+                  )}
                 </button>
               );
             })}

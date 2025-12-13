@@ -91,6 +91,24 @@ const TeacherDashboard: React.FC = () => {
   const [hiddenTaskKeys, setHiddenTaskKeys] = useState<Set<string>>(() => new Set());
   const [showHiddenAssignments, setShowHiddenAssignments] = useState(false);
 
+  // 學生進度（教師查看）
+  const [showStudentProgressModal, setShowStudentProgressModal] = useState(false);
+  const [progressLoading, setProgressLoading] = useState(false);
+  const [progressError, setProgressError] = useState('');
+  const [progressRows, setProgressRows] = useState<Array<{
+    id: string;
+    name: string;
+    username: string;
+    className: string;
+    received: number;
+    completed: number;
+    pending: number;
+  }>>([]);
+  const [progressSearch, setProgressSearch] = useState('');
+  const [progressFilterClass, setProgressFilterClass] = useState('');
+  const [progressFilterSubject, setProgressFilterSubject] = useState('');
+  const [progressIncludeHidden, setProgressIncludeHidden] = useState(false);
+
   // 小遊戲相關狀態
   const [showGameModal, setShowGameModal] = useState(false);
 	  const [gameType, setGameType] = useState<'maze' | 'matching' | 'tower-defense' | null>(null);
@@ -557,6 +575,172 @@ const TeacherDashboard: React.FC = () => {
     });
   };
 
+  useEffect(() => {
+    if (!showStudentProgressModal) return;
+    if (!user?.id) return;
+    setHiddenTaskKeys(loadHiddenTaskKeys(user.id, 'teacher'));
+  }, [showStudentProgressModal, user?.id]);
+
+  const openStudentProgress = async () => {
+    setShowStudentProgressModal(true);
+    setProgressError('');
+    if (availableSubjects.length === 0 || availableClasses.length === 0) {
+      await loadFilterOptions();
+    }
+    await loadStudentProgress();
+  };
+
+  const extractStudentId = (record: any): string | null => {
+    if (!record || typeof record !== 'object') return null;
+    const direct = record.studentId || record.userId || record.student?.id || record.student?._id || record.user?.id || record.user?._id;
+    return typeof direct === 'string' && direct ? direct : null;
+  };
+
+  const getStudentGroupForSubject = (student: any, subject: string): string => {
+    const profile = student?.profile || {};
+    if (subject === Subject.CHINESE) return profile.chineseGroup || '';
+    if (subject === Subject.ENGLISH) return profile.englishGroup || '';
+    if (subject === Subject.MATH) return profile.mathGroup || '';
+    return '';
+  };
+
+  const isStudentTargeted = (student: any, task: any): boolean => {
+    const targetClasses = Array.isArray(task.targetClasses) ? task.targetClasses : [];
+    const targetGroups = Array.isArray(task.targetGroups) ? task.targetGroups : [];
+
+    if (targetClasses.length > 0) {
+      const className = student?.profile?.class || '';
+      if (!targetClasses.includes(className)) return false;
+    }
+
+    if (targetGroups.length > 0) {
+      const group = getStudentGroupForSubject(student, String(task.subject));
+      if (group && !targetGroups.includes(group)) return false;
+    }
+
+    return true;
+  };
+
+  const mapWithConcurrency = async <T, R>(items: T[], limit: number, fn: (item: T) => Promise<R>): Promise<R[]> => {
+    const results: R[] = new Array(items.length);
+    let index = 0;
+    const workers = new Array(Math.min(limit, items.length)).fill(0).map(async () => {
+      while (index < items.length) {
+        const current = index++;
+        results[current] = await fn(items[current]);
+      }
+    });
+    await Promise.all(workers);
+    return results;
+  };
+
+  const loadStudentProgress = async () => {
+    if (!user?.id) return;
+
+    try {
+      setProgressLoading(true);
+      setProgressError('');
+
+      const teacherHidden = loadHiddenTaskKeys(user.id, 'teacher');
+      setHiddenTaskKeys(teacherHidden);
+
+      const [studentsData, assignmentData, quizData, gameData] = await Promise.all([
+        authService.getUsers({ role: 'student', limit: 2000 }),
+        authService.getTeacherAssignments(progressFilterSubject || undefined, progressFilterClass || undefined),
+        authService.getTeacherQuizzes(progressFilterSubject || undefined, progressFilterClass || undefined),
+        authService.getTeacherGames(progressFilterSubject || undefined, progressFilterClass || undefined)
+      ]);
+
+      const students = (studentsData.users || []).filter((u: any) => u?.role === 'student');
+
+      const tasksAll = [
+        ...(assignmentData.assignments || []).map((item: any) => ({ ...item, type: 'assignment' as const })),
+        ...(quizData.quizzes || []).map((item: any) => ({ ...item, type: 'quiz' as const })),
+        ...(gameData.games || []).map((item: any) => ({ ...item, type: 'game' as const }))
+      ];
+
+      const countedTasks = progressIncludeHidden
+        ? tasksAll
+        : tasksAll.filter((t: any) => !isAutoHidden(t.createdAt) && !teacherHidden.has(makeTaskKey(t.type, t.id)));
+
+      const completionEntries = await mapWithConcurrency(
+        countedTasks,
+        6,
+        async (task: any) => {
+          const key = makeTaskKey(task.type, task.id);
+          try {
+            if (task.type === 'quiz') {
+              const data = await authService.getQuizResults(task.id);
+              const ids = (data.results || []).map(extractStudentId).filter(Boolean) as string[];
+              return { key, set: new Set(ids) };
+            }
+            if (task.type === 'game') {
+              const data = await authService.getGameResults(task.id);
+              const ids = (data.scores || []).map(extractStudentId).filter(Boolean) as string[];
+              return { key, set: new Set(ids) };
+            }
+            const data = await authService.getAssignmentResponses(task.id);
+            const ids = (data.responses || []).map(extractStudentId).filter(Boolean) as string[];
+            return { key, set: new Set(ids) };
+          } catch (err) {
+            console.error('載入完成狀態失敗:', task?.type, task?.id, err);
+            return { key, set: new Set<string>() };
+          }
+        }
+      );
+
+      const completionMap = new Map<string, Set<string>>();
+      completionEntries.forEach((e) => completionMap.set(e.key, e.set));
+
+      const normalizedSearch = progressSearch.trim().toLowerCase();
+      const filteredStudents = students.filter((s: any) => {
+        const classOk = !progressFilterClass || (s?.profile?.class || '') === progressFilterClass;
+        if (!classOk) return false;
+        if (!normalizedSearch) return true;
+        const name = String(s?.profile?.name || '').toLowerCase();
+        const username = String(s?.username || '').toLowerCase();
+        return name.includes(normalizedSearch) || username.includes(normalizedSearch);
+      });
+
+      const rows = filteredStudents.map((student: any) => {
+        let received = 0;
+        let completed = 0;
+        for (const task of countedTasks) {
+          if (!isStudentTargeted(student, task)) continue;
+          received += 1;
+          const key = makeTaskKey(task.type, task.id);
+          if (completionMap.get(key)?.has(student.id)) completed += 1;
+        }
+        const pending = Math.max(0, received - completed);
+        return {
+          id: student.id,
+          name: student?.profile?.name || '學生',
+          username: student?.username || '',
+          className: student?.profile?.class || '',
+          received,
+          completed,
+          pending
+        };
+      }).sort((a, b) => b.pending - a.pending || a.className.localeCompare(b.className) || a.name.localeCompare(b.name));
+
+      setProgressRows(rows);
+    } catch (error) {
+      console.error('載入學生進度失敗:', error);
+      setProgressError(error instanceof Error ? error.message : '載入失敗');
+      setProgressRows([]);
+    } finally {
+      setProgressLoading(false);
+    }
+  };
+
+  const progressSummary = useMemo(() => {
+    const students = progressRows.length;
+    const received = progressRows.reduce((acc, r) => acc + r.received, 0);
+    const completed = progressRows.reduce((acc, r) => acc + r.completed, 0);
+    const pending = progressRows.reduce((acc, r) => acc + r.pending, 0);
+    return { students, received, completed, pending };
+  }, [progressRows]);
+
 	  // 開啟小遊戲建立入口（確保每次從選單開始）
 	  const openGameCreator = () => {
 	    setGameType(null);
@@ -869,6 +1053,151 @@ const TeacherDashboard: React.FC = () => {
 
       <UiSettingsModal open={showUiSettings} onClose={() => setShowUiSettings(false)} />
 
+      {/* Student Progress Modal */}
+      {showStudentProgressModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
+          <div className="bg-white border-4 border-brand-brown rounded-3xl w-full max-w-6xl max-h-[90vh] overflow-y-auto shadow-comic">
+            <div className="p-6 border-b-4 border-brand-brown bg-[#E0D2F8]">
+              <div className="flex justify-between items-center gap-4">
+                <div>
+                  <h2 className="text-3xl font-black text-brand-brown">學生進度</h2>
+                  <div className="text-sm text-gray-700 font-bold mt-1">
+                    學生 {progressSummary.students} • 收到 {progressSummary.received} • 完成 {progressSummary.completed} • 未完成 {progressSummary.pending}
+                  </div>
+                </div>
+                <button
+                  onClick={() => setShowStudentProgressModal(false)}
+                  className="w-10 h-10 rounded-full bg-white border-2 border-brand-brown hover:bg-gray-100 flex items-center justify-center"
+                  aria-label="關閉"
+                >
+                  <X className="w-6 h-6 text-brand-brown" />
+                </button>
+              </div>
+            </div>
+
+            <div className="p-6">
+              <div className="mb-4 p-4 bg-gray-50 rounded-2xl border-2 border-gray-200">
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 items-end">
+                  <div>
+                    <label className="block text-sm font-bold text-gray-600 mb-2">科目</label>
+                    <select
+                      value={progressFilterSubject}
+                      onChange={(e) => setProgressFilterSubject(e.target.value)}
+                      className="w-full px-3 py-2 border-2 border-gray-300 rounded-xl"
+                    >
+                      <option value="">全部科目</option>
+                      {availableSubjects.map(subject => (
+                        <option key={subject} value={subject}>{subject}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-bold text-gray-600 mb-2">班級</label>
+                    <select
+                      value={progressFilterClass}
+                      onChange={(e) => setProgressFilterClass(e.target.value)}
+                      className="w-full px-3 py-2 border-2 border-gray-300 rounded-xl"
+                    >
+                      <option value="">全部班級</option>
+                      {availableClasses.map(className => (
+                        <option key={className} value={className}>{className}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-bold text-gray-600 mb-2">搜尋</label>
+                    <input
+                      value={progressSearch}
+                      onChange={(e) => setProgressSearch(e.target.value)}
+                      placeholder="搜尋姓名或帳號..."
+                      className="w-full px-3 py-2 border-2 border-gray-300 rounded-xl"
+                    />
+                  </div>
+
+                  <div className="flex items-center justify-between gap-3">
+                    <label className="flex items-center gap-2 text-sm font-bold text-gray-700">
+                      <input
+                        type="checkbox"
+                        checked={progressIncludeHidden}
+                        onChange={(e) => setProgressIncludeHidden(e.target.checked)}
+                        className="w-4 h-4"
+                      />
+                      包含已隱藏（14天+）
+                    </label>
+                    <button
+                      onClick={loadStudentProgress}
+                      className="px-4 py-2 bg-blue-500 text-white rounded-xl font-bold border-2 border-blue-600 hover:bg-blue-600"
+                      disabled={progressLoading}
+                    >
+                      {progressLoading ? '計算中...' : '重新計算'}
+                    </button>
+                  </div>
+                </div>
+
+                {progressError && (
+                  <div className="mt-4 bg-red-100 border-4 border-red-500 rounded-2xl p-4 text-center">
+                    <p className="text-red-700 font-bold">載入失敗：{progressError}</p>
+                  </div>
+                )}
+              </div>
+
+              {progressLoading ? (
+                <div className="text-center py-12">
+                  <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-brand-brown mx-auto mb-4"></div>
+                  <p className="text-brand-brown font-bold">計算中...</p>
+                </div>
+              ) : progressRows.length > 0 ? (
+                <div className="overflow-x-auto">
+                  <table className="w-full border-4 border-brand-brown rounded-3xl overflow-hidden">
+                    <thead className="bg-white">
+                      <tr className="text-left">
+                        <th className="p-4 border-b-4 border-brand-brown text-brand-brown font-black">學生</th>
+                        <th className="p-4 border-b-4 border-brand-brown text-brand-brown font-black">班級</th>
+                        <th className="p-4 border-b-4 border-brand-brown text-brand-brown font-black">收到</th>
+                        <th className="p-4 border-b-4 border-brand-brown text-brand-brown font-black">完成</th>
+                        <th className="p-4 border-b-4 border-brand-brown text-brand-brown font-black">未完成</th>
+                        <th className="p-4 border-b-4 border-brand-brown text-brand-brown font-black">完成率</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {progressRows.map((row) => {
+                        const pct = row.received > 0 ? Math.round((row.completed / row.received) * 100) : 0;
+                        return (
+                          <tr key={row.id} className="bg-white odd:bg-[#FEF7EC]">
+                            <td className="p-4 border-b-2 border-gray-200">
+                              <div className="font-bold text-brand-brown">{row.name}</div>
+                              <div className="text-sm text-gray-600">{row.username}</div>
+                            </td>
+                            <td className="p-4 border-b-2 border-gray-200 font-bold text-gray-700">{row.className || '-'}</td>
+                            <td className="p-4 border-b-2 border-gray-200 font-bold text-gray-700">{row.received}</td>
+                            <td className="p-4 border-b-2 border-gray-200 font-bold text-green-700">{row.completed}</td>
+                            <td className="p-4 border-b-2 border-gray-200 font-bold text-red-600">{row.pending}</td>
+                            <td className="p-4 border-b-2 border-gray-200">
+                              <div className="flex items-center gap-3">
+                                <div className="flex-1 h-3 bg-gray-200 rounded-full border-2 border-brand-brown overflow-hidden">
+                                  <div className="h-full bg-[#93C47D]" style={{ width: `${pct}%` }} />
+                                </div>
+                                <div className="w-12 text-right text-sm font-black text-brand-brown">{pct}%</div>
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              ) : (
+                <div className="text-center py-12 text-gray-400 font-bold text-xl border-4 border-dashed border-gray-300 rounded-3xl">
+                  沒有資料
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Mobile Drawer Sidebar */}
       {isSidebarOpen && (
         <div className="fixed inset-0 z-40 lg:hidden">
@@ -953,7 +1282,14 @@ const TeacherDashboard: React.FC = () => {
                 >
                   🎮 創建小遊戲
                 </Button>
-                <Button fullWidth className="bg-[#E0D2F8] hover:bg-[#D0BCF5]" onClick={closeSidebar}>
+                <Button
+                  fullWidth
+                  className="bg-[#E0D2F8] hover:bg-[#D0BCF5]"
+                  onClick={() => {
+                    openStudentProgress();
+                    closeSidebar();
+                  }}
+                >
                   學生進度
                 </Button>
                 <Button fullWidth className="bg-[#FAD5BE] hover:bg-[#F8C4A6]" onClick={closeSidebar}>
@@ -1020,7 +1356,9 @@ const TeacherDashboard: React.FC = () => {
 	          >
 	            🎮 創建小遊戲
 	          </Button>
-          <Button fullWidth className="bg-[#E0D2F8] hover:bg-[#D0BCF5] text-lg">學生進度</Button>
+          <Button fullWidth className="bg-[#E0D2F8] hover:bg-[#D0BCF5] text-lg" onClick={openStudentProgress}>
+            學生進度
+          </Button>
           <Button fullWidth className="bg-[#FAD5BE] hover:bg-[#F8C4A6] text-lg">更多功能</Button>
         </nav>
       </aside>
