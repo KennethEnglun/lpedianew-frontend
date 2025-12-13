@@ -231,6 +231,7 @@ class AuthService {
     subject?: string;
     threadId?: string | null;
     botId?: string;
+    taskId?: string;
     message: string;
   }): Promise<{
     threadId: string;
@@ -249,6 +250,7 @@ class AuthService {
     subject?: string;
     threadId?: string | null;
     botId?: string;
+    taskId?: string;
     message: string;
   }, options?: { signal?: AbortSignal }): Promise<Response> {
     return fetch(`${this.API_BASE}/chats/send-stream`, {
@@ -363,6 +365,63 @@ class AuthService {
       headers: this.getAuthHeaders()
     });
     await this.handleResponse(response);
+  }
+
+  // === BOT 任務（派發自建 BOT）===
+  async createBotTask(payload: { botId: string; subject: string; targetClass: string }): Promise<{ task: any }> {
+    const response = await fetch(`${this.API_BASE}/bot-tasks`, {
+      method: 'POST',
+      headers: this.getAuthHeaders(),
+      body: JSON.stringify(payload)
+    });
+    return this.handleResponse(response);
+  }
+
+  async getTeacherBotTasks(subject?: string, targetClass?: string): Promise<{ tasks: any[]; total: number }> {
+    const params = new URLSearchParams();
+    if (subject) params.append('subject', subject);
+    if (targetClass) params.append('targetClass', targetClass);
+    const query = params.toString() ? `?${params.toString()}` : '';
+    const response = await fetch(`${this.API_BASE}/bot-tasks${query}`, {
+      headers: this.getAuthHeaders()
+    });
+    return this.handleResponse(response);
+  }
+
+  async deleteBotTask(taskId: string): Promise<void> {
+    const response = await fetch(`${this.API_BASE}/bot-tasks/${taskId}`, {
+      method: 'DELETE',
+      headers: this.getAuthHeaders()
+    });
+    await this.handleResponse(response);
+  }
+
+  async getStudentBotTasks(): Promise<{ tasks: any[]; total: number }> {
+    const response = await fetch(`${this.API_BASE}/bot-tasks/student`, {
+      headers: this.getAuthHeaders()
+    });
+    return this.handleResponse(response);
+  }
+
+  async getBotTaskMyThread(taskId: string): Promise<{ task: any; bot: any; thread: any; messages: any[] }> {
+    const response = await fetch(`${this.API_BASE}/bot-tasks/${taskId}/my-thread`, {
+      headers: this.getAuthHeaders()
+    });
+    return this.handleResponse(response);
+  }
+
+  async getBotTaskThreads(taskId: string): Promise<{ task: any; threads: any[] }> {
+    const response = await fetch(`${this.API_BASE}/bot-tasks/${taskId}/threads`, {
+      headers: this.getAuthHeaders()
+    });
+    return this.handleResponse(response);
+  }
+
+  async getBotTaskThreadMessages(taskId: string, threadId: string): Promise<{ task: any; thread: any; student: any; messages: any[] }> {
+    const response = await fetch(`${this.API_BASE}/bot-tasks/${taskId}/threads/${threadId}/messages`, {
+      headers: this.getAuthHeaders()
+    });
+    return this.handleResponse(response);
   }
 
   async getMyChatMessages(threadId: string, params?: { limit?: number }): Promise<{ thread: any; messages: any[] }> {

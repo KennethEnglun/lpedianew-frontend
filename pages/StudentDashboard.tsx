@@ -9,6 +9,7 @@ import { MazeGame } from '../components/MazeGame';
 import TowerDefenseGame from '../components/TowerDefenseGame';
 import UiSettingsModal from '../components/UiSettingsModal';
 import AiChatModal from '../components/AiChatModal';
+import BotTaskChatModal from '../components/BotTaskChatModal';
 import { loadHiddenTaskKeys, makeTaskKey, saveHiddenTaskKeys } from '../services/taskVisibility';
 
 interface Discussion {
@@ -133,6 +134,8 @@ const StudentDashboard: React.FC = () => {
   const [hiddenTaskKeys, setHiddenTaskKeys] = useState<Set<string>>(() => new Set());
   const [showHiddenTasks, setShowHiddenTasks] = useState(false);
   const [showAiChat, setShowAiChat] = useState(false);
+  const [showBotTaskChat, setShowBotTaskChat] = useState(false);
+  const [selectedBotTaskId, setSelectedBotTaskId] = useState<string | null>(null);
 
   // 小测验相关状态
   const [showQuizModal, setShowQuizModal] = useState(false);
@@ -576,10 +579,11 @@ const StudentDashboard: React.FC = () => {
       }
 
       // 並行載入討論串、小測驗和遊戲
-      const [discussionResponse, quizResponse, gameResponse] = await Promise.all([
+      const [discussionResponse, quizResponse, gameResponse, botTaskResponse] = await Promise.all([
         authService.getStudentDiscussions(),
         authService.getStudentQuizzes(),
-        authService.getStudentGames()
+        authService.getStudentGames(),
+        authService.getStudentBotTasks()
       ]);
 
       const discussionList = Array.isArray(discussionResponse.discussions) ? discussionResponse.discussions : [];
@@ -622,8 +626,19 @@ const StudentDashboard: React.FC = () => {
         score: game.bestScore || null
       }));
 
+      const botTasks: Task[] = (botTaskResponse.tasks || []).map((t: any) => ({
+        id: String(t.id),
+        title: String(t.botName || t.title || 'BOT 任務'),
+        type: 'ai-bot' as const,
+        subject: t.subject,
+        teacherName: t.teacherName || '教師',
+        teacherAvatar: '/teacher_login.png',
+        createdAt: t.createdAt || t.updatedAt,
+        completed: !!t.completed
+      }));
+
       // 合併所有任務
-      const allTasks = [...discussionTasks, ...quizTasks, ...gameTasks];
+      const allTasks = [...discussionTasks, ...quizTasks, ...gameTasks, ...botTasks];
       setTasks(allTasks);
       setLastRefresh(new Date());
 
@@ -699,6 +714,11 @@ const StudentDashboard: React.FC = () => {
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleBotTaskClick = (taskId: string) => {
+    setSelectedBotTaskId(String(taskId));
+    setShowBotTaskChat(true);
   };
 
   // 處理答案選擇
@@ -1092,6 +1112,11 @@ const StudentDashboard: React.FC = () => {
         onClose={() => setShowAiChat(false)}
         defaultSubject={String(selectedSubject)}
       />
+      <BotTaskChatModal
+        open={showBotTaskChat}
+        taskId={selectedBotTaskId}
+        onClose={() => { setShowBotTaskChat(false); setSelectedBotTaskId(null); }}
+      />
 
       {/* Main Layout */}
       <div className="flex-1 relative z-10 p-4 md:p-8 flex flex-col md:flex-row gap-6 max-w-7xl mx-auto w-full">
@@ -1246,7 +1271,7 @@ const StudentDashboard: React.FC = () => {
                     return '開始遊戲';
                   }
                   switch (task.type) {
-                    case 'ai-bot': return '開始對話';
+                    case 'ai-bot': return task.completed ? '已完成 ✓' : '開始對話';
                     default: return '開始';
                   }
                 };
@@ -1272,7 +1297,7 @@ const StudentDashboard: React.FC = () => {
                     return 'bg-[#E8F5E9] hover:bg-[#C8E6C9]'; // 未遊玩：淺綠色
                   }
                   switch (task.type) {
-                    case 'ai-bot': return 'bg-[#B5D8F8] hover:bg-[#A1CCF0]';
+                    case 'ai-bot': return task.completed ? 'bg-[#93C47D] hover:bg-[#86b572]' : 'bg-[#B5D8F8] hover:bg-[#A1CCF0]';
                     default: return 'bg-[#93C47D] hover:bg-[#86b572]';
                   }
                 };
@@ -1308,6 +1333,8 @@ const StudentDashboard: React.FC = () => {
                           handleQuizClick(task.id);
                         } else if (task.type === 'game') {
                           handleGameClick(task.id);
+                        } else if (task.type === 'ai-bot') {
+                          handleBotTaskClick(task.id);
                         }
                       }}
                       className={`${getTaskButtonColor()} text-brand-brown font-bold px-6 py-2 rounded-2xl border-4 border-brand-brown shadow-comic active:translate-y-1 active:shadow-none bg-opacity-100 ${task.type === 'quiz' && task.completed ? 'cursor-pointer hover:bg-green-300' : ''
@@ -1346,6 +1373,7 @@ const StudentDashboard: React.FC = () => {
                       if (task.type === 'discussion') handleDiscussionClick(task.id);
                       else if (task.type === 'quiz') handleQuizClick(task.id);
                       else if (task.type === 'game') handleGameClick(task.id);
+                      else if (task.type === 'ai-bot') handleBotTaskClick(task.id);
                     };
 
                     return (

@@ -1,5 +1,5 @@
 import React, { useMemo, useRef, useState, useEffect } from 'react';
-import { Menu, Settings, SlidersHorizontal, User, LogOut, MessageSquare, Plus, X, Image, Link, Code, Bold, Italic, Underline, Type, Palette, Upload, Trash, Filter, Eye, EyeOff, HelpCircle, Clock } from 'lucide-react';
+import { Menu, Settings, SlidersHorizontal, User, LogOut, MessageSquare, Plus, X, Image, Link, Code, Bold, Italic, Underline, Type, Palette, Upload, Trash, Filter, Eye, EyeOff, HelpCircle, Clock, Bot } from 'lucide-react';
 import Button from '../components/Button';
 import Select from '../components/Select';
 import Input from '../components/Input';
@@ -81,6 +81,12 @@ const TeacherDashboard: React.FC = () => {
   const [selectedAssignment, setSelectedAssignment] = useState<any>(null);
   const [assignmentResponses, setAssignmentResponses] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
+  const [myBots, setMyBots] = useState<any[]>([]);
+  const [showBotTaskAssignModal, setShowBotTaskAssignModal] = useState(false);
+  const [botTaskForm, setBotTaskForm] = useState<{ botId: string; subject: string; targetClass: string }>({ botId: '', subject: String(Subject.CHINESE), targetClass: '' });
+  const [botTaskThreadModalOpen, setBotTaskThreadModalOpen] = useState(false);
+  const [botTaskThreadModalTitle, setBotTaskThreadModalTitle] = useState('');
+  const [botTaskThreadMessages, setBotTaskThreadMessages] = useState<any[]>([]);
 
   // 篩選狀態
   const [filterSubject, setFilterSubject] = useState('');
@@ -434,16 +440,25 @@ const TeacherDashboard: React.FC = () => {
       setLoading(true);
 
       // 並行載入自己的作業、小測驗和遊戲
-      const [assignmentData, quizData, gameData] = await Promise.all([
+      const [assignmentData, quizData, gameData, botTaskData] = await Promise.all([
         authService.getTeacherAssignments(filterSubject || undefined, filterClass || undefined),
         authService.getTeacherQuizzes(filterSubject || undefined, filterClass || undefined),
-        authService.getTeacherGames(filterSubject || undefined, filterClass || undefined)
+        authService.getTeacherGames(filterSubject || undefined, filterClass || undefined),
+        authService.getTeacherBotTasks(filterSubject || undefined, filterClass || undefined)
       ]);
 
       const mine = [
         ...(assignmentData.assignments || []).map((item: any) => ({ ...item, type: 'assignment' })),
         ...(quizData.quizzes || []).map((item: any) => ({ ...item, type: 'quiz' })),
-        ...(gameData.games || []).map((item: any) => ({ ...item, type: 'game' }))
+        ...(gameData.games || []).map((item: any) => ({ ...item, type: 'game' })),
+        ...(botTaskData.tasks || []).map((item: any) => ({
+          ...item,
+          type: 'ai-bot',
+          title: item.title || item.botName || 'BOT 任務',
+          targetClasses: item.targetClasses || [],
+          responseCount: item.completedStudents ?? 0,
+          uniqueStudents: item.completedStudents ?? 0
+        }))
       ];
 
       // 同科同級其他教師任務（需要先在設定中填寫所屬班級/任教科目）
@@ -502,6 +517,53 @@ const TeacherDashboard: React.FC = () => {
     } catch (error) {
       console.error('載入作業失敗:', error);
       alert('載入作業失敗：' + (error instanceof Error ? error.message : '未知錯誤'));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const openBotTaskAssign = () => {
+    if (myBots.length === 0) {
+      alert('請先在「AI對話 → BOT」建立一個 BOT，才可以派發。');
+      return;
+    }
+    const defaultBotId = String(myBots[0]?.id || '');
+    setBotTaskForm({
+      botId: defaultBotId,
+      subject: filterSubject || String(Subject.CHINESE),
+      targetClass: filterClass || ''
+    });
+    setShowBotTaskAssignModal(true);
+  };
+
+  const submitBotTaskAssign = async () => {
+    try {
+      if (!botTaskForm.botId) return alert('請選擇 BOT');
+      if (!botTaskForm.subject) return alert('請選擇科目');
+      if (!botTaskForm.targetClass) return alert('請選擇班別');
+      await authService.createBotTask({
+        botId: botTaskForm.botId,
+        subject: botTaskForm.subject,
+        targetClass: botTaskForm.targetClass
+      });
+      alert('BOT 任務已派發！');
+      setShowBotTaskAssignModal(false);
+      await loadAssignments();
+    } catch (error) {
+      alert('派發失敗：' + (error instanceof Error ? error.message : '未知錯誤'));
+    }
+  };
+
+  const openBotTaskThreadMessages = async (taskId: string, threadId: string) => {
+    try {
+      setLoading(true);
+      const data = await authService.getBotTaskThreadMessages(taskId, threadId);
+      const studentName = data.student?.name || '學生';
+      setBotTaskThreadModalTitle(`${studentName} 的對話記錄`);
+      setBotTaskThreadMessages(Array.isArray(data.messages) ? data.messages : []);
+      setBotTaskThreadModalOpen(true);
+    } catch (error) {
+      alert('載入對話失敗：' + (error instanceof Error ? error.message : '未知錯誤'));
     } finally {
       setLoading(false);
     }
@@ -604,6 +666,7 @@ const TeacherDashboard: React.FC = () => {
       setLoading(true);
       const isQuiz = assignment.type === 'quiz';
       const isGame = assignment.type === 'game';
+      const isBotTask = assignment.type === 'ai-bot';
 
       if (isGame) {
         // 載入遊戲結果
@@ -617,6 +680,11 @@ const TeacherDashboard: React.FC = () => {
         setSelectedAssignment(assignment);
         setAssignmentResponses(data.results || []); // 測驗結果
         setEditedContent(assignment.description || '小測驗');
+      } else if (isBotTask) {
+        const data = await authService.getBotTaskThreads(assignment.id);
+        setSelectedAssignment(assignment);
+        setAssignmentResponses(Array.isArray(data.threads) ? data.threads : []);
+        setEditedContent('');
       } else {
         // 載入一般作業回應
         const data = await authService.getAssignmentResponses(assignment.id);
@@ -671,12 +739,13 @@ const TeacherDashboard: React.FC = () => {
 
   // 刪除整個作業或小測驗
   const handleDeleteAssignment = async (assignment: any) => {
-    const itemType = assignment.type === 'quiz' ? '小測驗' : assignment.type === 'game' ? '遊戲' : '作業';
+    const itemType = assignment.type === 'quiz' ? '小測驗' : assignment.type === 'game' ? '遊戲' : assignment.type === 'ai-bot' ? 'BOT任務' : '作業';
     if (!confirm(`確定要刪除整個${itemType}及其所有回應嗎？此操作無法復原！`)) return;
 
     try {
       if (assignment.type === 'quiz') await authService.deleteQuiz(assignment.id);
       else if (assignment.type === 'game') await authService.deleteGame(assignment.id);
+      else if (assignment.type === 'ai-bot') await authService.deleteBotTask(assignment.id);
       else await authService.deleteAssignment(assignment.id);
 
       alert(`${itemType}已刪除`);
@@ -701,6 +770,13 @@ const TeacherDashboard: React.FC = () => {
       setShowHiddenAssignments(false);
 	    await loadFilterOptions();
 	    await loadAssignments();
+      try {
+        const botsResp = await authService.getMyChatBots();
+        setMyBots(Array.isArray(botsResp.bots) ? botsResp.bots : []);
+      } catch (err) {
+        console.error('Failed to load bot list', err);
+        setMyBots([]);
+      }
     // Fetch all students for completion tracking
     try {
       const usersData = await authService.getStudentRoster({ limit: 2000 });
@@ -786,7 +862,7 @@ const TeacherDashboard: React.FC = () => {
 
     if (targetClasses.length > 0) {
       const className = student?.profile?.class || '';
-      if (!targetClasses.includes(className)) return false;
+      if (!targetClasses.includes('全部') && !targetClasses.includes(className)) return false;
     }
 
     if (targetGroups.length > 0) {
@@ -820,11 +896,12 @@ const TeacherDashboard: React.FC = () => {
       const teacherHidden = loadHiddenTaskKeys(user.id, 'teacher');
       setHiddenTaskKeys(teacherHidden);
 
-      const [studentsData, assignmentData, quizData, gameData] = await Promise.all([
+      const [studentsData, assignmentData, quizData, gameData, botTaskData] = await Promise.all([
         authService.getStudentRoster({ limit: 2000 }),
         authService.getTeacherAssignments(progressFilterSubject || undefined, progressFilterClass || undefined),
         authService.getTeacherQuizzes(progressFilterSubject || undefined, progressFilterClass || undefined),
-        authService.getTeacherGames(progressFilterSubject || undefined, progressFilterClass || undefined)
+        authService.getTeacherGames(progressFilterSubject || undefined, progressFilterClass || undefined),
+        authService.getTeacherBotTasks(progressFilterSubject || undefined, progressFilterClass || undefined)
       ]);
 
       const students = (studentsData.users || []).filter((u: any) => u?.role === 'student');
@@ -832,7 +909,8 @@ const TeacherDashboard: React.FC = () => {
       const tasksAll = [
         ...(assignmentData.assignments || []).map((item: any) => ({ ...item, type: 'assignment' as const })),
         ...(quizData.quizzes || []).map((item: any) => ({ ...item, type: 'quiz' as const })),
-        ...(gameData.games || []).map((item: any) => ({ ...item, type: 'game' as const }))
+        ...(gameData.games || []).map((item: any) => ({ ...item, type: 'game' as const })),
+        ...(botTaskData.tasks || []).map((item: any) => ({ ...item, type: 'ai-bot' as const }))
       ];
 
       const countedTasks = progressIncludeHidden
@@ -853,6 +931,11 @@ const TeacherDashboard: React.FC = () => {
             if (task.type === 'game') {
               const data = await authService.getGameResults(task.id);
               const ids = (data.scores || []).map(extractStudentId).filter(Boolean) as string[];
+              return { key, set: new Set(ids) };
+            }
+            if (task.type === 'ai-bot') {
+              const data = await authService.getBotTaskThreads(task.id);
+              const ids = (data.threads || []).filter((r: any) => r?.completed).map((r: any) => String(r.studentId)).filter(Boolean) as string[];
               return { key, set: new Set(ids) };
             }
             const data = await authService.getAssignmentResponses(task.id);
@@ -2725,9 +2808,9 @@ const TeacherDashboard: React.FC = () => {
       }
 
       {/* Assignment Management Modal */}
-      {
-        showAssignmentModal && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
+	      {
+	        showAssignmentModal && (
+	          <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
             <div className="bg-white border-4 border-brand-brown rounded-3xl w-full max-w-6xl max-h-[90vh] overflow-y-auto shadow-comic">
               <div className="p-6 border-b-4 border-brand-brown bg-[#C0E2BE]">
                 <div className="flex justify-between items-center">
@@ -2756,12 +2839,20 @@ const TeacherDashboard: React.FC = () => {
                           <Filter className="w-5 h-5 text-gray-600" />
                           <h3 className="font-bold text-gray-700">篩選條件</h3>
                         </div>
-                        <div className="flex gap-2">
-                          <button
-                            onClick={() => {
-                              setIsSelectMode(!isSelectMode);
-                              setSelectedAssignments([]);
-                            }}
+	                        <div className="flex gap-2">
+                            <button
+                              onClick={openBotTaskAssign}
+                              className="px-4 py-2 bg-white text-gray-700 rounded-xl font-bold border-2 border-gray-300 hover:border-brand-brown flex items-center gap-2"
+                              title="派發自建 BOT 任務（學生在我的學科中完成對話即算完成）"
+                            >
+                              <Bot className="w-4 h-4" />
+                              派發 BOT
+                            </button>
+	                          <button
+	                            onClick={() => {
+	                              setIsSelectMode(!isSelectMode);
+	                              setSelectedAssignments([]);
+	                            }}
                             className={`px-4 py-2 rounded-xl font-bold border-2 transition-colors ${isSelectMode
                               ? 'bg-blue-500 text-white border-blue-600'
                               : 'bg-white text-gray-600 border-gray-300 hover:border-blue-500'
@@ -2795,6 +2886,7 @@ const TeacherDashboard: React.FC = () => {
                                       if (!parsed) continue;
                                       if (parsed.type === 'quiz') await authService.deleteQuiz(parsed.id);
                                       else if (parsed.type === 'game') await authService.deleteGame(parsed.id);
+                                      else if (parsed.type === 'ai-bot') await authService.deleteBotTask(parsed.id);
                                       else await authService.deleteAssignment(parsed.id);
                                     }
                                     alert('刪除成功！');
@@ -2881,14 +2973,15 @@ const TeacherDashboard: React.FC = () => {
                           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-brand-brown mx-auto mb-4"></div>
                           <p className="text-brand-brown font-bold">載入中...</p>
                         </div>
-                      ) : visibleAssignments.length > 0 ? (
-                        visibleAssignments.map(assignment => {
-                          const isQuiz = assignment.type === 'quiz';
-                          const isGame = assignment.type === 'game';
-                          const isShared = !!(assignment as any).isShared;
-                          const assignmentKey = makeTaskKey(assignment.type, assignment.id);
-                          const isSelected = selectedAssignments.includes(assignmentKey);
-                          return (
+	                      ) : visibleAssignments.length > 0 ? (
+	                        visibleAssignments.map(assignment => {
+	                          const isQuiz = assignment.type === 'quiz';
+	                          const isGame = assignment.type === 'game';
+	                          const isBot = assignment.type === 'ai-bot';
+	                          const isShared = !!(assignment as any).isShared;
+	                          const assignmentKey = makeTaskKey(assignment.type, assignment.id);
+	                          const isSelected = selectedAssignments.includes(assignmentKey);
+	                          return (
                             <div key={assignmentKey} className={`bg-white border-4 rounded-3xl p-6 shadow-comic ${isSelected ? 'border-blue-500 bg-blue-50' : 'border-brand-brown'}`}>
                               <div className="flex justify-between items-start">
                                 <div className="flex-1 flex items-start gap-3">
@@ -2909,25 +3002,27 @@ const TeacherDashboard: React.FC = () => {
                                     />
                                   )}
                                   <div className="flex-1">
-                                    <div className="flex items-center gap-2 mb-2">
-                                      {isGame ? (
-                                        <span className="text-2xl">🎮</span>
-                                      ) : isQuiz ? (
-                                        <HelpCircle className="w-5 h-5 text-yellow-600" />
-                                      ) : (
-                                        <MessageSquare className="w-5 h-5 text-purple-600" />
-                                      )}
-                                      <h4 className="text-xl font-bold text-brand-brown">{assignment.title}</h4>
-                                    </div>
-                                    <div className="flex flex-wrap gap-4 text-sm text-gray-600 mb-3">
+	                                    <div className="flex items-center gap-2 mb-2">
+	                                      {isGame ? (
+	                                        <span className="text-2xl">🎮</span>
+	                                      ) : isQuiz ? (
+	                                        <HelpCircle className="w-5 h-5 text-yellow-600" />
+	                                      ) : isBot ? (
+	                                        <Bot className="w-5 h-5 text-green-700" />
+	                                      ) : (
+	                                        <MessageSquare className="w-5 h-5 text-purple-600" />
+	                                      )}
+	                                      <h4 className="text-xl font-bold text-brand-brown">{assignment.title}</h4>
+	                                    </div>
+	                                    <div className="flex flex-wrap gap-4 text-sm text-gray-600 mb-3">
                                       {isShared && (
                                         <span className="bg-indigo-100 px-2 py-1 rounded-lg">
                                           🤝 其他教師：{(assignment as any).teacherName || '—'}
                                         </span>
                                       )}
-                                      <span className={`px-2 py-1 rounded-lg ${isGame ? 'bg-green-100' : isQuiz ? 'bg-yellow-100' : 'bg-purple-100'}`}>
-                                        {isGame ? '🎮' : isQuiz ? '🧠' : '📚'} {assignment.subject}
-                                      </span>
+	                                      <span className={`px-2 py-1 rounded-lg ${isGame ? 'bg-green-100' : isQuiz ? 'bg-yellow-100' : isBot ? 'bg-emerald-100' : 'bg-purple-100'}`}>
+	                                        {isGame ? '🎮' : isQuiz ? '🧠' : isBot ? '🤖' : '📚'} {assignment.subject}
+	                                      </span>
                                       <span className="bg-green-100 px-2 py-1 rounded-lg">
                                         🏫 {(() => {
                                           const classes = Array.isArray(assignment.targetClasses) ? assignment.targetClasses.join(', ') : '';
@@ -2938,32 +3033,42 @@ const TeacherDashboard: React.FC = () => {
                                           return '無指定班級';
                                         })()}
                                       </span>
-                                      {!isShared && (
-                                        <>
-                                          <span className={`px-2 py-1 rounded-lg ${isGame ? 'bg-blue-100' : isQuiz ? 'bg-orange-100' : 'bg-yellow-100'}`}>
-                                            {isGame ? '🏆' : isQuiz ? '📊' : '💬'} {isGame ? (assignment.totalAttempts || 0) : isQuiz ? (assignment.totalSubmissions || 0) : (assignment.responseCount || 0)} 個{isGame ? '遊玩記錄' : isQuiz ? '提交' : '回應'}
-                                          </span>
-                                          <span className="bg-purple-100 px-2 py-1 rounded-lg">
-                                            👥 {assignment.uniqueStudents || 0} 位學生
-                                          </span>
-                                          {(isQuiz || isGame) && assignment.averageScore !== undefined && (
-                                            <span className="bg-blue-100 px-2 py-1 rounded-lg">
-                                              📈 平均分數: {Math.round(assignment.averageScore)}%
-                                            </span>
-                                          )}
-                                        </>
-                                      )}
+	                                      {!isShared && (
+	                                        <>
+	                                          {isBot ? (
+	                                            <span className="px-2 py-1 rounded-lg bg-emerald-100">
+	                                              🤖 完成 {(assignment.completedStudents ?? assignment.responseCount ?? 0)}/{(assignment.expectedStudents ?? 0)}
+	                                            </span>
+	                                          ) : (
+	                                            <span className={`px-2 py-1 rounded-lg ${isGame ? 'bg-blue-100' : isQuiz ? 'bg-orange-100' : 'bg-yellow-100'}`}>
+	                                              {isGame ? '🏆' : isQuiz ? '📊' : '💬'} {isGame ? (assignment.totalAttempts || 0) : isQuiz ? (assignment.totalSubmissions || 0) : (assignment.responseCount || 0)} 個{isGame ? '遊玩記錄' : isQuiz ? '提交' : '回應'}
+	                                            </span>
+	                                          )}
+	                                          {!isBot && (
+	                                            <span className="bg-purple-100 px-2 py-1 rounded-lg">
+	                                              👥 {assignment.uniqueStudents || 0} 位學生
+	                                            </span>
+	                                          )}
+	                                          {(isQuiz || isGame) && assignment.averageScore !== undefined && (
+	                                            <span className="bg-blue-100 px-2 py-1 rounded-lg">
+	                                              📈 平均分數: {Math.round(assignment.averageScore)}%
+	                                            </span>
+	                                          )}
+	                                        </>
+	                                      )}
                                     </div>
 	                                    <div className="flex items-center gap-2 text-sm text-gray-500">
-	                                      <span className={`px-2 py-1 rounded text-xs font-bold ${isQuiz
-	                                        ? 'bg-yellow-200 text-yellow-800'
-	                                        : isGame
-	                                          ? 'bg-emerald-200 text-emerald-900'
-	                                          : 'bg-purple-200 text-purple-800'
-	                                        }`}>
-	                                        {isQuiz
-	                                          ? '小測驗'
-	                                          : isGame
+		                                      <span className={`px-2 py-1 rounded text-xs font-bold ${isQuiz
+		                                        ? 'bg-yellow-200 text-yellow-800'
+		                                        : isGame
+		                                          ? 'bg-emerald-200 text-emerald-900'
+		                                          : isBot
+		                                            ? 'bg-emerald-200 text-emerald-900'
+		                                            : 'bg-purple-200 text-purple-800'
+		                                        }`}>
+		                                        {isQuiz
+		                                          ? '小測驗'
+		                                          : isGame
 	                                            ? (assignment.gameType === 'maze'
 	                                              ? '迷宮闖關'
 	                                              : assignment.gameType === 'matching'
@@ -2971,19 +3076,21 @@ const TeacherDashboard: React.FC = () => {
 	                                                : assignment.gameType === 'tower-defense'
 	                                                  ? '答題塔防'
 	                                                  : '小遊戲')
-	                                            : '討論串'}
-	                                      </span>
-	                                      <span>創建時間: {new Date(assignment.createdAt).toLocaleString()}</span>
-	                                    </div>
+		                                                : isBot
+		                                                  ? 'BOT任務'
+		                                                  : '討論串'}
+		                                      </span>
+		                                      <span>創建時間: {new Date(assignment.createdAt).toLocaleString()}</span>
+		                                    </div>
                                   </div>
                                   <div className="flex gap-2 ml-4">
 	                                    <button
 	                                      onClick={() => viewAssignmentDetails(assignment)}
 	                                      className="flex items-center gap-1 px-4 py-2 bg-blue-100 text-blue-700 rounded-xl hover:bg-blue-200 font-bold"
 	                                    >
-	                                      <Eye className="w-4 h-4" />
-	                                      {(isQuiz || isGame) ? '查看結果' : '查看回應'}
-	                                    </button>
+		                                      <Eye className="w-4 h-4" />
+		                                      {isBot ? '查看對話' : (isQuiz || isGame) ? '查看結果' : '查看回應'}
+		                                    </button>
                                     {!isSelectMode && (
                                       <button
                                         onClick={() => setManualHidden(assignment, true)}
@@ -3027,10 +3134,11 @@ const TeacherDashboard: React.FC = () => {
                         </button>
                         {showHiddenAssignments && (
                           <div className="mt-4 space-y-4">
-                            {hiddenAssignments.map((assignment) => {
-                              const isQuiz = assignment.type === 'quiz';
-                              const isGame = assignment.type === 'game';
-                              const isShared = !!(assignment as any).isShared;
+	                            {hiddenAssignments.map((assignment) => {
+	                              const isQuiz = assignment.type === 'quiz';
+	                              const isGame = assignment.type === 'game';
+	                              const isBot = assignment.type === 'ai-bot';
+	                              const isShared = !!(assignment as any).isShared;
                               const assignmentKey = makeTaskKey(assignment.type, assignment.id);
                               const autoHidden = isAutoHidden(assignment.createdAt);
                               const manuallyHidden = hiddenTaskKeys.has(assignmentKey) && !autoHidden;
@@ -3057,14 +3165,16 @@ const TeacherDashboard: React.FC = () => {
                                         />
                                       )}
                                       <div className="flex-1">
-                                        <div className="flex items-center gap-2 mb-2">
-                                          {isGame ? (
-                                            <span className="text-2xl">🎮</span>
-                                          ) : isQuiz ? (
-                                            <HelpCircle className="w-5 h-5 text-yellow-600" />
-                                          ) : (
-                                            <MessageSquare className="w-5 h-5 text-purple-600" />
-                                          )}
+	                                        <div className="flex items-center gap-2 mb-2">
+	                                          {isGame ? (
+	                                            <span className="text-2xl">🎮</span>
+	                                          ) : isQuiz ? (
+	                                            <HelpCircle className="w-5 h-5 text-yellow-600" />
+	                                          ) : isBot ? (
+	                                            <Bot className="w-5 h-5 text-green-700" />
+	                                          ) : (
+	                                            <MessageSquare className="w-5 h-5 text-purple-600" />
+	                                          )}
                                           <h4 className="text-xl font-bold text-brand-brown">{assignment.title}</h4>
                                           {isShared && (
                                             <span className="ml-2 text-xs font-bold px-2 py-1 rounded bg-indigo-100 text-indigo-800">
@@ -3078,15 +3188,17 @@ const TeacherDashboard: React.FC = () => {
                                           )}
                                         </div>
                                         <div className="flex items-center gap-2 text-sm text-gray-500">
-                                          <span className={`px-2 py-1 rounded text-xs font-bold ${isQuiz
-                                            ? 'bg-yellow-200 text-yellow-800'
-                                            : isGame
-                                              ? 'bg-emerald-200 text-emerald-900'
-                                              : 'bg-purple-200 text-purple-800'
-                                            }`}>
-                                            {isQuiz
-                                              ? '小測驗'
-                                              : isGame
+	                                          <span className={`px-2 py-1 rounded text-xs font-bold ${isQuiz
+	                                            ? 'bg-yellow-200 text-yellow-800'
+	                                            : isGame
+	                                              ? 'bg-emerald-200 text-emerald-900'
+	                                              : isBot
+	                                                ? 'bg-emerald-200 text-emerald-900'
+	                                                : 'bg-purple-200 text-purple-800'
+	                                            }`}>
+	                                            {isQuiz
+	                                              ? '小測驗'
+	                                              : isGame
                                                 ? (assignment.gameType === 'maze'
                                                   ? '迷宮闖關'
                                                   : assignment.gameType === 'matching'
@@ -3094,8 +3206,10 @@ const TeacherDashboard: React.FC = () => {
                                                     : assignment.gameType === 'tower-defense'
                                                       ? '答題塔防'
                                                       : '小遊戲')
-                                                : '討論串'}
-                                          </span>
+	                                                : isBot
+	                                                  ? 'BOT任務'
+	                                                  : '討論串'}
+	                                          </span>
                                           <span>創建時間: {new Date(assignment.createdAt).toLocaleString()}</span>
                                         </div>
                                       </div>
@@ -3104,9 +3218,9 @@ const TeacherDashboard: React.FC = () => {
                                           onClick={() => viewAssignmentDetails(assignment)}
                                           className="flex items-center gap-1 px-4 py-2 bg-blue-100 text-blue-700 rounded-xl hover:bg-blue-200 font-bold"
                                         >
-                                          <Eye className="w-4 h-4" />
-                                          {(isQuiz || isGame) ? '查看結果' : '查看回應'}
-                                        </button>
+	                                          <Eye className="w-4 h-4" />
+	                                          {isBot ? '查看對話' : (isQuiz || isGame) ? '查看結果' : '查看回應'}
+	                                        </button>
                                         {manuallyHidden && !isSelectMode && (
                                           <button
                                             onClick={() => setManualHidden(assignment, false)}
@@ -3169,23 +3283,29 @@ const TeacherDashboard: React.FC = () => {
                     {/* 教師原始內容 */}
                     <div className={`border-4 rounded-3xl p-6 mb-6 ${selectedAssignment?.type === 'quiz' ? 'bg-yellow-50 border-yellow-200' : 'bg-yellow-50 border-yellow-200'
                       }`}>
-                      <div className="flex justify-between items-start mb-4">
-                        <h4 className="text-xl font-bold text-brand-brown">
-                          {selectedAssignment?.type === 'quiz' ? '小測驗資訊' : '教師原始內容'}
-                        </h4>
-                        {selectedAssignment?.type !== 'quiz' && (
-                          <button
-                            onClick={() => setIsEditingContent(!isEditingContent)}
-                            className="px-4 py-2 bg-yellow-100 hover:bg-yellow-200 text-yellow-700 rounded-xl font-bold"
-                          >
-                            {isEditingContent ? '取消編輯' : '編輯內容'}
-                          </button>
-                        )}
-                      </div>
+	                      <div className="flex justify-between items-start mb-4">
+	                        <h4 className="text-xl font-bold text-brand-brown">
+	                          {selectedAssignment?.type === 'quiz'
+	                            ? '小測驗資訊'
+	                            : selectedAssignment?.type === 'game'
+	                              ? '遊戲資訊'
+	                              : selectedAssignment?.type === 'ai-bot'
+	                                ? 'BOT任務資訊'
+	                                : '教師原始內容'}
+	                        </h4>
+	                        {selectedAssignment?.type === 'assignment' && !(selectedAssignment as any).isShared && (
+	                          <button
+	                            onClick={() => setIsEditingContent(!isEditingContent)}
+	                            className="px-4 py-2 bg-yellow-100 hover:bg-yellow-200 text-yellow-700 rounded-xl font-bold"
+	                          >
+	                            {isEditingContent ? '取消編輯' : '編輯內容'}
+	                          </button>
+	                        )}
+	                      </div>
 
-                      {selectedAssignment?.type === 'quiz' ? (
-                        // 小測驗資訊顯示
-                        <div className="bg-white p-4 rounded-xl border-2 border-yellow-300">
+	                      {selectedAssignment?.type === 'quiz' ? (
+	                        // 小測驗資訊顯示
+	                        <div className="bg-white p-4 rounded-xl border-2 border-yellow-300">
                           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
                             <div>
                               <span className="font-bold text-brand-brown">標題：</span>
@@ -3248,14 +3368,56 @@ const TeacherDashboard: React.FC = () => {
                             </div>
                           )}
                         </div>
-                      ) : (
-                        // 一般討論串內容編輯
-                        isEditingContent ? (
-                          <div className="space-y-4">
-                            <div
-                              contentEditable
-                              onInput={(e) => setEditedContent(e.currentTarget.innerHTML)}
-                              dangerouslySetInnerHTML={{ __html: sanitizeHtml(editedContent) }}
+	                      ) : selectedAssignment?.type === 'ai-bot' ? (
+	                        <div className="bg-white p-4 rounded-xl border-2 border-yellow-300">
+	                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+	                            <div>
+	                              <span className="font-bold text-brand-brown">BOT：</span>
+	                              <span>{selectedAssignment.botName || selectedAssignment.title}</span>
+	                            </div>
+	                            <div>
+	                              <span className="font-bold text-brand-brown">科目：</span>
+	                              <span>{selectedAssignment.subject}</span>
+	                            </div>
+	                            <div>
+	                              <span className="font-bold text-brand-brown">派發對象：</span>
+	                              <span>{Array.isArray(selectedAssignment.targetClasses) ? selectedAssignment.targetClasses.join(', ') : '—'}</span>
+	                            </div>
+	                            <div>
+	                              <span className="font-bold text-brand-brown">完成：</span>
+	                              <span>{(selectedAssignment.completedStudents ?? 0)}/{(selectedAssignment.expectedStudents ?? 0)}</span>
+	                            </div>
+	                          </div>
+	                        </div>
+	                      ) : selectedAssignment?.type === 'game' ? (
+	                        <div className="bg-white p-4 rounded-xl border-2 border-yellow-300">
+	                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+	                            <div>
+	                              <span className="font-bold text-brand-brown">標題：</span>
+	                              <span>{selectedAssignment.title}</span>
+	                            </div>
+	                            <div>
+	                              <span className="font-bold text-brand-brown">科目：</span>
+	                              <span>{selectedAssignment.subject}</span>
+	                            </div>
+	                            <div>
+	                              <span className="font-bold text-brand-brown">類型：</span>
+	                              <span>{selectedAssignment.gameType || '小遊戲'}</span>
+	                            </div>
+	                            <div>
+	                              <span className="font-bold text-brand-brown">描述：</span>
+	                              <span>{selectedAssignment.description || '—'}</span>
+	                            </div>
+	                          </div>
+	                        </div>
+	                      ) : (
+	                        // 一般討論串內容編輯
+	                        isEditingContent ? (
+	                          <div className="space-y-4">
+	                            <div
+	                              contentEditable
+	                              onInput={(e) => setEditedContent(e.currentTarget.innerHTML)}
+	                              dangerouslySetInnerHTML={{ __html: sanitizeHtml(editedContent) }}
                               className="min-h-32 p-4 border-2 border-yellow-300 rounded-xl bg-white focus:outline-none focus:border-yellow-500"
                             />
                             <div className="flex gap-2">
@@ -3276,12 +3438,12 @@ const TeacherDashboard: React.FC = () => {
                               </button>
                             </div>
                           </div>
-                        ) : (
-                          <div className="bg-white p-4 rounded-xl border-2 border-yellow-300">
-                            <div dangerouslySetInnerHTML={{ __html: sanitizeHtml(getDisplayContent(selectedAssignment.content)) }} />
-                          </div>
-                        )
-                      )}
+	                        ) : (
+	                          <div className="bg-white p-4 rounded-xl border-2 border-yellow-300">
+	                            <div dangerouslySetInnerHTML={{ __html: sanitizeHtml(getDisplayContent(selectedAssignment.content)) }} />
+	                          </div>
+	                        )
+	                      )}
                     </div>
 
 
@@ -3373,128 +3535,302 @@ const TeacherDashboard: React.FC = () => {
                       </div>
                     )}
 
-                    {/* 學生回應或測驗結果列表 */}
-                    <div className="space-y-4">
-                      <h4 className="text-xl font-bold text-brand-brown">
-                        {selectedAssignment?.type === 'quiz' ? '測驗結果' : '學生回應'} ({assignmentResponses.length})
-                      </h4>
-                      {loading ? (
-                        <div className="text-center py-8">
-                          <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-brand-brown mx-auto mb-2"></div>
-                          <p className="text-brand-brown">載入中...</p>
-                        </div>
-                      ) : assignmentResponses.length > 0 ? (
-                        assignmentResponses.map(response => (
-                          <div key={response.id} className={`border-2 rounded-2xl p-4 ${selectedAssignment?.type === 'quiz' ? 'bg-yellow-50 border-yellow-200' : 'bg-gray-50 border-gray-300'
-                            }`}>
-                            <div className="flex justify-between items-start">
-                              <div className="flex-1">
-                                <div className="flex items-center gap-3 mb-2">
-                                  <div className={`w-8 h-8 rounded-full flex items-center justify-center ${selectedAssignment?.type === 'quiz' ? 'bg-yellow-500' : 'bg-brand-green-light'
-                                    }`}>
-                                    <span className="text-white font-bold text-sm">
-                                      {response.studentName?.charAt(0) || '學'}
-                                    </span>
-                                  </div>
-                                  <div>
-                                    <p className="font-bold text-brand-brown">{response.studentName}</p>
-                                    <p className="text-sm text-gray-600">{response.studentClass} • {response.studentUsername}</p>
-                                  </div>
-                                  {selectedAssignment?.type === 'quiz' && (
-                                    <div className="ml-auto flex items-center gap-4">
-                                      <div className={`px-3 py-1 rounded-full text-sm font-bold ${response.score >= 80 ? 'bg-green-100 text-green-700' :
-                                        response.score >= 60 ? 'bg-yellow-100 text-yellow-700' :
-                                          'bg-red-100 text-red-700'
-                                        }`}>
-                                        {Math.round(response.score)}%
-                                      </div>
-                                      <div className="text-sm text-gray-500">
-                                        {response.correctAnswers}/{response.totalQuestions} 正確
-                                      </div>
-                                    </div>
-                                  )}
-                                </div>
-
-                                {selectedAssignment?.type === 'quiz' || selectedAssignment?.type === 'game' ? (
-                                  <>
-                                    <div className="bg-white p-3 rounded-xl border border-gray-200">
-                                      <div className="grid grid-cols-2 gap-4 text-sm">
-                                        <div>
-                                          <span className="font-medium text-gray-600">得分:</span>
-                                          <span className="ml-2 font-bold">{Math.round(response.score)}%</span>
-                                        </div>
-                                        {/* For games, check if attempts data is available, otherwise show standard stats */}
-                                        {selectedAssignment?.type === 'game' && response.attempts && (
-                                          <div>
-                                            <span className="font-medium text-gray-600">遊玩次數:</span>
-                                            <span className="ml-2">{response.attempts}</span>
-                                          </div>
-                                        )}
-                                        <div>
-                                          <span className="font-medium text-gray-600">正確答案:</span>
-                                          <span className="ml-2">{response.correctAnswers}/{response.totalQuestions}</span>
-                                        </div>
-                                        <div>
-                                          <span className="font-medium text-gray-600">用時:</span>
-                                          <span className="ml-2">{response.timeSpent ? `${Math.round(response.timeSpent / 60)}分鐘` : '未記錄'}</span>
-                                        </div>
-                                        <div>
-                                          <span className="font-medium text-gray-600">提交時間:</span>
-                                          <span className="ml-2">{new Date(response.submittedAt || response.playedAt || Date.now()).toLocaleString()}</span>
-                                        </div>
-                                      </div>
-                                    </div>
-                                    <div className="mt-3 flex justify-end">
-                                      <button
-                                        onClick={() => setViewingResultDetails(response)}
-                                        className="px-4 py-2 bg-yellow-100 text-yellow-800 rounded-lg hover:bg-yellow-200 text-sm font-bold flex items-center gap-2"
-                                      >
-                                        <Eye className="w-4 h-4" />
-                                        查看詳情
-                                      </button>
-                                    </div>
-                                  </>
-                                ) : (
-                                  <div className="bg-white p-3 rounded-xl border border-gray-200">
-                                    <div dangerouslySetInnerHTML={{ __html: sanitizeHtml(response.content || response.message || '無內容') }} />
-                                  </div>
-                                )}
-
-                                {selectedAssignment?.type !== 'quiz' && (
-                                  <p className="text-xs text-gray-500 mt-2">
-                                    {new Date(response.createdAt).toLocaleString()}
-                                  </p>
-                                )}
-                              </div>
-                              {selectedAssignment?.type === 'assignment' && !(selectedAssignment as any).isShared && (
-                                <button
-                                  onClick={() => handleDeleteResponse(response.id)}
-                                  className="ml-4 p-2 bg-red-100 text-red-700 rounded-lg hover:bg-red-200"
-                                  title="刪除此回應"
-                                >
-                                  <Trash className="w-4 h-4" />
-                                </button>
-                              )}
-                            </div>
-                          </div>
-                        ))
-                      ) : (
-                        <div className="text-center py-8 text-gray-400 font-bold border-4 border-dashed border-gray-300 rounded-2xl">
-                          {selectedAssignment?.type === 'quiz' ? '目前沒有測驗結果 📊' : '目前沒有學生回應 💭'}
-                        </div>
-                      )}
-                    </div>
+	                    {/* 學生回應或測驗結果列表 */}
+	                    <div className="space-y-4">
+	                      {selectedAssignment?.type === 'ai-bot' ? (
+	                        <>
+	                          <h4 className="text-xl font-bold text-brand-brown">
+	                            學生對話狀況 ({assignmentResponses.length})
+	                          </h4>
+	                          {loading ? (
+	                            <div className="text-center py-8">
+	                              <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-brand-brown mx-auto mb-2"></div>
+	                              <p className="text-brand-brown">載入中...</p>
+	                            </div>
+	                          ) : assignmentResponses.length > 0 ? (
+	                            assignmentResponses.map((row) => (
+	                              <div key={row.studentId} className="border-2 rounded-2xl p-4 bg-gray-50 border-gray-300">
+	                                <div className="flex justify-between items-start">
+	                                  <div className="flex items-center gap-3">
+	                                    <div className="w-8 h-8 rounded-full bg-brand-green-light flex items-center justify-center">
+	                                      <span className="text-white font-bold text-sm">
+	                                        {String(row.studentName || '學').charAt(0)}
+	                                      </span>
+	                                    </div>
+	                                    <div>
+	                                      <p className="font-bold text-brand-brown flex items-center gap-2">
+	                                        {row.studentName}
+	                                        {row.completed ? (
+	                                          <span className="text-xs font-bold px-2 py-1 rounded bg-green-100 text-green-800">已完成</span>
+	                                        ) : (
+	                                          <span className="text-xs font-bold px-2 py-1 rounded bg-gray-200 text-gray-700">未完成</span>
+	                                        )}
+	                                      </p>
+	                                      <p className="text-sm text-gray-600">{row.studentClass} • {row.studentUsername}</p>
+	                                      {row.lastMessageAt && (
+	                                        <p className="text-xs text-gray-500 mt-1">最後訊息：{new Date(row.lastMessageAt).toLocaleString()}</p>
+	                                      )}
+	                                    </div>
+	                                  </div>
+	                                  <div className="flex gap-2">
+	                                    <button
+	                                      onClick={() => row.threadId && openBotTaskThreadMessages(selectedAssignment.id, String(row.threadId))}
+	                                      disabled={!row.threadId}
+	                                      className={`px-4 py-2 rounded-xl font-bold border-2 ${row.threadId ? 'bg-blue-100 text-blue-700 hover:bg-blue-200 border-blue-200' : 'bg-gray-100 text-gray-400 border-gray-200 cursor-not-allowed'}`}
+	                                    >
+	                                      查看對話
+	                                    </button>
+	                                  </div>
+	                                </div>
+	                              </div>
+	                            ))
+	                          ) : (
+	                            <div className="text-center py-8 text-gray-400 font-bold border-4 border-dashed border-gray-300 rounded-2xl">
+	                              目前沒有學生對話紀錄 💬
+	                            </div>
+	                          )}
+	                        </>
+	                      ) : (
+	                        <>
+	                          <h4 className="text-xl font-bold text-brand-brown">
+	                            {selectedAssignment?.type === 'quiz' ? '測驗結果' : '學生回應'} ({assignmentResponses.length})
+	                          </h4>
+	                          {loading ? (
+	                            <div className="text-center py-8">
+	                              <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-brand-brown mx-auto mb-2"></div>
+	                              <p className="text-brand-brown">載入中...</p>
+	                            </div>
+	                          ) : assignmentResponses.length > 0 ? (
+	                            assignmentResponses.map(response => (
+	                              <div key={response.id} className={`border-2 rounded-2xl p-4 ${selectedAssignment?.type === 'quiz' ? 'bg-yellow-50 border-yellow-200' : 'bg-gray-50 border-gray-300'
+	                                }`}>
+	                                <div className="flex justify-between items-start">
+	                                  <div className="flex-1">
+	                                    <div className="flex items-center gap-3 mb-2">
+	                                      <div className={`w-8 h-8 rounded-full flex items-center justify-center ${selectedAssignment?.type === 'quiz' ? 'bg-yellow-500' : 'bg-brand-green-light'
+	                                        }`}>
+	                                        <span className="text-white font-bold text-sm">
+	                                          {response.studentName?.charAt(0) || '學'}
+	                                        </span>
+	                                      </div>
+	                                      <div>
+	                                        <p className="font-bold text-brand-brown">{response.studentName}</p>
+	                                        <p className="text-sm text-gray-600">{response.studentClass} • {response.studentUsername}</p>
+	                                      </div>
+	                                      {selectedAssignment?.type === 'quiz' && (
+	                                        <div className="ml-auto flex items-center gap-4">
+	                                          <div className={`px-3 py-1 rounded-full text-sm font-bold ${response.score >= 80 ? 'bg-green-100 text-green-700' :
+	                                            response.score >= 60 ? 'bg-yellow-100 text-yellow-700' :
+	                                              'bg-red-100 text-red-700'
+	                                            }`}>
+	                                            {Math.round(response.score)}%
+	                                          </div>
+	                                          <div className="text-sm text-gray-500">
+	                                            {response.correctAnswers}/{response.totalQuestions} 正確
+	                                          </div>
+	                                        </div>
+	                                      )}
+	                                    </div>
+	
+	                                    {selectedAssignment?.type === 'quiz' || selectedAssignment?.type === 'game' ? (
+	                                      <>
+	                                        <div className="bg-white p-3 rounded-xl border border-gray-200">
+	                                          <div className="grid grid-cols-2 gap-4 text-sm">
+	                                            <div>
+	                                              <span className="font-medium text-gray-600">得分:</span>
+	                                              <span className="ml-2 font-bold">{Math.round(response.score)}%</span>
+	                                            </div>
+	                                            {selectedAssignment?.type === 'game' && response.attempts && (
+	                                              <div>
+	                                                <span className="font-medium text-gray-600">遊玩次數:</span>
+	                                                <span className="ml-2">{response.attempts}</span>
+	                                              </div>
+	                                            )}
+	                                            <div>
+	                                              <span className="font-medium text-gray-600">正確答案:</span>
+	                                              <span className="ml-2">{response.correctAnswers}/{response.totalQuestions}</span>
+	                                            </div>
+	                                            <div>
+	                                              <span className="font-medium text-gray-600">用時:</span>
+	                                              <span className="ml-2">{response.timeSpent ? `${Math.round(response.timeSpent / 60)}分鐘` : '未記錄'}</span>
+	                                            </div>
+	                                            <div>
+	                                              <span className="font-medium text-gray-600">提交時間:</span>
+	                                              <span className="ml-2">{new Date(response.submittedAt || response.playedAt || Date.now()).toLocaleString()}</span>
+	                                            </div>
+	                                          </div>
+	                                        </div>
+	                                        <div className="mt-3 flex justify-end">
+	                                          <button
+	                                            onClick={() => setViewingResultDetails(response)}
+	                                            className="px-4 py-2 bg-yellow-100 text-yellow-800 rounded-lg hover:bg-yellow-200 text-sm font-bold flex items-center gap-2"
+	                                          >
+	                                            <Eye className="w-4 h-4" />
+	                                            查看詳情
+	                                          </button>
+	                                        </div>
+	                                      </>
+	                                    ) : (
+	                                      <div className="bg-white p-3 rounded-xl border border-gray-200">
+	                                        <div dangerouslySetInnerHTML={{ __html: sanitizeHtml(response.content || response.message || '無內容') }} />
+	                                      </div>
+	                                    )}
+	
+	                                    {selectedAssignment?.type !== 'quiz' && (
+	                                      <p className="text-xs text-gray-500 mt-2">
+	                                        {new Date(response.createdAt).toLocaleString()}
+	                                      </p>
+	                                    )}
+	                                  </div>
+	                                  {selectedAssignment?.type === 'assignment' && !(selectedAssignment as any).isShared && (
+	                                    <button
+	                                      onClick={() => handleDeleteResponse(response.id)}
+	                                      className="ml-4 p-2 bg-red-100 text-red-700 rounded-lg hover:bg-red-200"
+	                                      title="刪除此回應"
+	                                    >
+	                                      <Trash className="w-4 h-4" />
+	                                    </button>
+	                                  )}
+	                                </div>
+	                              </div>
+	                            ))
+	                          ) : (
+	                            <div className="text-center py-8 text-gray-400 font-bold border-4 border-dashed border-gray-300 rounded-2xl">
+	                              {selectedAssignment?.type === 'quiz' ? '目前沒有測驗結果 📊' : '目前沒有學生回應 💭'}
+	                            </div>
+	                          )}
+	                        </>
+	                      )}
+	                    </div>
                   </div>
                 )}
               </div>
             </div>
           </div >
         )
-      }
+	      }
 
-	      {/* Quiz Creation Modal */}
-	      {
-	        showQuizModal && (
+        {showBotTaskAssignModal && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 z-[60] flex items-center justify-center p-4">
+            <div className="bg-white border-4 border-brand-brown rounded-3xl w-full max-w-2xl shadow-comic overflow-hidden">
+              <div className="p-6 border-b-4 border-brand-brown bg-[#D2EFFF] flex items-center justify-between">
+                <h2 className="text-2xl font-black text-brand-brown flex items-center gap-2">
+                  <Bot className="w-6 h-6" />
+                  派發 BOT 任務
+                </h2>
+                <button
+                  onClick={() => setShowBotTaskAssignModal(false)}
+                  className="w-10 h-10 rounded-full bg-white border-2 border-brand-brown hover:bg-gray-100 flex items-center justify-center"
+                >
+                  <X className="w-6 h-6 text-brand-brown" />
+                </button>
+              </div>
+              <div className="p-6 space-y-4">
+                <div>
+                  <label className="block text-sm font-bold text-brand-brown mb-2">選擇 BOT</label>
+                  <select
+                    value={botTaskForm.botId}
+                    onChange={(e) => setBotTaskForm((prev) => ({ ...prev, botId: e.target.value }))}
+                    className="w-full px-4 py-2 border-4 border-brand-brown rounded-2xl bg-white font-bold"
+                  >
+                    {myBots.map((b: any) => (
+                      <option key={b.id} value={b.id}>{b.name}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-bold text-brand-brown mb-2">科目</label>
+                    <select
+                      value={botTaskForm.subject}
+                      onChange={(e) => setBotTaskForm((prev) => ({ ...prev, subject: e.target.value }))}
+                      className="w-full px-4 py-2 border-4 border-brand-brown rounded-2xl bg-white font-bold"
+                    >
+                      {Object.values(Subject).map((s) => (
+                        <option key={s} value={s}>{s}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-bold text-brand-brown mb-2">班別</label>
+                    <select
+                      value={botTaskForm.targetClass}
+                      onChange={(e) => setBotTaskForm((prev) => ({ ...prev, targetClass: e.target.value }))}
+                      className="w-full px-4 py-2 border-4 border-brand-brown rounded-2xl bg-white font-bold"
+                    >
+                      <option value="">請選擇班別</option>
+                      {availableClasses.map((c) => (
+                        <option key={c} value={c}>{c}</option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+
+                <div className="p-4 bg-gray-50 border-2 border-gray-200 rounded-2xl text-sm text-gray-700 font-bold">
+                  學生在「我的學科 → 我的任務」看到此 BOT 任務，學生只要送出任意一句對話就算完成；你可在作業管理中查看學生對話記錄。
+                </div>
+
+                <div className="flex gap-4 pt-2">
+                  <Button
+                    className="flex-1 bg-gray-300 text-gray-700 hover:bg-gray-400"
+                    onClick={() => setShowBotTaskAssignModal(false)}
+                  >
+                    取消
+                  </Button>
+                  <Button
+                    className="flex-1 bg-[#D2EFFF] text-brand-brown hover:bg-[#BCE0FF] border-brand-brown"
+                    onClick={submitBotTaskAssign}
+                  >
+                    派發
+                  </Button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {botTaskThreadModalOpen && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 z-[70] flex items-center justify-center p-4">
+            <div className="bg-white border-4 border-brand-brown rounded-3xl w-full max-w-4xl max-h-[90vh] overflow-hidden shadow-comic flex flex-col">
+              <div className="p-5 border-b-4 border-brand-brown bg-[#E0D2F8] flex items-center justify-between">
+                <div className="text-xl font-black text-brand-brown">{botTaskThreadModalTitle || '對話記錄'}</div>
+                <button
+                  onClick={() => { setBotTaskThreadModalOpen(false); setBotTaskThreadMessages([]); }}
+                  className="w-10 h-10 rounded-full bg-white border-2 border-brand-brown hover:bg-gray-100 flex items-center justify-center"
+                >
+                  <X className="w-6 h-6 text-brand-brown" />
+                </button>
+              </div>
+              <div className="flex-1 overflow-y-auto p-4 bg-gray-50">
+                {botTaskThreadMessages.length === 0 ? (
+                  <div className="text-center py-12 text-gray-400 font-bold border-4 border-dashed border-gray-300 rounded-2xl">
+                    沒有對話內容
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    {botTaskThreadMessages.map((m: any) => (
+                      <div key={m.id} className={`flex ${m.sender === 'user' ? 'justify-end' : 'justify-start'}`}>
+                        <div className={`max-w-[85%] rounded-2xl px-4 py-3 border-2 break-words ${m.sender === 'user' ? 'bg-white border-brand-brown' : 'bg-[#E0D2F8] border-purple-300'}`}>
+                          <div className="whitespace-pre-wrap text-gray-800">{String(m.content || '')}</div>
+                          {m.createdAt && (
+                            <div className="text-[10px] text-gray-500 mt-2">
+                              {new Date(m.createdAt).toLocaleString()}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
+		      {/* Quiz Creation Modal */}
+		      {
+		        showQuizModal && (
 	          <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
             <div className="bg-white border-4 border-brand-brown rounded-3xl w-full max-w-5xl max-h-[90vh] overflow-y-auto shadow-comic">
               <div className="p-6 border-b-4 border-brand-brown bg-[#FDEEAD]">
