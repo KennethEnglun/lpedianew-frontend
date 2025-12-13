@@ -83,7 +83,12 @@ const TeacherDashboard: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [myBots, setMyBots] = useState<any[]>([]);
   const [showBotTaskAssignModal, setShowBotTaskAssignModal] = useState(false);
-  const [botTaskForm, setBotTaskForm] = useState<{ botId: string; subject: string; targetClass: string }>({ botId: '', subject: String(Subject.CHINESE), targetClass: '' });
+  const [botTaskForm, setBotTaskForm] = useState<{ botId: string; subject: string; targetClasses: string[]; targetGroups: string[] }>({
+    botId: '',
+    subject: String(Subject.CHINESE),
+    targetClasses: [],
+    targetGroups: []
+  });
   const [botTaskThreadModalOpen, setBotTaskThreadModalOpen] = useState(false);
   const [botTaskThreadModalTitle, setBotTaskThreadModalTitle] = useState('');
   const [botTaskThreadMessages, setBotTaskThreadMessages] = useState<any[]>([]);
@@ -531,8 +536,10 @@ const TeacherDashboard: React.FC = () => {
     setBotTaskForm({
       botId: defaultBotId,
       subject: filterSubject || String(Subject.CHINESE),
-      targetClass: filterClass || ''
+      targetClasses: filterClass ? [filterClass] : [],
+      targetGroups: []
     });
+    loadClassesAndGroups(filterSubject || String(Subject.CHINESE));
     setShowBotTaskAssignModal(true);
   };
 
@@ -540,11 +547,12 @@ const TeacherDashboard: React.FC = () => {
     try {
       if (!botTaskForm.botId) return alert('請選擇 Pedia');
       if (!botTaskForm.subject) return alert('請選擇科目');
-      if (!botTaskForm.targetClass) return alert('請選擇班別');
+      if (botTaskForm.targetClasses.length === 0 && botTaskForm.targetGroups.length === 0) return alert('請選擇班級或分組');
       await authService.createBotTask({
         botId: botTaskForm.botId,
         subject: botTaskForm.subject,
-        targetClass: botTaskForm.targetClass
+        targetClasses: botTaskForm.targetClasses,
+        targetGroups: botTaskForm.targetGroups
       });
       alert('Pedia 任務已派發！');
       setShowBotTaskAssignModal(false);
@@ -1522,21 +1530,32 @@ const TeacherDashboard: React.FC = () => {
                 >
                   學生進度
                 </Button>
-                <Button
-                  fullWidth
-                  className="bg-[#C0E2BE] hover:bg-[#A9D8A7]"
-                  onClick={() => {
-                    openAssignmentManagement();
-                    closeSidebar();
-                  }}
-                >
-                  作業管理
-                </Button>
-                <Button
-                  fullWidth
-                  className="bg-[#F8C5C5] hover:bg-[#F0B5B5] flex items-center justify-center gap-2"
-                  onClick={() => {
-                    setShowDiscussionModal(true);
+	                <Button
+	                  fullWidth
+	                  className="bg-[#C0E2BE] hover:bg-[#A9D8A7]"
+	                  onClick={() => {
+	                    openAssignmentManagement();
+	                    closeSidebar();
+	                  }}
+	                >
+	                  作業管理
+	                </Button>
+	                <Button
+	                  fullWidth
+	                  className="bg-[#D2EFFF] hover:bg-[#BCE0FF] flex items-center justify-center gap-2"
+	                  onClick={() => {
+	                    openBotTaskAssign();
+	                    closeSidebar();
+	                  }}
+	                >
+	                  <Bot className="w-5 h-5" />
+	                  派發Pedia
+	                </Button>
+	                <Button
+	                  fullWidth
+	                  className="bg-[#F8C5C5] hover:bg-[#F0B5B5] flex items-center justify-center gap-2"
+	                  onClick={() => {
+	                    setShowDiscussionModal(true);
                     closeSidebar();
                   }}
                 >
@@ -1615,14 +1634,22 @@ const TeacherDashboard: React.FC = () => {
           >
             學生進度
           </Button>
-          <Button fullWidth className="bg-[#C0E2BE] hover:bg-[#A9D8A7] text-lg" onClick={openAssignmentManagement}>
-            作業管理
-          </Button>
-          <Button
-            fullWidth
-            className="bg-[#F8C5C5] hover:bg-[#F0B5B5] text-lg flex items-center justify-center gap-2"
-            onClick={() => setShowDiscussionModal(true)}
-          >
+	          <Button fullWidth className="bg-[#C0E2BE] hover:bg-[#A9D8A7] text-lg" onClick={openAssignmentManagement}>
+	            作業管理
+	          </Button>
+	          <Button
+	            fullWidth
+	            className="bg-[#D2EFFF] hover:bg-[#BCE0FF] text-lg flex items-center justify-center gap-2"
+	            onClick={openBotTaskAssign}
+	          >
+	            <Bot className="w-5 h-5" />
+	            派發Pedia
+	          </Button>
+	          <Button
+	            fullWidth
+	            className="bg-[#F8C5C5] hover:bg-[#F0B5B5] text-lg flex items-center justify-center gap-2"
+	            onClick={() => setShowDiscussionModal(true)}
+	          >
             <MessageSquare className="w-5 h-5" />
             派發討論串
           </Button>
@@ -2839,19 +2866,11 @@ const TeacherDashboard: React.FC = () => {
                           <Filter className="w-5 h-5 text-gray-600" />
                           <h3 className="font-bold text-gray-700">篩選條件</h3>
                         </div>
-	                        <div className="flex gap-2">
-                            <button
-                              onClick={openBotTaskAssign}
-                              className="px-4 py-2 bg-white text-gray-700 rounded-xl font-bold border-2 border-gray-300 hover:border-brand-brown flex items-center gap-2"
-	                              title="派發自建 Pedia 任務（學生在我的學科中完成對話即算完成）"
-	                            >
-	                              <Bot className="w-4 h-4" />
-	                              派發 Pedia
-	                            </button>
-	                          <button
-	                            onClick={() => {
-	                              setIsSelectMode(!isSelectMode);
-	                              setSelectedAssignments([]);
+		                        <div className="flex gap-2">
+		                          <button
+		                            onClick={() => {
+		                              setIsSelectMode(!isSelectMode);
+		                              setSelectedAssignments([]);
 	                            }}
                             className={`px-4 py-2 rounded-xl font-bold border-2 transition-colors ${isSelectMode
                               ? 'bg-blue-500 text-white border-blue-600'
@@ -3710,13 +3729,13 @@ const TeacherDashboard: React.FC = () => {
         )
 	      }
 
-        {showBotTaskAssignModal && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 z-[60] flex items-center justify-center p-4">
-            <div className="bg-white border-4 border-brand-brown rounded-3xl w-full max-w-2xl shadow-comic overflow-hidden">
-              <div className="p-6 border-b-4 border-brand-brown bg-[#D2EFFF] flex items-center justify-between">
-	                <h2 className="text-2xl font-black text-brand-brown flex items-center gap-2">
-	                  <Bot className="w-6 h-6" />
-	                  派發 Pedia 任務
+	        {showBotTaskAssignModal && (
+	          <div className="fixed inset-0 bg-black bg-opacity-50 z-[60] flex items-center justify-center p-4">
+	            <div className="bg-white border-4 border-brand-brown rounded-3xl w-full max-w-2xl max-h-[90vh] shadow-comic overflow-y-auto">
+	              <div className="p-6 border-b-4 border-brand-brown bg-[#D2EFFF] flex items-center justify-between">
+		                <h2 className="text-2xl font-black text-brand-brown flex items-center gap-2">
+		                  <Bot className="w-6 h-6" />
+		                  派發 Pedia 任務
 	                </h2>
                 <button
                   onClick={() => setShowBotTaskAssignModal(false)}
@@ -3739,33 +3758,86 @@ const TeacherDashboard: React.FC = () => {
                   </select>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm font-bold text-brand-brown mb-2">科目</label>
-                    <select
-                      value={botTaskForm.subject}
-                      onChange={(e) => setBotTaskForm((prev) => ({ ...prev, subject: e.target.value }))}
-                      className="w-full px-4 py-2 border-4 border-brand-brown rounded-2xl bg-white font-bold"
-                    >
-                      {Object.values(Subject).map((s) => (
-                        <option key={s} value={s}>{s}</option>
-                      ))}
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block text-sm font-bold text-brand-brown mb-2">班別</label>
-                    <select
-                      value={botTaskForm.targetClass}
-                      onChange={(e) => setBotTaskForm((prev) => ({ ...prev, targetClass: e.target.value }))}
-                      className="w-full px-4 py-2 border-4 border-brand-brown rounded-2xl bg-white font-bold"
-                    >
-                      <option value="">請選擇班別</option>
-                      {availableClasses.map((c) => (
-                        <option key={c} value={c}>{c}</option>
-                      ))}
-                    </select>
-                  </div>
-                </div>
+	                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+	                  <div>
+	                    <label className="block text-sm font-bold text-brand-brown mb-2">科目</label>
+	                    <select
+	                      value={botTaskForm.subject}
+	                      onChange={(e) => {
+	                        const newSubject = e.target.value as Subject;
+	                        setBotTaskForm((prev) => ({ ...prev, subject: newSubject, targetClasses: [], targetGroups: [] }));
+	                        loadClassesAndGroups(newSubject);
+	                      }}
+	                      className="w-full px-4 py-2 border-4 border-brand-brown rounded-2xl bg-white font-bold"
+	                    >
+	                      {Object.values(Subject).map((s) => (
+	                        <option key={s} value={s}>{s}</option>
+	                      ))}
+	                    </select>
+	                  </div>
+	                  <div className="p-4 bg-gray-50 border-2 border-gray-200 rounded-2xl text-sm text-gray-700 font-bold flex items-center">
+	                    選好科目後，請選擇要派發的班級或分組
+	                  </div>
+	                </div>
+
+	                <div>
+	                  <label className="block text-sm font-bold text-brand-brown mb-2">派發至班級</label>
+	                  <div className="flex flex-wrap gap-2">
+	                    {availableClasses.map((className) => (
+	                      <button
+	                        key={className}
+	                        type="button"
+	                        onClick={() => {
+	                          setBotTaskForm((prev) => ({
+	                            ...prev,
+	                            targetClasses: prev.targetClasses.includes(className)
+	                              ? prev.targetClasses.filter((c) => c !== className)
+	                              : [...prev.targetClasses, className]
+	                          }));
+	                        }}
+	                        className={`px-4 py-2 rounded-2xl border-2 font-bold transition-colors ${botTaskForm.targetClasses.includes(className)
+	                          ? 'bg-[#D2EFFF] border-brand-brown text-brand-brown'
+	                          : 'bg-white border-gray-300 text-gray-600 hover:border-brand-brown'
+	                          }`}
+	                      >
+	                        {className}
+	                      </button>
+	                    ))}
+	                  </div>
+	                </div>
+
+	                {availableGroups.length > 0 && (
+	                  <div>
+	                    <label className="block text-sm font-bold text-brand-brown mb-2">
+	                      選擇分組 ({botTaskForm.subject})
+	                    </label>
+	                    <div className="flex flex-wrap gap-2">
+	                      {availableGroups.map((groupName) => (
+	                        <button
+	                          key={groupName}
+	                          type="button"
+	                          onClick={() => {
+	                            setBotTaskForm((prev) => ({
+	                              ...prev,
+	                              targetGroups: prev.targetGroups.includes(groupName)
+	                                ? prev.targetGroups.filter((g) => g !== groupName)
+	                                : [...prev.targetGroups, groupName]
+	                            }));
+	                          }}
+	                          className={`px-4 py-2 rounded-2xl border-2 font-bold transition-colors ${botTaskForm.targetGroups.includes(groupName)
+	                            ? 'bg-[#E8F4FD] border-blue-500 text-blue-600'
+	                            : 'bg-white border-gray-300 text-gray-600 hover:border-blue-500'
+	                            }`}
+	                        >
+	                          {groupName}
+	                        </button>
+	                      ))}
+	                    </div>
+	                    <p className="text-xs text-gray-500 mt-1">
+	                      選擇分組會精確派發給該分組的學生
+	                    </p>
+	                  </div>
+	                )}
 
                 <div className="p-4 bg-gray-50 border-2 border-gray-200 rounded-2xl text-sm text-gray-700 font-bold">
 	                  學生在「我的學科 → 我的任務」看到此 Pedia 任務，學生只要送出任意一句對話就算完成；你可在作業管理中查看學生對話記錄。

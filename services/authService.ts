@@ -367,8 +367,8 @@ class AuthService {
     await this.handleResponse(response);
   }
 
-  // === BOT 任務（派發自建 BOT）===
-  async createBotTask(payload: { botId: string; subject: string; targetClass: string }): Promise<{ task: any }> {
+  // === Pedia 任務（派發自建 Pedia）===
+  async createBotTask(payload: { botId: string; subject: string; targetClasses?: string[]; targetGroups?: string[]; targetClass?: string }): Promise<{ task: any }> {
     const response = await fetch(`${this.API_BASE}/bot-tasks`, {
       method: 'POST',
       headers: this.getAuthHeaders(),
