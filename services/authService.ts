@@ -621,6 +621,22 @@ class AuthService {
     });
     return this.handleResponse(response);
   }
+
+  async generateMatchingPairs(payload: {
+    subject: string;
+    grade?: '小一' | '小二' | '小三' | '小四' | '小五' | '小六';
+    topic: string;
+    count: number;
+    scopeText?: string;
+    advancedOnly?: boolean;
+  }): Promise<{ pairs: Array<{ question: string; answer: string }> }> {
+    const response = await fetch(`${this.API_BASE}/ai/pairs-generate`, {
+      method: 'POST',
+      headers: this.getAuthHeaders(),
+      body: JSON.stringify(payload)
+    });
+    return this.handleResponse(response);
+  }
 }
 
 export const authService = new AuthService();
