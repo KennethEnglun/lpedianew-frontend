@@ -26,6 +26,24 @@ const escapeHtml = (input: string) =>
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&#39;');
 
+const inlineToHtml = (escaped: string) => {
+  return escaped
+    .replace(/`([^`]+)`/g, (_m, code) => `<code class="bg-gray-200 border border-gray-300 rounded px-1 py-0.5 font-mono text-sm">${code}</code>`)
+    .replace(/\*\*([^*]+)\*\*/g, (_m, t) => `<strong>${t}</strong>`)
+    .replace(/\*([^*]+)\*/g, (_m, t) => `<em>${t}</em>`)
+    .replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g, (_m, text, url) => `<a href="${url}" target="_blank" rel="noreferrer" class="underline text-blue-700">${text}</a>`);
+};
+
+const splitTableRow = (line: string) => {
+  const trimmed = line.trim().replace(/^\|/, '').replace(/\|$/, '');
+  return trimmed.split('|').map((c) => c.trim());
+};
+
+const isTableSep = (line: string) => {
+  // e.g. | --- | :---: | ---: |
+  return /^\s*\|?\s*:?-{3,}:?\s*(\|\s*:?-{3,}:?\s*)+\|?\s*$/.test(line);
+};
+
 const markdownToSafeHtml = (markdown: string) => {
   const raw = String(markdown || '');
   const escaped = escapeHtml(raw);
@@ -40,14 +58,85 @@ const markdownToSafeHtml = (markdown: string) => {
     return `@@CODEBLOCK_${idx}@@`;
   });
 
-  const inline = withBlocks
-    .replace(/`([^`]+)`/g, (_m, code) => `<code class="bg-gray-200 border border-gray-300 rounded px-1 py-0.5 font-mono text-sm">${code}</code>`)
-    .replace(/\*\*([^*]+)\*\*/g, (_m, t) => `<strong>${t}</strong>`)
-    .replace(/\*([^*]+)\*/g, (_m, t) => `<em>${t}</em>`)
-    .replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g, (_m, text, url) => `<a href="${url}" target="_blank" rel="noreferrer" class="underline text-blue-700">${text}</a>`);
+  const lines = withBlocks.split('\n');
+  const out: string[] = [];
+  const paragraphBuf: string[] = [];
 
-  const withBreaks = inline.replace(/\n/g, '<br/>');
-  return withBreaks.replace(/@@CODEBLOCK_(\d+)@@/g, (_m, n) => codeBlocks[Number(n)] || '');
+  const flushParagraph = (buf: string[]) => {
+    if (buf.length === 0) return;
+    const html = inlineToHtml(buf.join('<br/>'));
+    out.push(`<p class="leading-relaxed">${html}</p>`);
+    buf.length = 0;
+  };
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i] ?? '';
+
+    // blank line
+    if (!line.trim()) {
+      // paragraph boundary
+      flushParagraph(paragraphBuf);
+      continue;
+    }
+
+    // headings
+    const headingMatch = line.match(/^(#{1,6})\s+(.*)$/);
+    if (headingMatch) {
+      flushParagraph(paragraphBuf);
+      const level = headingMatch[1].length;
+      const text = inlineToHtml(headingMatch[2].trim());
+      const sizes = ['text-2xl', 'text-xl', 'text-lg', 'text-base', 'text-sm', 'text-sm'];
+      out.push(`<h${level} class="${sizes[level - 1] || 'text-base'} font-black text-gray-900 mt-2">${text}</h${level}>`);
+      continue;
+    }
+
+    // lists
+    const listMatch = line.match(/^\s*[-*]\s+(.*)$/);
+    if (listMatch) {
+      flushParagraph(paragraphBuf);
+      const items: string[] = [];
+      let j = i;
+      for (; j < lines.length; j++) {
+        const l = lines[j] ?? '';
+        const m = l.match(/^\s*[-*]\s+(.*)$/);
+        if (!m) break;
+        items.push(`<li class="ml-5 list-disc">${inlineToHtml(m[1].trim())}</li>`);
+      }
+      out.push(`<ul class="space-y-1">${items.join('')}</ul>`);
+      i = j - 1;
+      continue;
+    }
+
+    // tables
+    const next = lines[i + 1] ?? '';
+    if (line.includes('|') && isTableSep(next)) {
+      flushParagraph(paragraphBuf);
+      const headerCells = splitTableRow(line).map((c) => `<th class="text-left px-3 py-2 border border-gray-300 bg-gray-100 font-black">${inlineToHtml(c)}</th>`);
+
+      const bodyRows: string[] = [];
+      let j = i + 2;
+      for (; j < lines.length; j++) {
+        const rowLine = lines[j] ?? '';
+        if (!rowLine.trim()) break;
+        if (!rowLine.includes('|')) break;
+        const cells = splitTableRow(rowLine).map((c) => `<td class="align-top px-3 py-2 border border-gray-300">${inlineToHtml(c)}</td>`);
+        bodyRows.push(`<tr>${cells.join('')}</tr>`);
+      }
+
+      out.push(
+        `<div class="overflow-x-auto"><table class="w-full border-collapse text-sm"><thead><tr>${headerCells.join('')}</tr></thead><tbody>${bodyRows.join('')}</tbody></table></div>`
+      );
+      i = j - 1;
+      continue;
+    }
+
+    // default paragraph (keep escaped line; render inline later)
+    paragraphBuf.push(line);
+  }
+
+  flushParagraph(paragraphBuf);
+  const joined = out.join('');
+  return joined.replace(/@@CODEBLOCK_(\d+)@@/g, (_m, n) => codeBlocks[Number(n)] || '');
 };
 
 const AiChatModal: React.FC<{
