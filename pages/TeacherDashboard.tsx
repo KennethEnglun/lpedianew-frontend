@@ -2958,13 +2958,11 @@ const TeacherDashboard: React.FC = () => {
                                   </div>
                                   <div className="flex gap-2 ml-4">
 	                                    <button
-	                                      onClick={() => { if (!isShared) viewAssignmentDetails(assignment); }}
-	                                      disabled={isShared}
-	                                      title={isShared ? '其他教師任務：不可查看結果/回應' : undefined}
-	                                      className={`flex items-center gap-1 px-4 py-2 rounded-xl font-bold ${isShared ? 'bg-gray-100 text-gray-400 cursor-not-allowed' : 'bg-blue-100 text-blue-700 hover:bg-blue-200'}`}
+	                                      onClick={() => viewAssignmentDetails(assignment)}
+	                                      className="flex items-center gap-1 px-4 py-2 bg-blue-100 text-blue-700 rounded-xl hover:bg-blue-200 font-bold"
 	                                    >
 	                                      <Eye className="w-4 h-4" />
-	                                      {isShared ? '不可查看' : (isQuiz || isGame) ? '查看結果' : '查看回應'}
+	                                      {(isQuiz || isGame) ? '查看結果' : '查看回應'}
 	                                    </button>
                                     {!isSelectMode && (
                                       <button
@@ -3083,13 +3081,11 @@ const TeacherDashboard: React.FC = () => {
                                       </div>
                                       <div className="flex gap-2 ml-4">
                                         <button
-                                          onClick={() => { if (!isShared) viewAssignmentDetails(assignment); }}
-                                          disabled={isShared}
-                                          title={isShared ? '其他教師任務：不可查看結果/回應' : undefined}
-                                          className={`flex items-center gap-1 px-4 py-2 rounded-xl font-bold ${isShared ? 'bg-gray-100 text-gray-400 cursor-not-allowed' : 'bg-blue-100 text-blue-700 hover:bg-blue-200'}`}
+                                          onClick={() => viewAssignmentDetails(assignment)}
+                                          className="flex items-center gap-1 px-4 py-2 bg-blue-100 text-blue-700 rounded-xl hover:bg-blue-200 font-bold"
                                         >
                                           <Eye className="w-4 h-4" />
-                                          {isShared ? '不可查看' : (isQuiz || isGame) ? '查看結果' : '查看回應'}
+                                          {(isQuiz || isGame) ? '查看結果' : '查看回應'}
                                         </button>
                                         {manuallyHidden && !isSelectMode && (
                                           <button
@@ -3450,13 +3446,15 @@ const TeacherDashboard: React.FC = () => {
                                   </p>
                                 )}
                               </div>
-                              <button
-                                onClick={() => handleDeleteResponse(response.id)}
-                                className="ml-4 p-2 bg-red-100 text-red-700 rounded-lg hover:bg-red-200"
-                                title={selectedAssignment?.type === 'quiz' ? '刪除此測驗結果' : '刪除此回應'}
-                              >
-                                <Trash className="w-4 h-4" />
-                              </button>
+                              {selectedAssignment?.type === 'assignment' && !(selectedAssignment as any).isShared && (
+                                <button
+                                  onClick={() => handleDeleteResponse(response.id)}
+                                  className="ml-4 p-2 bg-red-100 text-red-700 rounded-lg hover:bg-red-200"
+                                  title="刪除此回應"
+                                >
+                                  <Trash className="w-4 h-4" />
+                                </button>
+                              )}
                             </div>
                           </div>
                         ))
@@ -3826,7 +3824,7 @@ const TeacherDashboard: React.FC = () => {
 		              {settingsTab === 'teacher' ? (
 		                <>
 		                  <div className="bg-blue-50 border-2 border-blue-200 rounded-2xl p-4 text-sm text-gray-700">
-		                    設定後，作業管理會顯示「同科同級其他教師」派發的任務（只顯示基本資料，不可查看結果/回應或刪除）。
+		                    設定後，作業管理會顯示「同科同級其他教師」派發的任務（可查看學生回應/結果，但不可刪除任務）。
 		                  </div>
 
 		                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
