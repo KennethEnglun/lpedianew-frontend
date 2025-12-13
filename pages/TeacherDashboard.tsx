@@ -527,21 +527,36 @@ const TeacherDashboard: React.FC = () => {
     }
   };
 
-  const openBotTaskAssign = () => {
-    if (myBots.length === 0) {
-      alert('請先在「AI對話 → Pedia」建立一個 Pedia，才可以派發。');
-      return;
-    }
-    const defaultBotId = String(myBots[0]?.id || '');
-    setBotTaskForm({
-      botId: defaultBotId,
-      subject: filterSubject || String(Subject.CHINESE),
-      targetClasses: filterClass ? [filterClass] : [],
-      targetGroups: []
-    });
-    loadClassesAndGroups(filterSubject || String(Subject.CHINESE));
-    setShowBotTaskAssignModal(true);
-  };
+	  const openBotTaskAssign = async () => {
+	    let bots = myBots;
+	    if (bots.length === 0) {
+	      try {
+	        const botsResp = await authService.getMyChatBots();
+	        bots = Array.isArray(botsResp.bots) ? botsResp.bots : [];
+	        setMyBots(bots);
+	      } catch (err) {
+	        console.error('Failed to load bot list', err);
+	        bots = [];
+	        setMyBots([]);
+	      }
+	    }
+
+	    if (bots.length === 0) {
+	      alert('請先在「AI對話 → Pedia」建立一個 Pedia，才可以派發。');
+	      return;
+	    }
+
+	    const defaultBotId = String(bots[0]?.id || '');
+	    const defaultSubject = filterSubject || String(Subject.CHINESE);
+	    setBotTaskForm({
+	      botId: defaultBotId,
+	      subject: defaultSubject,
+	      targetClasses: filterClass ? [filterClass] : [],
+	      targetGroups: []
+	    });
+	    loadClassesAndGroups(defaultSubject);
+	    setShowBotTaskAssignModal(true);
+	  };
 
   const submitBotTaskAssign = async () => {
     try {
