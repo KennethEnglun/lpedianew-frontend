@@ -628,7 +628,7 @@ const StudentDashboard: React.FC = () => {
 
       const botTasks: Task[] = (botTaskResponse.tasks || []).map((t: any) => ({
         id: String(t.id),
-        title: String(t.botName || t.title || 'BOT 任務'),
+        title: String(t.botName || t.title || 'Pedia 任務'),
         type: 'ai-bot' as const,
         subject: t.subject,
         teacherName: t.teacherName || '教師',

@@ -137,8 +137,8 @@ export default function BotTaskChatModal(props: { open: boolean; taskId: string 
   const [copiedMessageId, setCopiedMessageId] = useState<string | null>(null);
 
   const title = useMemo(() => {
-    if (!taskInfo) return 'BOT 任務';
-    const botName = String(taskInfo.botName || 'BOT');
+    if (!taskInfo) return 'Pedia 任務';
+    const botName = String(taskInfo.botName || 'Pedia');
     const subject = String(taskInfo.subject || '');
     return subject ? `${botName}（${subject}）` : botName;
   }, [taskInfo]);
@@ -283,7 +283,7 @@ export default function BotTaskChatModal(props: { open: boolean; taskId: string 
               <Bot className="w-6 h-6 text-brand-brown" />
             </div>
             <div>
-              <div className="text-2xl font-black text-brand-brown">BOT 任務</div>
+              <div className="text-2xl font-black text-brand-brown">Pedia 任務</div>
               <div className="text-xs text-gray-600 font-bold">{title}</div>
             </div>
           </div>
@@ -371,4 +371,3 @@ export default function BotTaskChatModal(props: { open: boolean; taskId: string 
     </div>
   );
 }
-
