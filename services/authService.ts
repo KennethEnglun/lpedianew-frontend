@@ -228,7 +228,7 @@ class AuthService {
 
   // === AI 對話（通用 Bot）===
   async sendChatMessage(payload: {
-    subject: string;
+    subject?: string;
     threadId?: string | null;
     message: string;
   }): Promise<{
@@ -264,12 +264,13 @@ class AuthService {
     return this.handleResponse(response);
   }
 
-  async getTeacherChatThreads(params: { subject: string; class?: string; search?: string }): Promise<{ threads: any[] }> {
+  async getTeacherChatThreads(params: { subject?: string; class?: string; search?: string }): Promise<{ threads: any[] }> {
     const searchParams = new URLSearchParams();
-    searchParams.append('subject', params.subject);
+    if (params.subject) searchParams.append('subject', params.subject);
     if (params.class) searchParams.append('class', params.class);
     if (params.search) searchParams.append('search', params.search);
-    const response = await fetch(`${this.API_BASE}/chats/teacher/threads?${searchParams.toString()}`, {
+    const query = searchParams.toString() ? `?${searchParams.toString()}` : '';
+    const response = await fetch(`${this.API_BASE}/chats/teacher/threads${query}`, {
       headers: this.getAuthHeaders()
     });
     return this.handleResponse(response);

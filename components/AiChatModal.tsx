@@ -33,7 +33,7 @@ const AiChatModal: React.FC<{
   }, [user?.profile]);
 
   const [tab, setTab] = useState<'my' | 'students'>('my');
-  const [subject, setSubject] = useState<string>(defaultSubject || String(Subject.CHINESE));
+  const [subject, setSubject] = useState<string>(defaultSubject || String(Subject.CHINESE)); // student: active subject; teacher: optional filter for students tab ('' = all)
 
   // My chat
   const [myThreadId, setMyThreadId] = useState<string | null>(null);
@@ -60,9 +60,14 @@ const AiChatModal: React.FC<{
 
   useEffect(() => {
     if (!open) return;
-    const initial = defaultSubject || (isTeacher ? teacherSubjects[0] : String(Subject.CHINESE));
-    setSubject(String(initial || Subject.CHINESE));
-    setTab(isTeacher ? 'students' : 'my');
+    if (isTeacher) {
+      setSubject(''); // teacher: no top subject selector; default show all subjects in student threads
+      setTab('students');
+    } else {
+      const initial = defaultSubject || String(Subject.CHINESE);
+      setSubject(String(initial || Subject.CHINESE));
+      setTab('my');
+    }
   }, [defaultSubject, isTeacher, open, teacherSubjects]);
 
   const loadMyChat = async (nextSubject: string) => {
@@ -71,7 +76,9 @@ const AiChatModal: React.FC<{
       setMyError('');
       setMyThreadId(null);
       setMyMessages([]);
-      const threads = await authService.getMyChatThreads({ subject: nextSubject });
+      const threads = isTeacher
+        ? await authService.getMyChatThreads()
+        : await authService.getMyChatThreads({ subject: nextSubject });
       const t = Array.isArray(threads.threads) ? threads.threads[0] : null;
       if (!t?.id) return;
       setMyThreadId(t.id);
@@ -101,7 +108,7 @@ const AiChatModal: React.FC<{
       setSelectedThreadId(null);
       setSelectedStudentInfo(null);
       setStudentMessages([]);
-      const data = await authService.getTeacherChatThreads({ subject: nextSubject, search: studentSearch || undefined });
+      const data = await authService.getTeacherChatThreads({ subject: nextSubject || undefined, search: studentSearch || undefined });
       setStudentThreads(Array.isArray(data.threads) ? data.threads : []);
     } catch (error) {
       const message = error instanceof Error ? error.message : '載入失敗';
@@ -160,7 +167,7 @@ const AiChatModal: React.FC<{
       };
       setMyMessages((prev) => [...prev, tempUser]);
 
-      const res = await authService.sendChatMessage({ subject, threadId: myThreadId, message: text });
+      const res = await authService.sendChatMessage({ subject: isTeacher ? undefined : subject, threadId: myThreadId, message: text });
       setMyThreadId(res.threadId);
       if (res.assistantMessage) {
         const assistant: ChatMessage = {
@@ -206,18 +213,20 @@ const AiChatModal: React.FC<{
         </div>
 
         <div className="p-4 border-b-2 border-gray-200 bg-gray-50 flex flex-col md:flex-row items-start md:items-center gap-3">
-          <div className="w-full md:w-56">
-            <label className="block text-xs font-black text-gray-600 mb-1">科目</label>
-            <select
-              value={subject}
-              onChange={(e) => setSubject(e.target.value)}
-              className="w-full px-3 py-2 border-2 border-gray-300 rounded-xl bg-white"
-            >
-              {(isTeacher ? teacherSubjects : subjectOptions).map((s) => (
-                <option key={s} value={s}>{s}</option>
-              ))}
-            </select>
-          </div>
+          {!isTeacher && (
+            <div className="w-full md:w-56">
+              <label className="block text-xs font-black text-gray-600 mb-1">科目</label>
+              <select
+                value={subject}
+                onChange={(e) => setSubject(e.target.value)}
+                className="w-full px-3 py-2 border-2 border-gray-300 rounded-xl bg-white"
+              >
+                {subjectOptions.map((s) => (
+                  <option key={s} value={s}>{s}</option>
+                ))}
+              </select>
+            </div>
+          )}
 
           {isTeacher && (
             <div className="flex gap-2">
@@ -267,6 +276,20 @@ const AiChatModal: React.FC<{
                 </button>
               </div>
 
+              <div className="mb-3">
+                <label className="block text-xs font-black text-gray-600 mb-1">科目（可選）</label>
+                <select
+                  value={subject}
+                  onChange={(e) => setSubject(e.target.value)}
+                  className="w-full px-3 py-2 border-2 border-gray-300 rounded-xl bg-white"
+                >
+                  <option value="">全部</option>
+                  {teacherSubjects.map((s) => (
+                    <option key={s} value={s}>{s}</option>
+                  ))}
+                </select>
+              </div>
+
               {studentError && (
                 <div className="mb-3 text-sm font-bold text-red-700 bg-red-50 border-2 border-red-200 rounded-2xl p-3">
                   {studentError}
@@ -288,6 +311,9 @@ const AiChatModal: React.FC<{
                     >
                       <div className="font-black text-gray-800">{t.student?.name || '未知學生'}</div>
                       <div className="text-xs text-gray-600 font-bold">{t.student?.class || ''} • {t.student?.username || ''}</div>
+                      <div className="text-[11px] text-gray-600 mt-1 font-bold">
+                        科目：{t.subject || '—'}
+                      </div>
                       <div className="text-[11px] text-gray-500 mt-1">
                         {t.lastMessageAt ? new Date(t.lastMessageAt).toLocaleString() : ''}
                       </div>
@@ -406,4 +432,3 @@ const AiChatModal: React.FC<{
 };
 
 export default AiChatModal;
-
