@@ -158,6 +158,7 @@ const AiChatModal: React.FC<{
 
   // My chat
   const [mySidebarView, setMySidebarView] = useState<'chat' | 'bot'>('chat');
+  const [myChatBotId, setMyChatBotId] = useState<string>('global'); // teacher-only: 'global' = 自由聊天
   const [myBots, setMyBots] = useState<any[]>([]);
   const [myThreadId, setMyThreadId] = useState<string | null>(null);
   const [myThreads, setMyThreads] = useState<any[]>([]);
@@ -193,6 +194,13 @@ const AiChatModal: React.FC<{
   const [studentMessages, setStudentMessages] = useState<ChatMessage[]>([]);
   const [studentError, setStudentError] = useState('');
 
+  const currentChatBot = useMemo(() => {
+    if (myChatBotId === 'global') return { id: 'global', name: '自由聊天' };
+    const found = myBots.find((b: any) => String(b?.id) === String(myChatBotId));
+    if (found) return { id: String(found.id), name: String(found.name || 'BOT') };
+    return { id: myChatBotId, name: 'BOT' };
+  }, [myBots, myChatBotId]);
+
   const endRef = useRef<HTMLDivElement | null>(null);
   useEffect(() => {
     if (!open) return;
@@ -205,15 +213,17 @@ const AiChatModal: React.FC<{
       setSubject(''); // teacher: no top subject selector; default show all subjects in student threads
       setTab('students');
       setMySidebarView('chat');
+      setMyChatBotId('global');
     } else {
       const initial = defaultSubject || String(Subject.CHINESE);
       setSubject(String(initial || Subject.CHINESE));
       setTab('my');
       setMySidebarView('chat');
+      setMyChatBotId('global');
     }
   }, [defaultSubject, isTeacher, open, teacherSubjects]);
 
-  const loadMyChat = async (nextSubject: string) => {
+  const loadMyChat = async (nextSubject: string, nextBotId: string) => {
     try {
       setMyLoading(true);
       setMyError('');
@@ -233,7 +243,7 @@ const AiChatModal: React.FC<{
       }
 
       const threadsResp = isTeacher
-        ? await authService.getMyChatThreads()
+        ? await authService.getMyChatThreads(nextBotId === 'global' ? undefined : { botId: nextBotId })
         : await authService.getMyChatThreads({ subject: nextSubject });
       const threads = Array.isArray(threadsResp.threads) ? threadsResp.threads : [];
       setMyThreads(threads);
@@ -290,7 +300,10 @@ const AiChatModal: React.FC<{
       setMyLoading(true);
       setMyError('');
       setMyMessages([]);
-      const resp = await authService.createMyChatThread({ subject: isTeacher ? undefined : subject });
+      const resp = await authService.createMyChatThread({
+        subject: isTeacher ? undefined : subject,
+        ...(isTeacher && myChatBotId !== 'global' ? { botId: myChatBotId } : null)
+      });
       const thread = resp?.thread;
       if (thread?.id) {
         const nextId = String(thread.id);
@@ -326,10 +339,10 @@ const AiChatModal: React.FC<{
 
   useEffect(() => {
     if (!open) return;
-    if (tab === 'my') loadMyChat(subject);
+    if (tab === 'my') loadMyChat(subject, myChatBotId);
     else loadTeacherThreads(subject);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, subject, tab]);
+  }, [open, subject, tab, myChatBotId]);
 
   const openTeacherThread = async (threadId: string) => {
     try {
@@ -493,11 +506,21 @@ const AiChatModal: React.FC<{
       ]));
 
       const streamResp = await authService.sendChatMessageStream(
-        { subject: isTeacher ? undefined : subject, threadId: myThreadId, message: text },
+        {
+          subject: isTeacher ? undefined : subject,
+          threadId: myThreadId,
+          ...(isTeacher && myChatBotId !== 'global' ? { botId: myChatBotId } : null),
+          message: text
+        },
         { signal: abortRef.current?.signal }
       );
       if (!streamResp.ok || !streamResp.body) {
-        const fallback = await authService.sendChatMessage({ subject: isTeacher ? undefined : subject, threadId: myThreadId, message: text });
+        const fallback = await authService.sendChatMessage({
+          subject: isTeacher ? undefined : subject,
+          threadId: myThreadId,
+          ...(isTeacher && myChatBotId !== 'global' ? { botId: myChatBotId } : null),
+          message: text
+        });
         setMyThreadId(fallback.threadId);
         const content = String(fallback.assistantMessage?.content || '');
         setMyMessages((prev) => prev.map((m) => (m.id === tempAssistantId ? { ...m, content } : m)));
@@ -545,7 +568,7 @@ const AiChatModal: React.FC<{
       // Refresh thread list to pick up title + ordering
       try {
         const threadsResp = isTeacher
-          ? await authService.getMyChatThreads()
+          ? await authService.getMyChatThreads(myChatBotId === 'global' ? undefined : { botId: myChatBotId })
           : await authService.getMyChatThreads({ subject });
         const threads = Array.isArray(threadsResp.threads) ? threadsResp.threads : [];
         setMyThreads(threads);
@@ -766,17 +789,27 @@ const AiChatModal: React.FC<{
                 </>
               )}
 
-              <div className="space-y-2 mb-4">
-                <button
-                  type="button"
-                  onClick={() => setMySidebarView('chat')}
-                  className={`w-full px-3 py-2 rounded-2xl border-2 font-black text-left ${mySidebarView === 'chat'
-                    ? 'bg-[#FDEEAD] border-brand-brown text-brand-brown'
-                    : 'bg-white border-gray-200 text-gray-700 hover:border-brand-brown'
-                    }`}
-                >
-                  自由聊天
-                </button>
+	              <div className="space-y-2 mb-4">
+	                <button
+	                  type="button"
+	                  onClick={() => {
+	                    setMyChatBotId('global');
+	                    setMyThreadId(null);
+	                    setMyMessages([]);
+	                    setMyThreadSearch('');
+	                    setSelectedFolderId('all');
+	                    setMySidebarView('chat');
+	                  }}
+	                  className={`w-full px-3 py-2 rounded-2xl border-2 font-black text-left ${mySidebarView === 'chat'
+	                    ? 'bg-[#FDEEAD] border-brand-brown text-brand-brown'
+	                    : 'bg-white border-gray-200 text-gray-700 hover:border-brand-brown'
+	                    }`}
+	                >
+	                  自由聊天
+	                  {isTeacher && myChatBotId !== 'global' && (
+	                    <span className="ml-2 text-xs font-black text-gray-500">（使用：{currentChatBot.name}）</span>
+	                  )}
+	                </button>
                 <div className="px-3 py-2 rounded-2xl bg-white border-2 border-gray-200 text-gray-400 font-black">語音（開發中）</div>
                 <div className="px-3 py-2 rounded-2xl bg-white border-2 border-gray-200 text-gray-400 font-black">Imagine（開發中）</div>
                 {isTeacher ? (
@@ -852,16 +885,26 @@ const AiChatModal: React.FC<{
                         tabIndex={0}
                         onClick={() => {
                           if (editingBotId === String(b.id)) return;
-                          startEditBot(b);
+                          setMyChatBotId(String(b.id));
+                          setMyThreadId(null);
+                          setMyMessages([]);
+                          setMyThreadSearch('');
+                          setSelectedFolderId('all');
+                          setMySidebarView('chat');
                         }}
                         onKeyDown={(e) => {
                           if (editingBotId === String(b.id)) return;
                           if (e.key === 'Enter' || e.key === ' ') {
                             e.preventDefault();
-                            startEditBot(b);
+                            setMyChatBotId(String(b.id));
+                            setMyThreadId(null);
+                            setMyMessages([]);
+                            setMyThreadSearch('');
+                            setSelectedFolderId('all');
+                            setMySidebarView('chat');
                           }
                         }}
-                        aria-label={`編輯 BOT：${String(b?.name || '')}`}
+                        aria-label={`使用 BOT 聊天：${String(b?.name || '')}`}
                       >
                         <div className="flex items-start gap-2">
                           <div className="flex-1 flex items-start gap-2 text-left font-black text-gray-800">
@@ -908,7 +951,7 @@ const AiChatModal: React.FC<{
                             <>
                               <button
                                 type="button"
-                                onClick={() => startEditBot(b)}
+                                onClick={(e) => { e.stopPropagation(); startEditBot(b); }}
                                 className="opacity-100 md:opacity-0 md:group-hover:opacity-100 p-1 rounded hover:bg-gray-100"
                                 title="編輯"
                               >
@@ -916,7 +959,7 @@ const AiChatModal: React.FC<{
                               </button>
                               <button
                                 type="button"
-                                onClick={() => removeBot(String(b.id))}
+                                onClick={(e) => { e.stopPropagation(); removeBot(String(b.id)); }}
                                 className="opacity-100 md:opacity-0 md:group-hover:opacity-100 p-1 rounded hover:bg-gray-100"
                                 title="刪除"
                               >
