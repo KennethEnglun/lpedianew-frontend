@@ -845,7 +845,24 @@ const AiChatModal: React.FC<{
 
                   <div className="space-y-2">
                     {myBots.map((b: any) => (
-                      <div key={b.id} className="w-full px-3 py-2 rounded-2xl border-2 bg-white border-gray-200 group">
+                      <div
+                        key={b.id}
+                        className={`w-full px-3 py-2 rounded-2xl border-2 bg-white border-gray-200 group ${editingBotId === String(b.id) ? '' : 'cursor-pointer hover:border-brand-brown'}`}
+                        role="button"
+                        tabIndex={0}
+                        onClick={() => {
+                          if (editingBotId === String(b.id)) return;
+                          startEditBot(b);
+                        }}
+                        onKeyDown={(e) => {
+                          if (editingBotId === String(b.id)) return;
+                          if (e.key === 'Enter' || e.key === ' ') {
+                            e.preventDefault();
+                            startEditBot(b);
+                          }
+                        }}
+                        aria-label={`編輯 BOT：${String(b?.name || '')}`}
+                      >
                         <div className="flex items-start gap-2">
                           <div className="flex-1 flex items-start gap-2 text-left font-black text-gray-800">
                             <Bot className="w-4 h-4 mt-0.5" />
@@ -854,26 +871,28 @@ const AiChatModal: React.FC<{
                                 <input
                                   value={editingBotName}
                                   onChange={(e) => setEditingBotName(e.target.value)}
+                                  onClick={(e) => e.stopPropagation()}
                                   className="w-full px-2 py-1 border border-gray-300 rounded"
                                   placeholder="BOT 名稱"
                                 />
                                 <textarea
                                   value={editingBotPrompt}
                                   onChange={(e) => setEditingBotPrompt(e.target.value)}
+                                  onClick={(e) => e.stopPropagation()}
                                   className="w-full px-2 py-1 border border-gray-300 rounded min-h-[90px]"
                                   placeholder="BOT 指令（可選）"
                                 />
                                 <div className="flex gap-2">
                                   <button
                                     type="button"
-                                    onClick={() => saveBot(String(b.id))}
+                                    onClick={(e) => { e.stopPropagation(); saveBot(String(b.id)); }}
                                     className="flex-1 px-2 py-1 rounded-lg border border-brand-brown bg-[#FDEEAD] text-brand-brown font-black text-xs"
                                   >
                                     儲存
                                   </button>
                                   <button
                                     type="button"
-                                    onClick={() => { setEditingBotId(null); setEditingBotName(''); setEditingBotPrompt(''); }}
+                                    onClick={(e) => { e.stopPropagation(); setEditingBotId(null); setEditingBotName(''); setEditingBotPrompt(''); }}
                                     className="px-2 py-1 rounded-lg border border-gray-300 bg-white text-gray-700 font-black text-xs"
                                   >
                                     取消
@@ -890,7 +909,7 @@ const AiChatModal: React.FC<{
                               <button
                                 type="button"
                                 onClick={() => startEditBot(b)}
-                                className="opacity-0 group-hover:opacity-100 p-1 rounded hover:bg-gray-100"
+                                className="opacity-100 md:opacity-0 md:group-hover:opacity-100 p-1 rounded hover:bg-gray-100"
                                 title="編輯"
                               >
                                 <Pencil className="w-4 h-4 text-gray-700" />
@@ -898,7 +917,7 @@ const AiChatModal: React.FC<{
                               <button
                                 type="button"
                                 onClick={() => removeBot(String(b.id))}
-                                className="opacity-0 group-hover:opacity-100 p-1 rounded hover:bg-gray-100"
+                                className="opacity-100 md:opacity-0 md:group-hover:opacity-100 p-1 rounded hover:bg-gray-100"
                                 title="刪除"
                               >
                                 <Trash2 className="w-4 h-4 text-red-600" />
