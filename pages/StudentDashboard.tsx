@@ -580,10 +580,11 @@ const StudentDashboard: React.FC = () => {
         authService.getStudentGames()
       ]);
 
-      setDiscussions(discussionResponse.discussions || []);
+      const discussionList = Array.isArray(discussionResponse.discussions) ? discussionResponse.discussions : [];
+      setDiscussions(discussionList);
 
       // 轉換討論串為任務格式
-      const discussionTasks: Task[] = discussionResponse.discussions.map((discussion: Discussion) => ({
+      const discussionTasks: Task[] = discussionList.map((discussion: Discussion) => ({
         id: discussion.id,
         title: discussion.title,
         type: 'discussion' as const,
@@ -625,7 +626,7 @@ const StudentDashboard: React.FC = () => {
       setLastRefresh(new Date());
 
       // 檢查每個討論串的回應狀態
-      discussionResponse.discussions.forEach((discussion: Discussion) => {
+      discussionList.forEach((discussion: Discussion) => {
         checkResponseStatus(discussion.id);
       });
 
@@ -651,7 +652,7 @@ const StudentDashboard: React.FC = () => {
       const result = await authService.getAllResponsesForStudents(discussionId);
       setAllResponses(prev => ({
         ...prev,
-        [discussionId]: result.responses
+        [discussionId]: Array.isArray(result.responses) ? result.responses : []
       }));
     } catch (error) {
       console.error('載入所有回應失敗:', error);
@@ -864,9 +865,44 @@ const StudentDashboard: React.FC = () => {
     }
   };
 
+  type ContentBlock = { type: string; value: string };
+
+  const normalizeContentBlocks = (input: any): ContentBlock[] => {
+    if (Array.isArray(input)) {
+      return input
+        .map((raw) => {
+          if (!raw || typeof raw !== 'object') return null;
+          const type = typeof (raw as any).type === 'string' ? (raw as any).type : String((raw as any).type ?? 'text');
+          const value = typeof (raw as any).value === 'string' ? (raw as any).value : String((raw as any).value ?? '');
+          return { type, value };
+        })
+        .filter(Boolean) as ContentBlock[];
+    }
+
+    if (typeof input === 'string') {
+      const looksLikeHtml = /<\/?[a-z][\s\S]*>/i.test(input);
+      return [{ type: looksLikeHtml ? 'html' : 'text', value: input }];
+    }
+
+    if (input && typeof input === 'object') {
+      if ('type' in input && 'value' in input) {
+        const type = typeof (input as any).type === 'string' ? (input as any).type : String((input as any).type ?? 'text');
+        const value = typeof (input as any).value === 'string' ? (input as any).value : String((input as any).value ?? '');
+        return [{ type, value }];
+      }
+    }
+
+    return [];
+  };
+
   // 渲染討論串內容
-  const renderDiscussionContent = (content: { type: string; value: string }[]) => {
-    return content.map((block, index) => (
+  const renderDiscussionContent = (content: any) => {
+    const blocks = normalizeContentBlocks(content);
+    if (blocks.length === 0) {
+      return <div className="text-gray-500 font-bold">（無內容）</div>;
+    }
+
+    return blocks.map((block, index) => (
       <div key={index} className="mb-4">
         {block.type === 'text' && (
           <div className="prose prose-brand-brown max-w-none">
@@ -1387,60 +1423,70 @@ const StudentDashboard: React.FC = () => {
                 <h3 className="text-xl font-bold text-brand-brown mb-4">所有回應</h3>
 
                 {/* 顯示所有回應 */}
-                {allResponses[selectedDiscussion.id] && allResponses[selectedDiscussion.id].length > 0 ? (
-                  <div className="space-y-4 mb-6">
-                    {allResponses[selectedDiscussion.id].map((response: any, index: number) => {
-                      const isCurrentUser = response.studentId === user?.id;
-                      return (
-                        <div
-                          key={response.id || index}
-                          className={`border-2 rounded-xl p-4 ${isCurrentUser
-                            ? 'bg-blue-50 border-blue-300'
-                            : 'bg-gray-50 border-gray-300'
-                            }`}
-                        >
-                          <div className="flex items-center gap-2 mb-3">
-                            <div className={`w-6 h-6 rounded-full flex items-center justify-center ${isCurrentUser
-                              ? 'bg-blue-500'
-                              : 'bg-gray-500'
-                              }`}>
-                              <span className="text-white text-sm font-bold">
-                                {isCurrentUser ? '你' : response.studentName?.charAt(0) || '?'}
-                              </span>
-                            </div>
-                            <span className={`font-bold ${isCurrentUser
-                              ? 'text-blue-700'
-                              : 'text-gray-700'
-                              }`}>
-                              {isCurrentUser ? '你的回應' : `${response.studentName || '未知學生'} 的回應`}
-                            </span>
-                            <span className="text-sm text-gray-500">
-                              {new Date(response.createdAt).toLocaleString()}
-                            </span>
-                            {response.studentClass && (
-                              <span className="text-sm text-gray-400">
-                                ({response.studentClass})
-                              </span>
-                            )}
-                          </div>
+                {(() => {
+                  const responseList = Array.isArray(allResponses[selectedDiscussion.id])
+                    ? allResponses[selectedDiscussion.id]
+                    : [];
+
+                  if (responseList.length === 0) {
+                    return (
+                      <div className="text-gray-500 text-center py-8 mb-6">
+                        還沒有任何回應，成為第一個回應的學生吧！
+                      </div>
+                    );
+                  }
+
+                  return (
+                    <div className="space-y-4 mb-6">
+                      {responseList.map((response: any, index: number) => {
+                        const isCurrentUser = response.studentId === user?.id;
+                        return (
                           <div
-                            className="bg-white border border-gray-200 rounded-lg p-4 min-h-16"
-                            dangerouslySetInnerHTML={{ __html: sanitizeHtml(response.content || '載入中...') }}
-                          />
-                        </div>
-                      );
-                    })}
-                  </div>
-                ) : (
-                  <div className="text-gray-500 text-center py-8 mb-6">
-                    還沒有任何回應，成為第一個回應的學生吧！
-                  </div>
-                )}
+                            key={response.id || index}
+                            className={`border-2 rounded-xl p-4 ${isCurrentUser
+                              ? 'bg-blue-50 border-blue-300'
+                              : 'bg-gray-50 border-gray-300'
+                              }`}
+                          >
+                            <div className="flex items-center gap-2 mb-3">
+                              <div className={`w-6 h-6 rounded-full flex items-center justify-center ${isCurrentUser
+                                ? 'bg-blue-500'
+                                : 'bg-gray-500'
+                                }`}>
+                                <span className="text-white text-sm font-bold">
+                                  {isCurrentUser ? '你' : response.studentName?.charAt(0) || '?'}
+                                </span>
+                              </div>
+                              <span className={`font-bold ${isCurrentUser
+                                ? 'text-blue-700'
+                                : 'text-gray-700'
+                                }`}>
+                                {isCurrentUser ? '你的回應' : `${response.studentName || '未知學生'} 的回應`}
+                              </span>
+                              <span className="text-sm text-gray-500">
+                                {new Date(response.createdAt).toLocaleString()}
+                              </span>
+                              {response.studentClass && (
+                                <span className="text-sm text-gray-400">
+                                  ({response.studentClass})
+                                </span>
+                              )}
+                            </div>
+                            <div
+                              className="bg-white border border-gray-200 rounded-lg p-4 min-h-16"
+                              dangerouslySetInnerHTML={{ __html: sanitizeHtml(response.content || '載入中...') }}
+                            />
+                          </div>
+                        );
+                      })}
+                    </div>
+                  );
+                })()}
 
                 {/* 編輯器 - 無論是否已回應都顯示 */}
                 <div className="space-y-4">
                   <h4 className="text-lg font-bold text-brand-brown">
-                    {allResponses[selectedDiscussion.id]?.some(r => r.studentId === user?.id)
+                    {(Array.isArray(allResponses[selectedDiscussion.id]) ? allResponses[selectedDiscussion.id] : []).some(r => r.studentId === user?.id)
                       ? '新增回應'
                       : '撰寫回應'
                     }
