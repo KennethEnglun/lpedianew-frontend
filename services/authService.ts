@@ -248,14 +248,15 @@ class AuthService {
     subject?: string;
     threadId?: string | null;
     message: string;
-  }): Promise<Response> {
+  }, options?: { signal?: AbortSignal }): Promise<Response> {
     return fetch(`${this.API_BASE}/chats/send-stream`, {
       method: 'POST',
       headers: {
         ...this.getAuthHeaders(),
         'Accept': 'text/event-stream'
       },
-      body: JSON.stringify(payload)
+      body: JSON.stringify(payload),
+      signal: options?.signal
     });
   }
 
@@ -265,6 +266,15 @@ class AuthService {
     const query = searchParams.toString() ? `?${searchParams.toString()}` : '';
     const response = await fetch(`${this.API_BASE}/chats/me/threads${query}`, {
       headers: this.getAuthHeaders()
+    });
+    return this.handleResponse(response);
+  }
+
+  async createMyChatThread(payload: { subject?: string }): Promise<{ thread: any }> {
+    const response = await fetch(`${this.API_BASE}/chats/me/threads`, {
+      method: 'POST',
+      headers: this.getAuthHeaders(),
+      body: JSON.stringify(payload || {})
     });
     return this.handleResponse(response);
   }
