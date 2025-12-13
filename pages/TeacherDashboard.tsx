@@ -730,7 +730,7 @@ const TeacherDashboard: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50 flex overflow-hidden font-sans">
+    <div className="h-full bg-gray-50 flex overflow-hidden font-sans">
       {/* Background */}
       <div
         className="absolute inset-0 z-0 pointer-events-none"

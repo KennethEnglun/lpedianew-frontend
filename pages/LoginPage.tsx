@@ -110,7 +110,7 @@ const LoginPage: React.FC = () => {
 
   if (isLoading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+      <div className="h-full flex items-center justify-center bg-gray-50">
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
           <p className="text-gray-600">載入中...</p>
@@ -121,7 +121,7 @@ const LoginPage: React.FC = () => {
 
   return (
     <div 
-      className="min-h-screen w-full flex flex-col items-center justify-center p-4 md:p-8"
+      className="h-full w-full flex flex-col items-center justify-center p-4 md:p-8"
       style={{
         backgroundImage: `url('/bg.png')`,
         backgroundSize: 'cover',

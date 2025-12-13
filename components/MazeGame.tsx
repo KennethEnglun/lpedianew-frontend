@@ -65,6 +65,34 @@ export const MazeGame: React.FC<Props> = ({ questions, onExit, onComplete }) => 
 
     // Touch Handling Refs
     const touchStartRef = useRef<{ x: number, y: number } | null>(null);
+    const [showTouchControls, setShowTouchControls] = useState(false);
+
+    useEffect(() => {
+        const coarseQuery = typeof window !== 'undefined' && 'matchMedia' in window
+            ? window.matchMedia('(pointer: coarse)')
+            : null;
+
+        const update = () => {
+            const hasTouchPoints = typeof navigator !== 'undefined' && 'maxTouchPoints' in navigator
+                ? navigator.maxTouchPoints > 0
+                : false;
+            setShowTouchControls(hasTouchPoints || Boolean(coarseQuery?.matches));
+        };
+
+        update();
+        if (!coarseQuery) return;
+
+        // Safari < 14 uses addListener/removeListener.
+        if ('addEventListener' in coarseQuery) {
+            coarseQuery.addEventListener('change', update);
+            return () => coarseQuery.removeEventListener('change', update);
+        }
+
+        // @ts-expect-error - legacy Safari API
+        coarseQuery.addListener(update);
+        // @ts-expect-error - legacy Safari API
+        return () => coarseQuery.removeListener(update);
+    }, []);
 
     // --- Particle System ---
     const createExplosion = (x: number, y: number, color: string = '#fbbf24') => {
@@ -269,6 +297,11 @@ export const MazeGame: React.FC<Props> = ({ questions, onExit, onComplete }) => 
         };
     };
 
+    const handleTouchMove = (e: React.TouchEvent) => {
+        // Prevent iPad Safari from scrolling the page while swiping inside the maze.
+        if (touchStartRef.current && e.cancelable) e.preventDefault();
+    };
+
     const handleTouchEnd = (e: React.TouchEvent) => {
         if (!touchStartRef.current) return;
 
@@ -370,7 +403,9 @@ export const MazeGame: React.FC<Props> = ({ questions, onExit, onComplete }) => 
         <div
             className="flex flex-col items-center justify-center w-full h-full bg-gradient-to-br from-indigo-100 to-amber-100 p-4 relative overflow-hidden rounded-3xl"
             onTouchStart={handleTouchStart}
+            onTouchMove={handleTouchMove}
             onTouchEnd={handleTouchEnd}
+            style={{ touchAction: 'none' }}
         >
 
             {/* HUD */}
@@ -471,41 +506,47 @@ export const MazeGame: React.FC<Props> = ({ questions, onExit, onComplete }) => 
             </div>
 
             {/* Floating D-Pad */}
-            <div className="absolute bottom-8 right-8 z-40 lg:hidden flex flex-col items-center gap-2 pointer-events-none">
-                <div className="pointer-events-auto bg-white/30 backdrop-blur-md p-2 rounded-full border border-white/40 shadow-xl grid grid-cols-3 gap-1">
-                    <div />
-                    <button
-                        className="w-16 h-16 bg-white/80 rounded-full flex items-center justify-center active:bg-white active:scale-90 transition-all shadow-sm"
-                        onClick={(e) => { e.stopPropagation(); handleMove(0, -1); }}
-                    >
-                        <ArrowLeft className="rotate-90 text-indigo-600" size={32} />
-                    </button>
-                    <div />
-                    <button
-                        className="w-16 h-16 bg-white/80 rounded-full flex items-center justify-center active:bg-white active:scale-90 transition-all shadow-sm"
-                        onClick={(e) => { e.stopPropagation(); handleMove(-1, 0); }}
-                    >
-                        <ArrowLeft className="text-indigo-600" size={32} />
-                    </button>
-                    <div className="w-16 h-16 flex items-center justify-center">
-                        <div className="w-4 h-4 bg-white/40 rounded-full"></div>
+            {showTouchControls && (
+                <div className="absolute bottom-8 right-8 z-40 flex flex-col items-center gap-2 pointer-events-none">
+                    <div className="pointer-events-auto bg-white/30 backdrop-blur-md p-2 rounded-full border border-white/40 shadow-xl grid grid-cols-3 gap-1">
+                        <div />
+                        <button
+                            className="w-16 h-16 bg-white/80 rounded-full flex items-center justify-center active:bg-white active:scale-90 transition-all shadow-sm"
+                            onClick={(e) => { e.stopPropagation(); handleMove(0, -1); }}
+                            aria-label="向上"
+                        >
+                            <ArrowLeft className="rotate-90 text-indigo-600" size={32} />
+                        </button>
+                        <div />
+                        <button
+                            className="w-16 h-16 bg-white/80 rounded-full flex items-center justify-center active:bg-white active:scale-90 transition-all shadow-sm"
+                            onClick={(e) => { e.stopPropagation(); handleMove(-1, 0); }}
+                            aria-label="向左"
+                        >
+                            <ArrowLeft className="text-indigo-600" size={32} />
+                        </button>
+                        <div className="w-16 h-16 flex items-center justify-center">
+                            <div className="w-4 h-4 bg-white/40 rounded-full"></div>
+                        </div>
+                        <button
+                            className="w-16 h-16 bg-white/80 rounded-full flex items-center justify-center active:bg-white active:scale-90 transition-all shadow-sm"
+                            onClick={(e) => { e.stopPropagation(); handleMove(1, 0); }}
+                            aria-label="向右"
+                        >
+                            <ArrowLeft className="rotate-180 text-indigo-600" size={32} />
+                        </button>
+                        <div />
+                        <button
+                            className="w-16 h-16 bg-white/80 rounded-full flex items-center justify-center active:bg-white active:scale-90 transition-all shadow-sm"
+                            onClick={(e) => { e.stopPropagation(); handleMove(0, 1); }}
+                            aria-label="向下"
+                        >
+                            <ArrowLeft className="-rotate-90 text-indigo-600" size={32} />
+                        </button>
+                        <div />
                     </div>
-                    <button
-                        className="w-16 h-16 bg-white/80 rounded-full flex items-center justify-center active:bg-white active:scale-90 transition-all shadow-sm"
-                        onClick={(e) => { e.stopPropagation(); handleMove(1, 0); }}
-                    >
-                        <ArrowLeft className="rotate-180 text-indigo-600" size={32} />
-                    </button>
-                    <div />
-                    <button
-                        className="w-16 h-16 bg-white/80 rounded-full flex items-center justify-center active:bg-white active:scale-90 transition-all shadow-sm"
-                        onClick={(e) => { e.stopPropagation(); handleMove(0, 1); }}
-                    >
-                        <ArrowLeft className="-rotate-90 text-indigo-600" size={32} />
-                    </button>
-                    <div />
                 </div>
-            </div>
+            )}
 
             {/* Question Modal */}
             {activeQuestion && (

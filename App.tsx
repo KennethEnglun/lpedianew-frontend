@@ -10,35 +10,39 @@ import AdminDashboard from './pages/AdminDashboard';
 const App: React.FC = () => {
   return (
     <AuthProvider>
-      <HashRouter>
-        <Routes>
-          <Route path="/" element={<LoginPage />} />
-          <Route
-            path="/teacher"
-            element={
-              <ProtectedRoute requiredRole="teacher">
-                <TeacherDashboard />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/student"
-            element={
-              <ProtectedRoute requiredRole="student">
-                <StudentDashboard />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/admin"
-            element={
-              <ProtectedRoute requiredRole="admin">
-                <AdminDashboard />
-              </ProtectedRoute>
-            }
-          />
-        </Routes>
-      </HashRouter>
+      <div className="app-viewport">
+        <div className="app-shell">
+          <HashRouter>
+            <Routes>
+              <Route path="/" element={<LoginPage />} />
+              <Route
+                path="/teacher"
+                element={
+                  <ProtectedRoute requiredRole="teacher">
+                    <TeacherDashboard />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/student"
+                element={
+                  <ProtectedRoute requiredRole="student">
+                    <StudentDashboard />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/admin"
+                element={
+                  <ProtectedRoute requiredRole="admin">
+                    <AdminDashboard />
+                  </ProtectedRoute>
+                }
+              />
+            </Routes>
+          </HashRouter>
+        </div>
+      </div>
     </AuthProvider>
   );
 };

@@ -920,7 +920,7 @@ const StudentDashboard: React.FC = () => {
   const subjectConfig = SUBJECT_CONFIG[selectedSubject];
 
   return (
-    <div className="min-h-screen font-sans flex flex-col relative overflow-hidden" style={{ backgroundColor: '#D9F3D5' }}>
+    <div className="h-full font-sans flex flex-col relative overflow-hidden" style={{ backgroundColor: '#D9F3D5' }}>
       {/* Background */}
       <div
         className="absolute inset-0 z-0 pointer-events-none opacity-80"
