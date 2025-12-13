@@ -608,6 +608,7 @@ class AuthService {
 
   async generateQuizQuestions(payload: {
     subject: string;
+    grade?: '小一' | '小二' | '小三' | '小四' | '小五' | '小六';
     topic: string;
     count: number;
     scopeText?: string;

@@ -50,6 +50,7 @@ const TeacherDashboard: React.FC = () => {
   const [showAiQuizGenerator, setShowAiQuizGenerator] = useState(false);
   const [aiGenCount, setAiGenCount] = useState(10);
   const [aiGenTopic, setAiGenTopic] = useState('');
+  const [aiGenGrade, setAiGenGrade] = useState<'小一' | '小二' | '小三' | '小四' | '小五' | '小六'>('小三');
   const [aiGenUseScope, setAiGenUseScope] = useState(false);
   const [aiGenScopeText, setAiGenScopeText] = useState('');
   const [aiGenAdvancedOnly, setAiGenAdvancedOnly] = useState(false);
@@ -250,6 +251,7 @@ const TeacherDashboard: React.FC = () => {
     setAiGenPreview([]);
     setAiGenTopic('');
     setAiGenCount(10);
+    setAiGenGrade('小三');
     setAiGenUseScope(false);
     setAiGenScopeText('');
     setAiGenAdvancedOnly(false);
@@ -284,6 +286,7 @@ const TeacherDashboard: React.FC = () => {
       const count = Math.max(1, Math.min(50, Math.floor(aiGenCount || 10)));
       const result = await authService.generateQuizQuestions({
         subject: String(quizForm.subject),
+        grade: aiGenGrade,
         topic: aiGenTopic.trim(),
         count,
         scopeText: scopeText.slice(0, 5000),
@@ -2960,13 +2963,29 @@ const TeacherDashboard: React.FC = () => {
 	                    className="w-full px-4 py-3 rounded-2xl border-2 border-brand-brown bg-white font-bold text-brand-brown"
 	                  />
 	                </div>
-	                <Input
-	                  label="題目主題（可選）"
-	                  placeholder="例如：分數加減 / 文言文 / 乘法 / 詞性..."
-	                  value={aiGenTopic}
-	                  onChange={(e) => setAiGenTopic(e.target.value)}
-	                />
+	                <div>
+	                  <label className="block text-sm font-bold text-brand-brown mb-2">對象年級</label>
+	                  <select
+	                    value={aiGenGrade}
+	                    onChange={(e) => setAiGenGrade(e.target.value as any)}
+	                    className="w-full px-4 py-3 rounded-2xl border-2 border-brand-brown bg-white font-bold text-brand-brown"
+	                  >
+	                    <option value="小一">小一</option>
+	                    <option value="小二">小二</option>
+	                    <option value="小三">小三</option>
+	                    <option value="小四">小四</option>
+	                    <option value="小五">小五</option>
+	                    <option value="小六">小六</option>
+	                  </select>
+	                </div>
 	              </div>
+
+	              <Input
+	                label="題目主題（可選）"
+	                placeholder="例如：分數加減 / 文言文 / 乘法 / 詞性..."
+	                value={aiGenTopic}
+	                onChange={(e) => setAiGenTopic(e.target.value)}
+	              />
 
 	              <div className="bg-[#F8FAFC] border-2 border-gray-200 rounded-2xl p-4">
 	                <div className="flex items-center gap-3 mb-3">
