@@ -214,8 +214,8 @@ const AiChatModal: React.FC<{
   useEffect(() => {
     if (!open) return;
     if (isTeacher) {
-      setSubject(''); // teacher: no top subject selector; default show all subjects in student threads
-      setTab('students');
+      setSubject(''); // teacher: no top subject selector
+      setTab('my');
       setMySidebarView('chat');
       setMyChatBotId('global');
     } else {
@@ -660,151 +660,13 @@ const AiChatModal: React.FC<{
             </div>
           )}
 
-          {isTeacher && (
-            <div className="flex gap-2">
-              <button
-                type="button"
-                onClick={() => setTab('students')}
-                className={`px-4 py-2 rounded-2xl border-2 font-black ${tab === 'students'
-                  ? 'bg-[#FDEEAD] border-brand-brown text-brand-brown'
-                  : 'bg-white border-gray-300 text-gray-600 hover:border-brand-brown'
-                  }`}
-              >
-                學生對話
-              </button>
-              <button
-                type="button"
-                onClick={() => setTab('my')}
-                className={`px-4 py-2 rounded-2xl border-2 font-black ${tab === 'my'
-                  ? 'bg-[#FDEEAD] border-brand-brown text-brand-brown'
-                  : 'bg-white border-gray-300 text-gray-600 hover:border-brand-brown'
-                  }`}
-              >
-                我的對話
-              </button>
-            </div>
-          )}
+          {isTeacher && <div className="text-sm text-gray-600 font-bold">我的對話</div>}
         </div>
 
-        {tab === 'students' && isTeacher ? (
-          <div className="flex-1 min-h-0 flex flex-col md:flex-row">
-            <div className="w-full md:w-80 border-r-0 md:border-r-2 border-gray-200 bg-white p-4 overflow-y-auto">
-              <div className="flex items-center gap-2 mb-3">
-                <div className="flex-1">
-                  <Input
-                    label="搜尋學生"
-                    placeholder="姓名 / 帳號"
-                    value={studentSearch}
-                    onChange={(e) => setStudentSearch(e.target.value)}
-                  />
-                </div>
-                <button
-                  type="button"
-                  onClick={() => loadTeacherThreads(subject)}
-                  className="mt-6 w-10 h-10 rounded-xl bg-white border-2 border-gray-300 hover:border-brand-brown flex items-center justify-center"
-                  title="搜尋"
-                >
-                  <Search className="w-5 h-5 text-gray-700" />
-                </button>
-              </div>
-
-              <div className="mb-3">
-                <label className="block text-xs font-black text-gray-600 mb-1">科目（可選）</label>
-                <select
-                  value={subject}
-                  onChange={(e) => setSubject(e.target.value)}
-                  className="w-full px-3 py-2 border-2 border-gray-300 rounded-xl bg-white"
-                >
-                  <option value="">全部</option>
-                  {teacherSubjects.map((s) => (
-                    <option key={s} value={s}>{s}</option>
-                  ))}
-                </select>
-              </div>
-
-              {studentError && (
-                <div className="mb-3 text-sm font-bold text-red-700 bg-red-50 border-2 border-red-200 rounded-2xl p-3">
-                  {studentError}
-                </div>
-              )}
-
-              {studentLoading ? (
-                <div className="text-center py-8 text-brand-brown font-bold">載入中...</div>
-              ) : studentThreads.length > 0 ? (
-                <div className="space-y-2">
-                  {studentThreads.map((t) => (
-                    <button
-                      key={t.threadId}
-                      onClick={() => openTeacherThread(t.threadId)}
-                      className={`w-full text-left px-3 py-3 rounded-2xl border-2 transition-colors ${selectedThreadId === t.threadId
-                        ? 'bg-[#FDEEAD] border-brand-brown'
-                        : 'bg-gray-50 border-gray-200 hover:border-brand-brown'
-                        }`}
-                    >
-                      <div className="font-black text-gray-800">{t.student?.name || '未知學生'}</div>
-                      <div className="text-xs text-gray-600 font-bold">{t.student?.class || ''} • {t.student?.username || ''}</div>
-                      <div className="text-[11px] text-gray-600 mt-1 font-bold">
-                        科目：{t.subject || '—'}
-                      </div>
-                      <div className="text-[11px] text-gray-500 mt-1">
-                        {t.lastMessageAt ? new Date(t.lastMessageAt).toLocaleString() : ''}
-                      </div>
-                    </button>
-                  ))}
-                </div>
-              ) : (
-                <div className="text-center py-10 text-gray-400 font-bold border-4 border-dashed border-gray-200 rounded-2xl">
-                  暫無學生對話
-                </div>
-              )}
-            </div>
-
-            <div className="flex-1 min-h-0 flex flex-col bg-gray-50">
-              <div className="p-4 border-b-2 border-gray-200 bg-white">
-                <div className="text-lg font-black text-brand-brown">對話紀錄</div>
-                <div className="text-xs text-gray-600 font-bold">
-                  {selectedStudentInfo ? `${selectedStudentInfo.name}（${selectedStudentInfo.class}）` : '請從左側選擇學生'}
-                </div>
-              </div>
-              <div className="flex-1 min-h-0 overflow-y-auto p-4 space-y-3">
-                {studentMessages.map((m) => (
-                  <div key={m.id} className={`flex ${m.sender === 'user' ? 'justify-end' : 'justify-start'}`}>
-                    <div
-                      className={`${bubbleBase} ${m.sender === 'user'
-                        ? 'bg-white border-brand-brown text-gray-800'
-                        : 'bg-[#E0D2F8] border-purple-300 text-gray-800'
-                        }`}
-                    >
-                      <div className="flex justify-end mb-2">
-                        <button
-                          type="button"
-                          onClick={() => copyToClipboard(m.content, m.id)}
-                          className="inline-flex items-center gap-1 px-2 py-1 rounded-lg border border-gray-300 bg-white/70 hover:bg-white text-xs font-bold text-gray-700"
-                          aria-label="複製"
-                          title={copiedMessageId === m.id ? '已複製' : '複製'}
-                        >
-                          {copiedMessageId === m.id ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
-                          {copiedMessageId === m.id ? '已複製' : '複製'}
-                        </button>
-                      </div>
-                      <div dangerouslySetInnerHTML={{ __html: markdownToSafeHtml(m.content) }} />
-                      {m.createdAt && (
-                        <div className="text-[10px] text-gray-500 mt-2">
-                          {new Date(m.createdAt).toLocaleString()}
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                ))}
-                <div ref={endRef} />
-              </div>
-            </div>
-          </div>
-        ) : (
-	          <div className="flex-1 min-h-0 flex flex-col md:flex-row bg-gray-50">
-	            {/* Left Sidebar (My chat) */}
-		            <aside className="hidden md:flex w-80 border-r-2 border-gray-200 bg-white p-4 overflow-y-auto flex-col">
-		              {mySidebarView !== 'image' && (
+        <div className="flex-1 min-h-0 flex flex-col md:flex-row bg-gray-50">
+			            {/* Left Sidebar (My chat) */}
+			            <aside className="hidden md:flex w-80 border-r-2 border-gray-200 bg-white p-4 overflow-y-auto flex-col">
+			              {mySidebarView !== 'image' && (
 		                <>
 		                  <div className="mb-3">
 		                    <label className="block text-xs font-black text-gray-600 mb-1">搜尋</label>
@@ -873,8 +735,8 @@ const AiChatModal: React.FC<{
 	                  </button>
 	                ) : (
 	                  <div className="px-3 py-2 rounded-2xl bg-white border-2 border-gray-200 text-gray-400 font-black">Pedia（教師專用）</div>
-	                )}
-	              </div>
+			                )}
+		              </div>
 
 	              {isTeacher && mySidebarView === 'bot' && (
                 <div className="mb-4">
@@ -921,11 +783,11 @@ const AiChatModal: React.FC<{
                           取消
                         </button>
                       </div>
-                    </div>
-                  )}
+				          </div>
+	                  )}
 
-                  <div className="space-y-2">
-                    {myBots.map((b: any) => (
+	                  <div className="space-y-2">
+	                    {myBots.map((b: any) => (
                       <div
                         key={b.id}
                         className={`w-full px-3 py-2 rounded-2xl border-2 bg-white border-gray-200 group ${editingBotId === String(b.id) ? '' : 'cursor-pointer hover:border-brand-brown'}`}
@@ -1448,11 +1310,10 @@ const AiChatModal: React.FC<{
 	                </>
 	              )}
 	            </div>
-          </div>
-        )}
-      </div>
-    </div>
-  );
+	          </div>
+		      </div>
+		    </div>
+	  );
 };
 
 export default AiChatModal;

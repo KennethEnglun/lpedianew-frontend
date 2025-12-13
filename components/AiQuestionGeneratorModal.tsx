@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import Input from './Input';
 import { X } from 'lucide-react';
 import { authService } from '../services/authService';
@@ -7,15 +7,12 @@ type Grade = '小一' | '小二' | '小三' | '小四' | '小五' | '小六';
 type Mode = 'mcq' | 'pairs';
 type ImportMode = 'replace' | 'append';
 
-type AiSettings = { provider: string; model: string; hasApiKey: boolean; updatedAt: string | null };
-
 interface Props {
   open: boolean;
   mode: Mode;
   subject: string;
   title: string;
   onClose: () => void;
-  onOpenSettings: () => void;
   importModes?: ImportMode[];
   onImport: (
     payload: { mcq?: Array<{ question: string; options: string[]; correctIndex: number }>; pairs?: Array<{ question: string; answer: string }> },
@@ -23,8 +20,7 @@ interface Props {
   ) => void;
 }
 
-export const AiQuestionGeneratorModal: React.FC<Props> = ({ open, mode, subject, title, onClose, onOpenSettings, importModes = ['replace'], onImport }) => {
-  const [settings, setSettings] = useState<AiSettings | null>(null);
+export const AiQuestionGeneratorModal: React.FC<Props> = ({ open, mode, subject, title, onClose, importModes = ['replace'], onImport }) => {
   const [count, setCount] = useState(10);
   const [topic, setTopic] = useState('');
   const [grade, setGrade] = useState<Grade>('小三');
@@ -37,8 +33,6 @@ export const AiQuestionGeneratorModal: React.FC<Props> = ({ open, mode, subject,
   const [previewMcq, setPreviewMcq] = useState<Array<{ question: string; options: string[]; correctIndex: number }>>([]);
   const [previewPairs, setPreviewPairs] = useState<Array<{ question: string; answer: string }>>([]);
 
-  const modelName = useMemo(() => settings?.model || 'grok-4-1-fast-reasoning-latest', [settings?.model]);
-
   useEffect(() => {
     if (!open) return;
     setError(null);
@@ -50,27 +44,12 @@ export const AiQuestionGeneratorModal: React.FC<Props> = ({ open, mode, subject,
     setAdvancedOnly(false);
     setPreviewMcq([]);
     setPreviewPairs([]);
-
-    (async () => {
-      try {
-        const s = await authService.getAiSettings();
-        setSettings(s);
-      } catch {
-        setSettings({ provider: 'grok', model: 'grok-4-1-fast-reasoning-latest', hasApiKey: false, updatedAt: null });
-      }
-    })();
   }, [open]);
 
   const run = async () => {
     setError(null);
     setPreviewMcq([]);
     setPreviewPairs([]);
-
-    const s = settings || await authService.getAiSettings().catch(() => null);
-    if (!s?.hasApiKey) {
-      setError('尚未設定 AI API Key，請先到右上設定完成設定');
-      return;
-    }
 
     const effectiveScope = useScope ? scopeText.slice(0, 5000) : '';
     if (advancedOnly && !effectiveScope.trim()) {
@@ -122,7 +101,7 @@ export const AiQuestionGeneratorModal: React.FC<Props> = ({ open, mode, subject,
             <div>
               <h2 className="text-2xl font-black text-brand-brown">{title}</h2>
               <p className="text-sm text-gray-600 mt-1">
-                科目：<span className="font-bold">{subject}</span> • 模型：<span className="font-bold">{modelName}</span>
+                科目：<span className="font-bold">{subject}</span>
               </p>
             </div>
             <button
@@ -138,15 +117,6 @@ export const AiQuestionGeneratorModal: React.FC<Props> = ({ open, mode, subject,
           {error && (
             <div className="bg-red-50 border-2 border-red-200 rounded-2xl p-4 text-red-700 font-bold">
               {error}
-              {error.includes('API Key') && (
-                <button
-                  type="button"
-                  onClick={() => { onClose(); onOpenSettings(); }}
-                  className="ml-3 underline"
-                >
-                  立即前往設定
-                </button>
-              )}
             </div>
           )}
 

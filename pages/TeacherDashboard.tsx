@@ -18,12 +18,6 @@ const TeacherDashboard: React.FC = () => {
   const { logout, user, refreshUser } = useAuth();
 
   const [showSettingsModal, setShowSettingsModal] = useState(false);
-  const [settingsTab, setSettingsTab] = useState<'teacher' | 'ai'>('teacher');
-  const [aiSettings, setAiSettings] = useState<{ provider: string; model: string; hasApiKey: boolean; updatedAt: string | null } | null>(null);
-  const [aiApiKeyDraft, setAiApiKeyDraft] = useState('');
-  const [aiKeyVisible, setAiKeyVisible] = useState(false);
-  const [aiLoading, setAiLoading] = useState(false);
-  const [aiSaving, setAiSaving] = useState(false);
   const [showUiSettings, setShowUiSettings] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [showAiChat, setShowAiChat] = useState(false);
@@ -273,28 +267,11 @@ const TeacherDashboard: React.FC = () => {
     return { homeroomClass, subjectsTaught, subjectGroups };
   };
 
-  const openSettings = async (tab: 'teacher' | 'ai' = 'teacher') => {
+  const openSettings = async () => {
     setShowSettingsModal(true);
-    setSettingsTab(tab);
-    setAiKeyVisible(false);
-    setAiApiKeyDraft('');
     setTeacherSettingsError('');
 
-    if (tab === 'ai') {
-      try {
-        setAiLoading(true);
-        const settings = await authService.getAiSettings();
-        setAiSettings(settings);
-      } catch (error) {
-        console.error('載入 AI 設定失敗:', error);
-        setAiSettings({ provider: 'grok', model: 'grok-4-1-fast-reasoning-latest', hasApiKey: false, updatedAt: null });
-      } finally {
-        setAiLoading(false);
-      }
-      return;
-    }
-
-    // teacher tab init
+    // teacher settings init
     const nextDraft = normalizeTeacherSettingsFromUser();
     setTeacherSettingsDraft(nextDraft);
     try {
@@ -318,21 +295,6 @@ const TeacherDashboard: React.FC = () => {
       setGroupOptionsBySubject(map);
     } catch (error) {
       console.error('載入教師設定選項失敗:', error);
-    }
-  };
-
-  const saveAiSettings = async () => {
-    try {
-      setAiSaving(true);
-      const saved = await authService.updateAiSettings({ apiKey: aiApiKeyDraft });
-      setAiSettings(saved);
-      setAiApiKeyDraft('');
-      alert('AI 設定已更新');
-    } catch (error) {
-      console.error('更新 AI 設定失敗:', error);
-      alert('更新 AI 設定失敗：' + (error instanceof Error ? error.message : '未知錯誤'));
-    } finally {
-      setAiSaving(false);
     }
   };
 
@@ -398,24 +360,6 @@ const TeacherDashboard: React.FC = () => {
       return { ...prev, subjectGroups: { ...prev.subjectGroups, [subject]: next } };
     });
   };
-
-  useEffect(() => {
-    if (!showSettingsModal) return;
-    if (settingsTab !== 'ai') return;
-    if (aiSettings !== null) return;
-    (async () => {
-      try {
-        setAiLoading(true);
-        const settings = await authService.getAiSettings();
-        setAiSettings(settings);
-      } catch (error) {
-        console.error('載入 AI 設定失敗:', error);
-        setAiSettings({ provider: 'grok', model: 'grok-4-1-fast-reasoning-latest', hasApiKey: false, updatedAt: null });
-      } finally {
-        setAiLoading(false);
-      }
-    })();
-  }, [aiSettings, settingsTab, showSettingsModal]);
 
   const openAiGenerator = (config: {
     mode: 'mcq' | 'pairs';
@@ -1275,11 +1219,11 @@ const TeacherDashboard: React.FC = () => {
             <div className="text-lg font-black text-brand-brown font-rounded leading-none">教師中心</div>
           </div>
           <div className="flex items-center gap-2">
-            <button
-              onClick={() => openSettings('teacher')}
-              className="w-10 h-10 bg-white rounded-full border-2 border-brand-brown shadow-comic flex items-center justify-center"
-              title="設定"
-            >
+	            <button
+	              onClick={openSettings}
+	              className="w-10 h-10 bg-white rounded-full border-2 border-brand-brown shadow-comic flex items-center justify-center"
+	              title="設定"
+	            >
               <Settings className="text-brand-brown w-5 h-5" />
             </button>
             <button
@@ -1309,11 +1253,11 @@ const TeacherDashboard: React.FC = () => {
 
       {/* Header Icons */}
       <header className="hidden lg:flex fixed top-4 right-4 sm:right-6 z-20 gap-3 sm:gap-4">
-        <button
-          onClick={() => openSettings('teacher')}
-          className="w-10 h-10 sm:w-12 sm:h-12 bg-white rounded-full border-2 border-brand-brown shadow-comic flex items-center justify-center hover:scale-105 transition-transform"
-          title="設定"
-        >
+	        <button
+	          onClick={openSettings}
+	          className="w-10 h-10 sm:w-12 sm:h-12 bg-white rounded-full border-2 border-brand-brown shadow-comic flex items-center justify-center hover:scale-105 transition-transform"
+	          title="設定"
+	        >
           <Settings className="text-brand-brown w-5 h-5 sm:w-6 sm:h-6" />
         </button>
         <button
@@ -4217,224 +4161,143 @@ const TeacherDashboard: React.FC = () => {
 		      {/* Settings Modal */}
 		      {showSettingsModal && (
 		        <div className="fixed inset-0 bg-black bg-opacity-50 z-[70] flex items-center justify-center p-4">
-		          <div className="bg-white border-4 border-brand-brown rounded-3xl w-full max-w-3xl shadow-comic-xl max-h-[90vh] overflow-y-auto">
-		            <div className="p-6 border-b-4 border-brand-brown bg-[#D9F3D5]">
-		              <div className="flex justify-between items-center">
-		                <div>
-		                  <h2 className="text-2xl font-black text-brand-brown">設定</h2>
-		                  {settingsTab === 'ai' && (
-		                    <p className="text-sm text-gray-600 mt-1">
-		                      模型：<span className="font-bold">{aiSettings?.model || 'grok-4-1-fast-reasoning-latest'}</span>
-		                    </p>
-		                  )}
-		                </div>
-		                <button
-		                  onClick={() => setShowSettingsModal(false)}
-		                  className="w-10 h-10 rounded-full bg-white border-2 border-brand-brown hover:bg-gray-100 flex items-center justify-center"
-		                  aria-label="關閉"
+			          <div className="bg-white border-4 border-brand-brown rounded-3xl w-full max-w-3xl shadow-comic-xl max-h-[90vh] overflow-y-auto">
+			            <div className="p-6 border-b-4 border-brand-brown bg-[#D9F3D5]">
+			              <div className="flex justify-between items-center">
+			                <div>
+			                  <h2 className="text-2xl font-black text-brand-brown">設定</h2>
+			                </div>
+			                <button
+			                  onClick={() => setShowSettingsModal(false)}
+			                  className="w-10 h-10 rounded-full bg-white border-2 border-brand-brown hover:bg-gray-100 flex items-center justify-center"
+			                  aria-label="關閉"
 		                >
 		                  <X className="w-6 h-6 text-brand-brown" />
 		                </button>
-		              </div>
-		            </div>
+			              </div>
+			            </div>
 
-		            <div className="px-6 pt-4">
-		              <div className="flex gap-2">
-		                <button
-		                  type="button"
-		                  onClick={() => setSettingsTab('teacher')}
-		                  className={`px-4 py-2 rounded-2xl border-2 font-black ${settingsTab === 'teacher'
-		                    ? 'bg-[#FDEEAD] border-brand-brown text-brand-brown'
-		                    : 'bg-white border-gray-300 text-gray-600 hover:border-brand-brown'
-		                    }`}
-		                >
-		                  教師設定
-		                </button>
-		                <button
-		                  type="button"
-		                  onClick={() => setSettingsTab('ai')}
-		                  className={`px-4 py-2 rounded-2xl border-2 font-black ${settingsTab === 'ai'
-		                    ? 'bg-[#FDEEAD] border-brand-brown text-brand-brown'
-		                    : 'bg-white border-gray-300 text-gray-600 hover:border-brand-brown'
-		                    }`}
-		                >
-		                  AI 設定
-		                </button>
-		              </div>
-		            </div>
+			            <div className="p-6 space-y-4">
+			              <>
+			                <div className="bg-blue-50 border-2 border-blue-200 rounded-2xl p-4 text-sm text-gray-700">
+			                  設定後，作業管理會顯示「同科同級其他教師」派發的任務（可查看學生回應/結果，但不可刪除任務）。
+			                </div>
 
-		            <div className="p-6 space-y-4">
-		              {settingsTab === 'teacher' ? (
-		                <>
-		                  <div className="bg-blue-50 border-2 border-blue-200 rounded-2xl p-4 text-sm text-gray-700">
-		                    設定後，作業管理會顯示「同科同級其他教師」派發的任務（可查看學生回應/結果，但不可刪除任務）。
-		                  </div>
+			                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+			                  <div>
+			                    <label className="block text-sm font-bold text-gray-600 mb-2">所屬班級</label>
+			                    <select
+			                      value={teacherSettingsDraft.homeroomClass}
+			                      onChange={(e) => setTeacherSettingsDraft((prev) => ({ ...prev, homeroomClass: e.target.value }))}
+			                      className="w-full px-3 py-2 border-2 border-gray-300 rounded-xl"
+			                    >
+			                      <option value="">未設定</option>
+			                      {availableClasses.map((className) => (
+			                        <option key={className} value={className}>{className}</option>
+			                      ))}
+			                    </select>
+			                  </div>
+			                </div>
 
-		                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-		                    <div>
-		                      <label className="block text-sm font-bold text-gray-600 mb-2">所屬班級</label>
-		                      <select
-		                        value={teacherSettingsDraft.homeroomClass}
-		                        onChange={(e) => setTeacherSettingsDraft((prev) => ({ ...prev, homeroomClass: e.target.value }))}
-		                        className="w-full px-3 py-2 border-2 border-gray-300 rounded-xl"
-		                      >
-		                        <option value="">未設定</option>
-		                        {availableClasses.map((className) => (
-		                          <option key={className} value={className}>{className}</option>
-		                        ))}
-		                      </select>
-		                    </div>
-		                  </div>
+			                <div>
+			                  <div className="text-sm font-black text-gray-700 mb-2">任教科目</div>
+			                  <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+			                    {availableSubjects.map((subject) => {
+			                      const checked = teacherSettingsDraft.subjectsTaught.includes(subject);
+			                      return (
+			                        <label
+			                          key={subject}
+			                          className={`flex items-center gap-2 px-3 py-2 rounded-xl border-2 cursor-pointer ${checked ? 'bg-[#FDEEAD] border-brand-brown' : 'bg-white border-gray-200 hover:border-brand-brown'}`}
+			                        >
+			                          <input
+			                            type="checkbox"
+			                            checked={checked}
+			                            onChange={() => toggleSubjectTaught(subject)}
+			                            className="w-4 h-4"
+			                          />
+			                          <span className="font-bold text-gray-700">{subject}</span>
+			                        </label>
+			                      );
+			                    })}
+			                  </div>
+			                </div>
 
-		                  <div>
-		                    <div className="text-sm font-black text-gray-700 mb-2">任教科目</div>
-		                    <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
-		                      {availableSubjects.map((subject) => {
-		                        const checked = teacherSettingsDraft.subjectsTaught.includes(subject);
-		                        return (
-		                          <label
-		                            key={subject}
-		                            className={`flex items-center gap-2 px-3 py-2 rounded-xl border-2 cursor-pointer ${checked ? 'bg-[#FDEEAD] border-brand-brown' : 'bg-white border-gray-200 hover:border-brand-brown'}`}
-		                          >
-		                            <input
-		                              type="checkbox"
-		                              checked={checked}
-		                              onChange={() => toggleSubjectTaught(subject)}
-		                              className="w-4 h-4"
-		                            />
-		                            <span className="font-bold text-gray-700">{subject}</span>
-		                          </label>
-		                        );
-		                      })}
-		                    </div>
-		                  </div>
+			                {teacherSettingsDraft.subjectsTaught.length > 0 && (
+			                  <div className="space-y-3">
+			                    <div className="text-sm font-black text-gray-700">科目分組</div>
+			                    {teacherSettingsDraft.subjectsTaught.map((subject) => {
+			                      const groups = groupOptionsBySubject[subject] || [];
+			                      const selectedGroups = teacherSettingsDraft.subjectGroups[subject] || [];
+			                      return (
+			                        <div key={subject} className="p-4 rounded-2xl border-2 border-gray-200 bg-gray-50">
+			                          <div className="font-black text-gray-700 mb-2">{subject}</div>
+			                          {groups.length > 0 ? (
+			                            <div className="flex flex-wrap gap-2">
+			                              {groups.map((group) => {
+			                                const checked = selectedGroups.includes(group);
+			                                return (
+			                                  <label
+			                                    key={group}
+			                                    className={`flex items-center gap-2 px-3 py-2 rounded-xl border-2 cursor-pointer ${checked ? 'bg-white border-brand-brown' : 'bg-white border-gray-200 hover:border-brand-brown'}`}
+			                                  >
+			                                    <input
+			                                      type="checkbox"
+			                                      checked={checked}
+			                                      onChange={() => toggleSubjectGroup(subject, group)}
+			                                      className="w-4 h-4"
+			                                    />
+			                                    <span className="font-bold text-gray-700">{group}</span>
+			                                  </label>
+			                                );
+			                              })}
+			                            </div>
+			                          ) : (
+			                            <div className="text-sm text-gray-500">本科暫無分組（或未提供分組名單）</div>
+			                          )}
+			                        </div>
+			                      );
+			                    })}
+			                  </div>
+			                )}
 
-		                  {teacherSettingsDraft.subjectsTaught.length > 0 && (
-		                    <div className="space-y-3">
-		                      <div className="text-sm font-black text-gray-700">科目分組</div>
-		                      {teacherSettingsDraft.subjectsTaught.map((subject) => {
-		                        const groups = groupOptionsBySubject[subject] || [];
-		                        const selectedGroups = teacherSettingsDraft.subjectGroups[subject] || [];
-		                        return (
-		                          <div key={subject} className="p-4 rounded-2xl border-2 border-gray-200 bg-gray-50">
-		                            <div className="font-black text-gray-700 mb-2">{subject}</div>
-		                            {groups.length > 0 ? (
-		                              <div className="flex flex-wrap gap-2">
-		                                {groups.map((group) => {
-		                                  const checked = selectedGroups.includes(group);
-		                                  return (
-		                                    <label
-		                                      key={group}
-		                                      className={`flex items-center gap-2 px-3 py-2 rounded-xl border-2 cursor-pointer ${checked ? 'bg-white border-brand-brown' : 'bg-white border-gray-200 hover:border-brand-brown'}`}
-		                                    >
-		                                      <input
-		                                        type="checkbox"
-		                                        checked={checked}
-		                                        onChange={() => toggleSubjectGroup(subject, group)}
-		                                        className="w-4 h-4"
-		                                      />
-		                                      <span className="font-bold text-gray-700">{group}</span>
-		                                    </label>
-		                                  );
-		                                })}
-		                              </div>
-		                            ) : (
-		                              <div className="text-sm text-gray-500">本科暫無分組（或未提供分組名單）</div>
-		                            )}
-		                          </div>
-		                        );
-		                      })}
-		                    </div>
-		                  )}
+			                {teacherSettingsError && (
+			                  <div className="bg-red-50 border-2 border-red-200 rounded-2xl p-4 text-sm text-red-700 font-bold">
+			                    {teacherSettingsError}
+			                  </div>
+			                )}
 
-		                  {teacherSettingsError && (
-		                    <div className="bg-red-50 border-2 border-red-200 rounded-2xl p-4 text-sm text-red-700 font-bold">
-		                      {teacherSettingsError}
-		                    </div>
-		                  )}
+			                <div className="flex items-center gap-3 pt-2">
+			                  <button
+			                    type="button"
+			                    onClick={() => setShowSettingsModal(false)}
+			                    className="px-5 py-2 bg-gray-100 border-2 border-gray-300 rounded-2xl font-black text-gray-700 hover:bg-gray-200"
+			                  >
+			                    關閉
+			                  </button>
+			                  <button
+			                    type="button"
+			                    onClick={saveTeacherSettings}
+			                    disabled={teacherSettingsSaving}
+			                    className={`ml-auto px-6 py-2 rounded-2xl border-2 border-brand-brown font-black ${teacherSettingsSaving ? 'bg-gray-300 text-gray-600 cursor-wait' : 'bg-[#FDEEAD] text-brand-brown hover:bg-[#FCE690]'}`}
+			                  >
+			                    {teacherSettingsSaving ? '儲存中...' : '儲存'}
+			                  </button>
+			                </div>
+			              </>
+			            </div>
+			          </div>
+			        </div>
+			      )}
 
-		                  <div className="flex items-center gap-3 pt-2">
-		                    <button
-		                      type="button"
-		                      onClick={() => setShowSettingsModal(false)}
-		                      className="px-5 py-2 bg-gray-100 border-2 border-gray-300 rounded-2xl font-black text-gray-700 hover:bg-gray-200"
-		                    >
-		                      關閉
-		                    </button>
-		                    <button
-		                      type="button"
-		                      onClick={saveTeacherSettings}
-		                      disabled={teacherSettingsSaving}
-		                      className={`ml-auto px-6 py-2 rounded-2xl border-2 border-brand-brown font-black ${teacherSettingsSaving ? 'bg-gray-300 text-gray-600 cursor-wait' : 'bg-[#FDEEAD] text-brand-brown hover:bg-[#FCE690]'}`}
-		                    >
-		                      {teacherSettingsSaving ? '儲存中...' : '儲存'}
-		                    </button>
-		                  </div>
-		                </>
-		              ) : (
-		                <>
-		                  <div className="bg-yellow-50 border-2 border-yellow-200 rounded-2xl p-4 text-sm text-gray-700">
-		                    建議把 API Key 設定在後端代理中使用；前端不會顯示已保存的 Key，只會顯示「已設定/未設定」狀態。
-		                  </div>
-
-		                  <div className="flex items-center gap-3">
-		                    <span className={`px-3 py-1 rounded-full text-xs font-black border-2 ${aiSettings?.hasApiKey ? 'bg-emerald-100 border-emerald-300 text-emerald-800' : 'bg-red-100 border-red-300 text-red-800'}`}>
-		                      {aiSettings?.hasApiKey ? '已設定 API Key' : '未設定 API Key'}
-		                    </span>
-		                    {aiSettings?.updatedAt && (
-		                      <span className="text-xs text-gray-500">
-		                        更新時間：{new Date(aiSettings.updatedAt).toLocaleString()}
-		                      </span>
-		                    )}
-		                  </div>
-
-		                  {aiLoading ? (
-		                    <div className="text-center py-6 text-brand-brown font-bold">載入中...</div>
-		                  ) : (
-		                    <>
-		                      <Input
-		                        label="Grok API Key（更新/清除）"
-		                        type={aiKeyVisible ? 'text' : 'password'}
-		                        placeholder="輸入 Grok API Key（留空代表清除）"
-		                        value={aiApiKeyDraft}
-		                        onChange={(e) => setAiApiKeyDraft(e.target.value)}
-		                      />
-		                      <div className="flex items-center gap-3">
-		                        <button
-		                          type="button"
-		                          onClick={() => setAiKeyVisible(v => !v)}
-		                          className="px-4 py-2 bg-gray-100 border-2 border-gray-300 rounded-2xl font-bold text-gray-700 hover:bg-gray-200"
-		                        >
-		                          {aiKeyVisible ? '隱藏' : '顯示'}
-		                        </button>
-		                        <button
-		                          type="button"
-		                          onClick={saveAiSettings}
-		                          disabled={aiSaving}
-		                          className={`ml-auto px-6 py-2 rounded-2xl border-2 border-brand-brown font-black ${aiSaving ? 'bg-gray-300 text-gray-600 cursor-wait' : 'bg-[#FDEEAD] text-brand-brown hover:bg-[#FCE690]'}`}
-		                        >
-		                          {aiSaving ? '儲存中...' : '儲存'}
-		                        </button>
-		                      </div>
-		                    </>
-		                  )}
-		                </>
-		              )}
-		            </div>
-		          </div>
-		        </div>
-		      )}
-
-		      <AiQuestionGeneratorModal
-		        open={showAiGenerator}
-		        mode={aiGeneratorMode}
-		        subject={aiGeneratorSubject}
-		        title={aiGeneratorTitle}
-		        importModes={aiGeneratorImportModes}
-		        onOpenSettings={() => openSettings('ai')}
-		        onClose={() => setShowAiGenerator(false)}
-		        onImport={(payload, importMode) => aiGeneratorOnImportRef.current(payload, importMode)}
-		      />
+			      <AiQuestionGeneratorModal
+			        open={showAiGenerator}
+			        mode={aiGeneratorMode}
+			        subject={aiGeneratorSubject}
+			        title={aiGeneratorTitle}
+			        importModes={aiGeneratorImportModes}
+			        onClose={() => setShowAiGenerator(false)}
+			        onImport={(payload, importMode) => aiGeneratorOnImportRef.current(payload, importMode)}
+			      />
       {/* Student Quiz Result Detail Modal */}
       {
         viewingResultDetails && selectedAssignment && (
