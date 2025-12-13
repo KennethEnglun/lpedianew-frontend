@@ -16,6 +16,9 @@ interface User {
     chineseGroup?: string;
     englishGroup?: string;
     mathGroup?: string;
+    homeroomClass?: string;
+    subjectsTaught?: string[];
+    subjectGroups?: Record<string, string[]>;
   };
   lastLogin?: string;
   isActive: boolean;
@@ -197,6 +200,32 @@ class AuthService {
     return this.handleResponse(response);
   }
 
+  // 更新自己的教師設定（教師/管理員）
+  async updateMyTeacherSettings(settings: {
+    homeroomClass?: string;
+    subjectsTaught?: string[];
+    subjectGroups?: Record<string, string[]>;
+  }): Promise<User> {
+    const response = await fetch(`${this.API_BASE}/users/me/teacher-settings`, {
+      method: 'PUT',
+      headers: this.getAuthHeaders(),
+      body: JSON.stringify(settings)
+    });
+
+    const result = await this.handleResponse<{ message: string; user: User }>(response);
+    const current = this.getUser();
+    const nextUser = {
+      ...(current || result.user),
+      ...result.user,
+      profile: {
+        ...(current?.profile || {}),
+        ...(result.user.profile || {})
+      }
+    } as User;
+    localStorage.setItem(this.USER_KEY, JSON.stringify(nextUser));
+    return nextUser;
+  }
+
   // 創建用戶（管理員專用）
   async createUser(userData: {
     username: string;
@@ -347,6 +376,26 @@ class AuthService {
     return this.handleResponse(response);
   }
 
+  // 同科同級其他教師作業（討論串）
+  async getSharedAssignments(params: {
+    subject: string;
+    grade: string;
+    targetClass?: string;
+    groups?: string[];
+  }): Promise<{ assignments: any[]; total: number }> {
+    const searchParams = new URLSearchParams();
+    searchParams.append('subject', params.subject);
+    searchParams.append('grade', params.grade);
+    if (params.targetClass) searchParams.append('targetClass', params.targetClass);
+    if (params.groups && params.groups.length > 0) searchParams.append('groups', params.groups.join(','));
+
+    const response = await fetch(`${this.API_BASE}/assignments/shared?${searchParams.toString()}`, {
+      headers: this.getAuthHeaders()
+    });
+
+    return this.handleResponse(response);
+  }
+
   // 獲取特定作業的學生回應
   async getAssignmentResponses(assignmentId: string): Promise<{ assignment: any, responses: any[], total: number }> {
     const response = await fetch(`${this.API_BASE}/assignments/${assignmentId}/responses`, {
@@ -469,6 +518,26 @@ class AuthService {
     return this.handleResponse(response);
   }
 
+  // 同科同級其他教師小測驗
+  async getSharedQuizzes(params: {
+    subject: string;
+    grade: string;
+    targetClass?: string;
+    groups?: string[];
+  }): Promise<{ quizzes: any[]; total: number }> {
+    const searchParams = new URLSearchParams();
+    searchParams.append('subject', params.subject);
+    searchParams.append('grade', params.grade);
+    if (params.targetClass) searchParams.append('targetClass', params.targetClass);
+    if (params.groups && params.groups.length > 0) searchParams.append('groups', params.groups.join(','));
+
+    const response = await fetch(`${this.API_BASE}/quizzes/shared?${searchParams.toString()}`, {
+      headers: this.getAuthHeaders()
+    });
+
+    return this.handleResponse(response);
+  }
+
   // 獲取學生的小測驗列表
   async getStudentQuizzes(): Promise<{ quizzes: any[], total: number }> {
     const response = await fetch(`${this.API_BASE}/quizzes/student`, {
@@ -562,6 +631,28 @@ class AuthService {
     if (gameType) params.append('gameType', gameType);
 
     const response = await fetch(`${this.API_BASE}/games/teacher?${params.toString()}`, {
+      headers: this.getAuthHeaders()
+    });
+
+    return this.handleResponse(response);
+  }
+
+  // 同科同級其他教師遊戲
+  async getSharedGames(params: {
+    subject: string;
+    grade: string;
+    targetClass?: string;
+    groups?: string[];
+    gameType?: string;
+  }): Promise<{ games: any[]; total: number }> {
+    const searchParams = new URLSearchParams();
+    searchParams.append('subject', params.subject);
+    searchParams.append('grade', params.grade);
+    if (params.targetClass) searchParams.append('targetClass', params.targetClass);
+    if (params.gameType) searchParams.append('gameType', params.gameType);
+    if (params.groups && params.groups.length > 0) searchParams.append('groups', params.groups.join(','));
+
+    const response = await fetch(`${this.API_BASE}/games/shared?${searchParams.toString()}`, {
       headers: this.getAuthHeaders()
     });
 

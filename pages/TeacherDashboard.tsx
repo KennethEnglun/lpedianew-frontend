@@ -14,9 +14,10 @@ import { Subject, Discussion } from '../types';
 
 const TeacherDashboard: React.FC = () => {
   const navigate = useNavigate();
-  const { logout, user } = useAuth();
+  const { logout, user, refreshUser } = useAuth();
 
-  const [showAiSettingsModal, setShowAiSettingsModal] = useState(false);
+  const [showSettingsModal, setShowSettingsModal] = useState(false);
+  const [settingsTab, setSettingsTab] = useState<'teacher' | 'ai'>('teacher');
   const [aiSettings, setAiSettings] = useState<{ provider: string; model: string; hasApiKey: boolean; updatedAt: string | null } | null>(null);
   const [aiApiKeyDraft, setAiApiKeyDraft] = useState('');
   const [aiKeyVisible, setAiKeyVisible] = useState(false);
@@ -24,6 +25,15 @@ const TeacherDashboard: React.FC = () => {
   const [aiSaving, setAiSaving] = useState(false);
   const [showUiSettings, setShowUiSettings] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+
+  const [teacherSettingsDraft, setTeacherSettingsDraft] = useState<{
+    homeroomClass: string;
+    subjectsTaught: string[];
+    subjectGroups: Record<string, string[]>;
+  }>({ homeroomClass: '', subjectsTaught: [], subjectGroups: {} });
+  const [teacherSettingsSaving, setTeacherSettingsSaving] = useState(false);
+  const [teacherSettingsError, setTeacherSettingsError] = useState('');
+  const [groupOptionsBySubject, setGroupOptionsBySubject] = useState<Record<string, string[]>>({});
 
   const [showDiscussionModal, setShowDiscussionModal] = useState(false);
   const [discussionForm, setDiscussionForm] = useState({
@@ -236,19 +246,65 @@ const TeacherDashboard: React.FC = () => {
     }
   };
 
-  const openAiSettings = async () => {
-    setShowAiSettingsModal(true);
+  const normalizeTeacherSettingsFromUser = () => {
+    const profile: any = user?.profile || {};
+    const homeroomClass = typeof profile.homeroomClass === 'string' ? profile.homeroomClass : '';
+    const subjectsTaught = Array.isArray(profile.subjectsTaught) ? profile.subjectsTaught.filter((s: any) => typeof s === 'string') : [];
+    const subjectGroups: Record<string, string[]> = {};
+    if (profile.subjectGroups && typeof profile.subjectGroups === 'object') {
+      Object.entries(profile.subjectGroups as Record<string, any>).forEach(([subject, groups]) => {
+        if (!Array.isArray(groups)) return;
+        subjectGroups[subject] = groups.filter((g: any) => typeof g === 'string');
+      });
+    }
+    return { homeroomClass, subjectsTaught, subjectGroups };
+  };
+
+  const openSettings = async (tab: 'teacher' | 'ai' = 'teacher') => {
+    setShowSettingsModal(true);
+    setSettingsTab(tab);
     setAiKeyVisible(false);
     setAiApiKeyDraft('');
+    setTeacherSettingsError('');
+
+    if (tab === 'ai') {
+      try {
+        setAiLoading(true);
+        const settings = await authService.getAiSettings();
+        setAiSettings(settings);
+      } catch (error) {
+        console.error('載入 AI 設定失敗:', error);
+        setAiSettings({ provider: 'grok', model: 'grok-4-1-fast-reasoning-latest', hasApiKey: false, updatedAt: null });
+      } finally {
+        setAiLoading(false);
+      }
+      return;
+    }
+
+    // teacher tab init
+    const nextDraft = normalizeTeacherSettingsFromUser();
+    setTeacherSettingsDraft(nextDraft);
     try {
-      setAiLoading(true);
-      const settings = await authService.getAiSettings();
-      setAiSettings(settings);
+      if (availableSubjects.length === 0 || availableClasses.length === 0) {
+        await loadFilterOptions();
+      }
+
+      const subjects = nextDraft.subjectsTaught;
+      if (subjects.length === 0) {
+        setGroupOptionsBySubject({});
+        return;
+      }
+      const results = await Promise.all(
+        subjects.map(async (subject) => {
+          const data = await authService.getAvailableClasses(subject);
+          return { subject, groups: (data.groups || []).slice().sort() };
+        })
+      );
+      const map: Record<string, string[]> = {};
+      results.forEach((r) => { map[r.subject] = r.groups; });
+      setGroupOptionsBySubject(map);
     } catch (error) {
-      console.error('載入 AI 設定失敗:', error);
-      setAiSettings({ provider: 'grok', model: 'grok-4-1-fast-reasoning-latest', hasApiKey: false, updatedAt: null });
-    } finally {
-      setAiLoading(false);
+      console.error('載入教師設定選項失敗:', error);
     }
   };
 
@@ -267,6 +323,87 @@ const TeacherDashboard: React.FC = () => {
     }
   };
 
+  const saveTeacherSettings = async () => {
+    try {
+      setTeacherSettingsSaving(true);
+      setTeacherSettingsError('');
+      await authService.updateMyTeacherSettings(teacherSettingsDraft);
+      refreshUser();
+      alert('教師設定已更新');
+    } catch (error) {
+      console.error('更新教師設定失敗:', error);
+      setTeacherSettingsError(error instanceof Error ? error.message : '更新失敗');
+    } finally {
+      setTeacherSettingsSaving(false);
+    }
+  };
+
+  const toggleSubjectTaught = async (subject: string) => {
+    const already = teacherSettingsDraft.subjectsTaught.includes(subject);
+    if (already) {
+      setTeacherSettingsDraft((prev) => {
+        const { [subject]: _removed, ...restGroups } = prev.subjectGroups;
+        return {
+          ...prev,
+          subjectsTaught: prev.subjectsTaught.filter((s) => s !== subject),
+          subjectGroups: restGroups
+        };
+      });
+      setGroupOptionsBySubject((prev) => {
+        const { [subject]: _removed, ...rest } = prev;
+        return rest;
+      });
+      return;
+    }
+
+    setTeacherSettingsDraft((prev) => ({
+      ...prev,
+      subjectsTaught: [...prev.subjectsTaught, subject],
+      subjectGroups: { ...prev.subjectGroups, [subject]: prev.subjectGroups[subject] || [] }
+    }));
+
+    try {
+      const data = await authService.getAvailableClasses(subject);
+      const groups = (data.groups || []).slice().sort();
+      setGroupOptionsBySubject((prev) => ({ ...prev, [subject]: groups }));
+      setTeacherSettingsDraft((prev) => {
+        const selected = prev.subjectGroups[subject] || [];
+        const allowed = new Set(groups);
+        const nextSelected = selected.filter((g) => allowed.has(g));
+        return { ...prev, subjectGroups: { ...prev.subjectGroups, [subject]: nextSelected } };
+      });
+    } catch (error) {
+      console.error('載入科目分組失敗:', error);
+      setGroupOptionsBySubject((prev) => ({ ...prev, [subject]: [] }));
+    }
+  };
+
+  const toggleSubjectGroup = (subject: string, group: string) => {
+    setTeacherSettingsDraft((prev) => {
+      const current = Array.isArray(prev.subjectGroups[subject]) ? prev.subjectGroups[subject] : [];
+      const next = current.includes(group) ? current.filter((g) => g !== group) : [...current, group];
+      return { ...prev, subjectGroups: { ...prev.subjectGroups, [subject]: next } };
+    });
+  };
+
+  useEffect(() => {
+    if (!showSettingsModal) return;
+    if (settingsTab !== 'ai') return;
+    if (aiSettings !== null) return;
+    (async () => {
+      try {
+        setAiLoading(true);
+        const settings = await authService.getAiSettings();
+        setAiSettings(settings);
+      } catch (error) {
+        console.error('載入 AI 設定失敗:', error);
+        setAiSettings({ provider: 'grok', model: 'grok-4-1-fast-reasoning-latest', hasApiKey: false, updatedAt: null });
+      } finally {
+        setAiLoading(false);
+      }
+    })();
+  }, [aiSettings, settingsTab, showSettingsModal]);
+
   const openAiGenerator = (config: {
     mode: 'mcq' | 'pairs';
     title: string;
@@ -284,24 +421,61 @@ const TeacherDashboard: React.FC = () => {
 
   // === 作業管理功能 ===
 
+  const parseGradeFromClassName = (className?: string) => {
+    const match = String(className || '').match(/^(\d+)/);
+    return match ? match[1] : '';
+  };
+
   // 載入作業列表（包含小測驗和遊戲）
   const loadAssignments = async () => {
     try {
       setLoading(true);
 
-      // 並行載入作業、小測驗和遊戲
+      // 並行載入自己的作業、小測驗和遊戲
       const [assignmentData, quizData, gameData] = await Promise.all([
         authService.getTeacherAssignments(filterSubject || undefined, filterClass || undefined),
         authService.getTeacherQuizzes(filterSubject || undefined, filterClass || undefined),
         authService.getTeacherGames(filterSubject || undefined, filterClass || undefined)
       ]);
 
-      // 合併作業、小測驗和遊戲，標記類型
-      let allAssignments = [
+      const mine = [
         ...(assignmentData.assignments || []).map((item: any) => ({ ...item, type: 'assignment' })),
         ...(quizData.quizzes || []).map((item: any) => ({ ...item, type: 'quiz' })),
         ...(gameData.games || []).map((item: any) => ({ ...item, type: 'game' }))
       ];
+
+      // 同科同級其他教師任務（需要先在設定中填寫所屬班級/任教科目）
+      const profile: any = user?.profile || {};
+      const homeroomClass = typeof profile.homeroomClass === 'string' ? profile.homeroomClass : '';
+      const grade = parseGradeFromClassName(homeroomClass);
+      const subjectsTaught = Array.isArray(profile.subjectsTaught) ? profile.subjectsTaught.filter((s: any) => typeof s === 'string') : [];
+      const subjectGroups: Record<string, string[]> = profile.subjectGroups && typeof profile.subjectGroups === 'object' ? profile.subjectGroups : {};
+
+      const subjectsForShared = (filterSubject ? [filterSubject] : subjectsTaught).filter((s) => subjectsTaught.includes(s));
+      const shared: any[] = [];
+
+      if (grade && subjectsForShared.length > 0) {
+        const results = await Promise.all(
+          subjectsForShared.map(async (subject) => {
+            const groups = Array.isArray(subjectGroups[subject]) ? subjectGroups[subject] : [];
+            const [a, q, g] = await Promise.all([
+              authService.getSharedAssignments({ subject, grade, targetClass: filterClass || undefined, groups }),
+              authService.getSharedQuizzes({ subject, grade, targetClass: filterClass || undefined, groups }),
+              authService.getSharedGames({ subject, grade, targetClass: filterClass || undefined, groups })
+            ]);
+            return { subject, a, q, g };
+          })
+        );
+
+        results.forEach(({ a, q, g }) => {
+          (a.assignments || []).forEach((item: any) => shared.push({ ...item, type: 'assignment', isShared: true }));
+          (q.quizzes || []).forEach((item: any) => shared.push({ ...item, type: 'quiz', isShared: true }));
+          (g.games || []).forEach((item: any) => shared.push({ ...item, type: 'game', isShared: true }));
+        });
+      }
+
+      // 合併並標記來源
+      let allAssignments = [...mine, ...shared];
 
       // 收集所有分組選項
       const allGroups = new Set<string>();
@@ -557,9 +731,9 @@ const TeacherDashboard: React.FC = () => {
   const visibleAssignments = useMemo(() => assignments.filter((a) => !isItemHidden(a)), [assignments, hiddenTaskKeys]);
   const hiddenAssignments = useMemo(() => assignments.filter((a) => isItemHidden(a)), [assignments, hiddenTaskKeys]);
 
-  const displayedAssignmentKeys = useMemo(() => {
+  const displayedDeletableAssignmentKeys = useMemo(() => {
     const items = showHiddenAssignments ? [...visibleAssignments, ...hiddenAssignments] : visibleAssignments;
-    return items.map((a) => makeTaskKey(a.type, a.id));
+    return items.filter((a: any) => !a?.isShared).map((a) => makeTaskKey(a.type, a.id));
   }, [hiddenAssignments, showHiddenAssignments, visibleAssignments]);
 
   const setManualHidden = (item: any, hidden: boolean) => {
@@ -994,9 +1168,9 @@ const TeacherDashboard: React.FC = () => {
           </div>
           <div className="flex items-center gap-2">
             <button
-              onClick={openAiSettings}
+              onClick={() => openSettings('teacher')}
               className="w-10 h-10 bg-white rounded-full border-2 border-brand-brown shadow-comic flex items-center justify-center"
-              title="設定（AI）"
+              title="設定"
             >
               <Settings className="text-brand-brown w-5 h-5" />
             </button>
@@ -1028,9 +1202,9 @@ const TeacherDashboard: React.FC = () => {
       {/* Header Icons */}
       <header className="hidden lg:flex fixed top-4 right-4 sm:right-6 z-20 gap-3 sm:gap-4">
         <button
-          onClick={openAiSettings}
+          onClick={() => openSettings('teacher')}
           className="w-10 h-10 sm:w-12 sm:h-12 bg-white rounded-full border-2 border-brand-brown shadow-comic flex items-center justify-center hover:scale-105 transition-transform"
-          title="設定（AI）"
+          title="設定"
         >
           <Settings className="text-brand-brown w-5 h-5 sm:w-6 sm:h-6" />
         </button>
@@ -2578,7 +2752,7 @@ const TeacherDashboard: React.FC = () => {
                           {isSelectMode && (
                             <>
                               <button
-                                onClick={() => setSelectedAssignments(displayedAssignmentKeys)}
+                                onClick={() => setSelectedAssignments(displayedDeletableAssignmentKeys)}
                                 className="px-4 py-2 bg-white text-gray-700 rounded-xl font-bold border-2 border-gray-300 hover:border-blue-500"
                               >
                                 全選
@@ -2691,6 +2865,7 @@ const TeacherDashboard: React.FC = () => {
                         visibleAssignments.map(assignment => {
                           const isQuiz = assignment.type === 'quiz';
                           const isGame = assignment.type === 'game';
+                          const isShared = !!(assignment as any).isShared;
                           const assignmentKey = makeTaskKey(assignment.type, assignment.id);
                           const isSelected = selectedAssignments.includes(assignmentKey);
                           return (
@@ -2701,14 +2876,16 @@ const TeacherDashboard: React.FC = () => {
                                     <input
                                       type="checkbox"
                                       checked={isSelected}
+                                      disabled={isShared}
                                       onChange={(e) => {
+                                        if (isShared) return;
                                         if (e.target.checked) {
                                           setSelectedAssignments(prev => [...prev, assignmentKey]);
                                         } else {
                                           setSelectedAssignments(prev => prev.filter(key => key !== assignmentKey));
                                         }
                                       }}
-                                      className="w-6 h-6 mt-1 rounded border-2 border-gray-400 text-blue-600 focus:ring-blue-500"
+                                      className={`w-6 h-6 mt-1 rounded border-2 border-gray-400 text-blue-600 focus:ring-blue-500 ${isShared ? 'opacity-50 cursor-not-allowed' : ''}`}
                                     />
                                   )}
                                   <div className="flex-1">
@@ -2723,6 +2900,11 @@ const TeacherDashboard: React.FC = () => {
                                       <h4 className="text-xl font-bold text-brand-brown">{assignment.title}</h4>
                                     </div>
                                     <div className="flex flex-wrap gap-4 text-sm text-gray-600 mb-3">
+                                      {isShared && (
+                                        <span className="bg-indigo-100 px-2 py-1 rounded-lg">
+                                          🤝 其他教師：{(assignment as any).teacherName || '—'}
+                                        </span>
+                                      )}
                                       <span className={`px-2 py-1 rounded-lg ${isGame ? 'bg-green-100' : isQuiz ? 'bg-yellow-100' : 'bg-purple-100'}`}>
                                         {isGame ? '🎮' : isQuiz ? '🧠' : '📚'} {assignment.subject}
                                       </span>
@@ -2736,16 +2918,20 @@ const TeacherDashboard: React.FC = () => {
                                           return '無指定班級';
                                         })()}
                                       </span>
-                                      <span className={`px-2 py-1 rounded-lg ${isGame ? 'bg-blue-100' : isQuiz ? 'bg-orange-100' : 'bg-yellow-100'}`}>
-                                        {isGame ? '🏆' : isQuiz ? '📊' : '💬'} {isGame ? (assignment.totalAttempts || 0) : isQuiz ? (assignment.totalSubmissions || 0) : (assignment.responseCount || 0)} 個{isGame ? '遊玩記錄' : isQuiz ? '提交' : '回應'}
-                                      </span>
-                                      <span className="bg-purple-100 px-2 py-1 rounded-lg">
-                                        👥 {assignment.uniqueStudents || 0} 位學生
-                                      </span>
-                                      {(isQuiz || isGame) && assignment.averageScore !== undefined && (
-                                        <span className="bg-blue-100 px-2 py-1 rounded-lg">
-                                          📈 平均分數: {Math.round(assignment.averageScore)}%
-                                        </span>
+                                      {!isShared && (
+                                        <>
+                                          <span className={`px-2 py-1 rounded-lg ${isGame ? 'bg-blue-100' : isQuiz ? 'bg-orange-100' : 'bg-yellow-100'}`}>
+                                            {isGame ? '🏆' : isQuiz ? '📊' : '💬'} {isGame ? (assignment.totalAttempts || 0) : isQuiz ? (assignment.totalSubmissions || 0) : (assignment.responseCount || 0)} 個{isGame ? '遊玩記錄' : isQuiz ? '提交' : '回應'}
+                                          </span>
+                                          <span className="bg-purple-100 px-2 py-1 rounded-lg">
+                                            👥 {assignment.uniqueStudents || 0} 位學生
+                                          </span>
+                                          {(isQuiz || isGame) && assignment.averageScore !== undefined && (
+                                            <span className="bg-blue-100 px-2 py-1 rounded-lg">
+                                              📈 平均分數: {Math.round(assignment.averageScore)}%
+                                            </span>
+                                          )}
+                                        </>
                                       )}
                                     </div>
 	                                    <div className="flex items-center gap-2 text-sm text-gray-500">
@@ -2772,11 +2958,13 @@ const TeacherDashboard: React.FC = () => {
                                   </div>
                                   <div className="flex gap-2 ml-4">
 	                                    <button
-	                                      onClick={() => viewAssignmentDetails(assignment)}
-	                                      className="flex items-center gap-1 px-4 py-2 bg-blue-100 text-blue-700 rounded-xl hover:bg-blue-200 font-bold"
+	                                      onClick={() => { if (!isShared) viewAssignmentDetails(assignment); }}
+	                                      disabled={isShared}
+	                                      title={isShared ? '其他教師任務：不可查看結果/回應' : undefined}
+	                                      className={`flex items-center gap-1 px-4 py-2 rounded-xl font-bold ${isShared ? 'bg-gray-100 text-gray-400 cursor-not-allowed' : 'bg-blue-100 text-blue-700 hover:bg-blue-200'}`}
 	                                    >
 	                                      <Eye className="w-4 h-4" />
-	                                      {(isQuiz || isGame) ? '查看結果' : '查看回應'}
+	                                      {isShared ? '不可查看' : (isQuiz || isGame) ? '查看結果' : '查看回應'}
 	                                    </button>
                                     {!isSelectMode && (
                                       <button
@@ -2789,8 +2977,10 @@ const TeacherDashboard: React.FC = () => {
                                       </button>
                                     )}
                                     <button
-                                      onClick={() => handleDeleteAssignment(assignment)}
-                                      className="flex items-center gap-1 px-4 py-2 bg-red-100 text-red-700 rounded-xl hover:bg-red-200 font-bold"
+                                      onClick={() => { if (!isShared) handleDeleteAssignment(assignment); }}
+                                      disabled={isShared}
+                                      title={isShared ? '其他教師任務：不可刪除' : undefined}
+                                      className={`flex items-center gap-1 px-4 py-2 rounded-xl font-bold ${isShared ? 'bg-gray-100 text-gray-400 cursor-not-allowed' : 'bg-red-100 text-red-700 hover:bg-red-200'}`}
                                     >
                                       <Trash className="w-4 h-4" />
                                       刪除
@@ -2822,6 +3012,7 @@ const TeacherDashboard: React.FC = () => {
                             {hiddenAssignments.map((assignment) => {
                               const isQuiz = assignment.type === 'quiz';
                               const isGame = assignment.type === 'game';
+                              const isShared = !!(assignment as any).isShared;
                               const assignmentKey = makeTaskKey(assignment.type, assignment.id);
                               const autoHidden = isAutoHidden(assignment.createdAt);
                               const manuallyHidden = hiddenTaskKeys.has(assignmentKey) && !autoHidden;
@@ -2839,10 +3030,12 @@ const TeacherDashboard: React.FC = () => {
                                           type="checkbox"
                                           checked={isSelected}
                                           onChange={(e) => {
+                                            if (isShared) return;
                                             if (e.target.checked) setSelectedAssignments(prev => [...prev, assignmentKey]);
                                             else setSelectedAssignments(prev => prev.filter(key => key !== assignmentKey));
                                           }}
-                                          className="w-6 h-6 mt-1 rounded border-2 border-gray-400 text-blue-600 focus:ring-blue-500"
+                                          disabled={isShared}
+                                          className={`w-6 h-6 mt-1 rounded border-2 border-gray-400 text-blue-600 focus:ring-blue-500 ${isShared ? 'opacity-50 cursor-not-allowed' : ''}`}
                                         />
                                       )}
                                       <div className="flex-1">
@@ -2855,6 +3048,11 @@ const TeacherDashboard: React.FC = () => {
                                             <MessageSquare className="w-5 h-5 text-purple-600" />
                                           )}
                                           <h4 className="text-xl font-bold text-brand-brown">{assignment.title}</h4>
+                                          {isShared && (
+                                            <span className="ml-2 text-xs font-bold px-2 py-1 rounded bg-indigo-100 text-indigo-800">
+                                              其他教師：{(assignment as any).teacherName || '—'}
+                                            </span>
+                                          )}
                                           {autoHidden && (
                                             <span className="ml-2 text-xs font-bold px-2 py-1 rounded bg-gray-200 text-gray-700">
                                               超過14天自動隱藏
@@ -2885,11 +3083,13 @@ const TeacherDashboard: React.FC = () => {
                                       </div>
                                       <div className="flex gap-2 ml-4">
                                         <button
-                                          onClick={() => viewAssignmentDetails(assignment)}
-                                          className="flex items-center gap-1 px-4 py-2 bg-blue-100 text-blue-700 rounded-xl hover:bg-blue-200 font-bold"
+                                          onClick={() => { if (!isShared) viewAssignmentDetails(assignment); }}
+                                          disabled={isShared}
+                                          title={isShared ? '其他教師任務：不可查看結果/回應' : undefined}
+                                          className={`flex items-center gap-1 px-4 py-2 rounded-xl font-bold ${isShared ? 'bg-gray-100 text-gray-400 cursor-not-allowed' : 'bg-blue-100 text-blue-700 hover:bg-blue-200'}`}
                                         >
                                           <Eye className="w-4 h-4" />
-                                          {(isQuiz || isGame) ? '查看結果' : '查看回應'}
+                                          {isShared ? '不可查看' : (isQuiz || isGame) ? '查看結果' : '查看回應'}
                                         </button>
                                         {manuallyHidden && !isSelectMode && (
                                           <button
@@ -2902,8 +3102,10 @@ const TeacherDashboard: React.FC = () => {
                                           </button>
                                         )}
                                         <button
-                                          onClick={() => handleDeleteAssignment(assignment)}
-                                          className="flex items-center gap-1 px-4 py-2 bg-red-100 text-red-700 rounded-xl hover:bg-red-200 font-bold"
+                                          onClick={() => { if (!isShared) handleDeleteAssignment(assignment); }}
+                                          disabled={isShared}
+                                          title={isShared ? '其他教師任務：不可刪除' : undefined}
+                                          className={`flex items-center gap-1 px-4 py-2 rounded-xl font-bold ${isShared ? 'bg-gray-100 text-gray-400 cursor-not-allowed' : 'bg-red-100 text-red-700 hover:bg-red-200'}`}
                                         >
                                           <Trash className="w-4 h-4" />
                                           刪除
@@ -3571,75 +3773,214 @@ const TeacherDashboard: React.FC = () => {
 	        )
 	      }
 
-		      {/* AI Settings Modal */}
-		      {showAiSettingsModal && (
+		      {/* Settings Modal */}
+		      {showSettingsModal && (
 		        <div className="fixed inset-0 bg-black bg-opacity-50 z-[70] flex items-center justify-center p-4">
-		          <div className="bg-white border-4 border-brand-brown rounded-3xl w-full max-w-2xl shadow-comic-xl">
-	            <div className="p-6 border-b-4 border-brand-brown bg-[#D9F3D5]">
-	              <div className="flex justify-between items-center">
-	                <div>
-	                  <h2 className="text-2xl font-black text-brand-brown">設定（AI）</h2>
-	                  <p className="text-sm text-gray-600 mt-1">
-	                    模型：<span className="font-bold">{aiSettings?.model || 'grok-4-1-fast-reasoning-latest'}</span>
-	                  </p>
-	                </div>
-	                <button
-	                  onClick={() => setShowAiSettingsModal(false)}
-	                  className="w-10 h-10 rounded-full bg-white border-2 border-brand-brown hover:bg-gray-100 flex items-center justify-center"
-	                >
-	                  <X className="w-6 h-6 text-brand-brown" />
-	                </button>
-	              </div>
-	            </div>
+		          <div className="bg-white border-4 border-brand-brown rounded-3xl w-full max-w-3xl shadow-comic-xl max-h-[90vh] overflow-y-auto">
+		            <div className="p-6 border-b-4 border-brand-brown bg-[#D9F3D5]">
+		              <div className="flex justify-between items-center">
+		                <div>
+		                  <h2 className="text-2xl font-black text-brand-brown">設定</h2>
+		                  {settingsTab === 'ai' && (
+		                    <p className="text-sm text-gray-600 mt-1">
+		                      模型：<span className="font-bold">{aiSettings?.model || 'grok-4-1-fast-reasoning-latest'}</span>
+		                    </p>
+		                  )}
+		                </div>
+		                <button
+		                  onClick={() => setShowSettingsModal(false)}
+		                  className="w-10 h-10 rounded-full bg-white border-2 border-brand-brown hover:bg-gray-100 flex items-center justify-center"
+		                  aria-label="關閉"
+		                >
+		                  <X className="w-6 h-6 text-brand-brown" />
+		                </button>
+		              </div>
+		            </div>
 
-	            <div className="p-6 space-y-4">
-	              <div className="bg-yellow-50 border-2 border-yellow-200 rounded-2xl p-4 text-sm text-gray-700">
-	                建議把 API Key 設定在後端代理中使用；前端不會顯示已保存的 Key，只會顯示「已設定/未設定」狀態。
-	              </div>
+		            <div className="px-6 pt-4">
+		              <div className="flex gap-2">
+		                <button
+		                  type="button"
+		                  onClick={() => setSettingsTab('teacher')}
+		                  className={`px-4 py-2 rounded-2xl border-2 font-black ${settingsTab === 'teacher'
+		                    ? 'bg-[#FDEEAD] border-brand-brown text-brand-brown'
+		                    : 'bg-white border-gray-300 text-gray-600 hover:border-brand-brown'
+		                    }`}
+		                >
+		                  教師設定
+		                </button>
+		                <button
+		                  type="button"
+		                  onClick={() => setSettingsTab('ai')}
+		                  className={`px-4 py-2 rounded-2xl border-2 font-black ${settingsTab === 'ai'
+		                    ? 'bg-[#FDEEAD] border-brand-brown text-brand-brown'
+		                    : 'bg-white border-gray-300 text-gray-600 hover:border-brand-brown'
+		                    }`}
+		                >
+		                  AI 設定
+		                </button>
+		              </div>
+		            </div>
 
-	              <div className="flex items-center gap-3">
-	                <span className={`px-3 py-1 rounded-full text-xs font-black border-2 ${aiSettings?.hasApiKey ? 'bg-emerald-100 border-emerald-300 text-emerald-800' : 'bg-red-100 border-red-300 text-red-800'}`}>
-	                  {aiSettings?.hasApiKey ? '已設定 API Key' : '未設定 API Key'}
-	                </span>
-	                {aiSettings?.updatedAt && (
-	                  <span className="text-xs text-gray-500">
-	                    更新時間：{new Date(aiSettings.updatedAt).toLocaleString()}
-	                  </span>
-	                )}
-	              </div>
+		            <div className="p-6 space-y-4">
+		              {settingsTab === 'teacher' ? (
+		                <>
+		                  <div className="bg-blue-50 border-2 border-blue-200 rounded-2xl p-4 text-sm text-gray-700">
+		                    設定後，作業管理會顯示「同科同級其他教師」派發的任務（只顯示基本資料，不可查看結果/回應或刪除）。
+		                  </div>
 
-	              {aiLoading ? (
-	                <div className="text-center py-6 text-brand-brown font-bold">載入中...</div>
-	              ) : (
-	                <>
-	                  <Input
-	                    label="Grok API Key（更新/清除）"
-	                    type={aiKeyVisible ? 'text' : 'password'}
-	                    placeholder="輸入 Grok API Key（留空代表清除）"
-	                    value={aiApiKeyDraft}
-	                    onChange={(e) => setAiApiKeyDraft(e.target.value)}
-	                  />
-	                  <div className="flex items-center gap-3">
-	                    <button
-	                      type="button"
-	                      onClick={() => setAiKeyVisible(v => !v)}
-	                      className="px-4 py-2 bg-gray-100 border-2 border-gray-300 rounded-2xl font-bold text-gray-700 hover:bg-gray-200"
-	                    >
-	                      {aiKeyVisible ? '隱藏' : '顯示'}
-	                    </button>
-	                    <button
-	                      type="button"
-	                      onClick={saveAiSettings}
-	                      disabled={aiSaving}
-	                      className={`ml-auto px-6 py-2 rounded-2xl border-2 border-brand-brown font-black ${aiSaving ? 'bg-gray-300 text-gray-600 cursor-wait' : 'bg-[#FDEEAD] text-brand-brown hover:bg-[#FCE690]'}`}
-	                    >
-	                      {aiSaving ? '儲存中...' : '儲存'}
-	                    </button>
-	                  </div>
-	                </>
-	              )}
-	            </div>
-	          </div>
+		                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+		                    <div>
+		                      <label className="block text-sm font-bold text-gray-600 mb-2">所屬班級</label>
+		                      <select
+		                        value={teacherSettingsDraft.homeroomClass}
+		                        onChange={(e) => setTeacherSettingsDraft((prev) => ({ ...prev, homeroomClass: e.target.value }))}
+		                        className="w-full px-3 py-2 border-2 border-gray-300 rounded-xl"
+		                      >
+		                        <option value="">未設定</option>
+		                        {availableClasses.map((className) => (
+		                          <option key={className} value={className}>{className}</option>
+		                        ))}
+		                      </select>
+		                    </div>
+		                  </div>
+
+		                  <div>
+		                    <div className="text-sm font-black text-gray-700 mb-2">任教科目</div>
+		                    <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+		                      {availableSubjects.map((subject) => {
+		                        const checked = teacherSettingsDraft.subjectsTaught.includes(subject);
+		                        return (
+		                          <label
+		                            key={subject}
+		                            className={`flex items-center gap-2 px-3 py-2 rounded-xl border-2 cursor-pointer ${checked ? 'bg-[#FDEEAD] border-brand-brown' : 'bg-white border-gray-200 hover:border-brand-brown'}`}
+		                          >
+		                            <input
+		                              type="checkbox"
+		                              checked={checked}
+		                              onChange={() => toggleSubjectTaught(subject)}
+		                              className="w-4 h-4"
+		                            />
+		                            <span className="font-bold text-gray-700">{subject}</span>
+		                          </label>
+		                        );
+		                      })}
+		                    </div>
+		                  </div>
+
+		                  {teacherSettingsDraft.subjectsTaught.length > 0 && (
+		                    <div className="space-y-3">
+		                      <div className="text-sm font-black text-gray-700">科目分組</div>
+		                      {teacherSettingsDraft.subjectsTaught.map((subject) => {
+		                        const groups = groupOptionsBySubject[subject] || [];
+		                        const selectedGroups = teacherSettingsDraft.subjectGroups[subject] || [];
+		                        return (
+		                          <div key={subject} className="p-4 rounded-2xl border-2 border-gray-200 bg-gray-50">
+		                            <div className="font-black text-gray-700 mb-2">{subject}</div>
+		                            {groups.length > 0 ? (
+		                              <div className="flex flex-wrap gap-2">
+		                                {groups.map((group) => {
+		                                  const checked = selectedGroups.includes(group);
+		                                  return (
+		                                    <label
+		                                      key={group}
+		                                      className={`flex items-center gap-2 px-3 py-2 rounded-xl border-2 cursor-pointer ${checked ? 'bg-white border-brand-brown' : 'bg-white border-gray-200 hover:border-brand-brown'}`}
+		                                    >
+		                                      <input
+		                                        type="checkbox"
+		                                        checked={checked}
+		                                        onChange={() => toggleSubjectGroup(subject, group)}
+		                                        className="w-4 h-4"
+		                                      />
+		                                      <span className="font-bold text-gray-700">{group}</span>
+		                                    </label>
+		                                  );
+		                                })}
+		                              </div>
+		                            ) : (
+		                              <div className="text-sm text-gray-500">本科暫無分組（或未提供分組名單）</div>
+		                            )}
+		                          </div>
+		                        );
+		                      })}
+		                    </div>
+		                  )}
+
+		                  {teacherSettingsError && (
+		                    <div className="bg-red-50 border-2 border-red-200 rounded-2xl p-4 text-sm text-red-700 font-bold">
+		                      {teacherSettingsError}
+		                    </div>
+		                  )}
+
+		                  <div className="flex items-center gap-3 pt-2">
+		                    <button
+		                      type="button"
+		                      onClick={() => setShowSettingsModal(false)}
+		                      className="px-5 py-2 bg-gray-100 border-2 border-gray-300 rounded-2xl font-black text-gray-700 hover:bg-gray-200"
+		                    >
+		                      關閉
+		                    </button>
+		                    <button
+		                      type="button"
+		                      onClick={saveTeacherSettings}
+		                      disabled={teacherSettingsSaving}
+		                      className={`ml-auto px-6 py-2 rounded-2xl border-2 border-brand-brown font-black ${teacherSettingsSaving ? 'bg-gray-300 text-gray-600 cursor-wait' : 'bg-[#FDEEAD] text-brand-brown hover:bg-[#FCE690]'}`}
+		                    >
+		                      {teacherSettingsSaving ? '儲存中...' : '儲存'}
+		                    </button>
+		                  </div>
+		                </>
+		              ) : (
+		                <>
+		                  <div className="bg-yellow-50 border-2 border-yellow-200 rounded-2xl p-4 text-sm text-gray-700">
+		                    建議把 API Key 設定在後端代理中使用；前端不會顯示已保存的 Key，只會顯示「已設定/未設定」狀態。
+		                  </div>
+
+		                  <div className="flex items-center gap-3">
+		                    <span className={`px-3 py-1 rounded-full text-xs font-black border-2 ${aiSettings?.hasApiKey ? 'bg-emerald-100 border-emerald-300 text-emerald-800' : 'bg-red-100 border-red-300 text-red-800'}`}>
+		                      {aiSettings?.hasApiKey ? '已設定 API Key' : '未設定 API Key'}
+		                    </span>
+		                    {aiSettings?.updatedAt && (
+		                      <span className="text-xs text-gray-500">
+		                        更新時間：{new Date(aiSettings.updatedAt).toLocaleString()}
+		                      </span>
+		                    )}
+		                  </div>
+
+		                  {aiLoading ? (
+		                    <div className="text-center py-6 text-brand-brown font-bold">載入中...</div>
+		                  ) : (
+		                    <>
+		                      <Input
+		                        label="Grok API Key（更新/清除）"
+		                        type={aiKeyVisible ? 'text' : 'password'}
+		                        placeholder="輸入 Grok API Key（留空代表清除）"
+		                        value={aiApiKeyDraft}
+		                        onChange={(e) => setAiApiKeyDraft(e.target.value)}
+		                      />
+		                      <div className="flex items-center gap-3">
+		                        <button
+		                          type="button"
+		                          onClick={() => setAiKeyVisible(v => !v)}
+		                          className="px-4 py-2 bg-gray-100 border-2 border-gray-300 rounded-2xl font-bold text-gray-700 hover:bg-gray-200"
+		                        >
+		                          {aiKeyVisible ? '隱藏' : '顯示'}
+		                        </button>
+		                        <button
+		                          type="button"
+		                          onClick={saveAiSettings}
+		                          disabled={aiSaving}
+		                          className={`ml-auto px-6 py-2 rounded-2xl border-2 border-brand-brown font-black ${aiSaving ? 'bg-gray-300 text-gray-600 cursor-wait' : 'bg-[#FDEEAD] text-brand-brown hover:bg-[#FCE690]'}`}
+		                        >
+		                          {aiSaving ? '儲存中...' : '儲存'}
+		                        </button>
+		                      </div>
+		                    </>
+		                  )}
+		                </>
+		              )}
+		            </div>
+		          </div>
 		        </div>
 		      )}
 
@@ -3649,7 +3990,7 @@ const TeacherDashboard: React.FC = () => {
 		        subject={aiGeneratorSubject}
 		        title={aiGeneratorTitle}
 		        importModes={aiGeneratorImportModes}
-		        onOpenSettings={openAiSettings}
+		        onOpenSettings={() => openSettings('ai')}
 		        onClose={() => setShowAiGenerator(false)}
 		        onImport={(payload, importMode) => aiGeneratorOnImportRef.current(payload, importMode)}
 		      />
