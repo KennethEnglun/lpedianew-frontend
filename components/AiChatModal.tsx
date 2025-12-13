@@ -164,7 +164,7 @@ const AiChatModal: React.FC<{
   const [myThreads, setMyThreads] = useState<any[]>([]);
   const [myThreadSearch, setMyThreadSearch] = useState('');
   const [myFolders, setMyFolders] = useState<any[]>([]);
-  const [selectedFolderId, setSelectedFolderId] = useState<string>('all'); // 'all' | 'unfiled' | folderId
+  const [selectedFolderId, setSelectedFolderId] = useState<string>('all'); // 'all' | 'filed' | 'unfiled' | folderId
   const [creatingFolder, setCreatingFolder] = useState(false);
   const [newFolderName, setNewFolderName] = useState('');
   const [editingFolderId, setEditingFolderId] = useState<string | null>(null);
@@ -239,7 +239,7 @@ const AiChatModal: React.FC<{
       }
 
       const threadsResp = isTeacher
-        ? await authService.getMyChatThreads(nextBotId === 'global' ? undefined : { botId: nextBotId })
+        ? await authService.getMyChatThreads(mySidebarView === 'chat' ? { botId: 'all' } : (nextBotId === 'global' ? undefined : { botId: nextBotId }))
         : await authService.getMyChatThreads({ subject: nextSubject });
       const threads = Array.isArray(threadsResp.threads) ? threadsResp.threads : [];
       setMyThreads(threads);
@@ -267,11 +267,24 @@ const AiChatModal: React.FC<{
     }
   };
 
-  const openMyThread = async (threadId: string) => {
+  const openMyThread = async (threadId: string, thread?: any) => {
     try {
       abortRef.current?.abort();
       setMyLoading(true);
       setMyError('');
+
+      if (isTeacher) {
+        const t = thread || myThreads.find((x: any) => String(x?.id) === String(threadId));
+        const nextBot = String(t?.botId || 'global');
+        if (nextBot && nextBot !== 'global') {
+          setMyChatBotId(nextBot);
+          setSelectedFolderId('all');
+          setMySidebarView('bot');
+        } else {
+          setMySidebarView('chat');
+        }
+      }
+
       setMyThreadId(threadId);
       const msg = await authService.getMyChatMessages(threadId, { limit: 200 });
       const arr = Array.isArray(msg.messages) ? msg.messages : [];
@@ -564,7 +577,7 @@ const AiChatModal: React.FC<{
       // Refresh thread list to pick up title + ordering
       try {
         const threadsResp = isTeacher
-          ? await authService.getMyChatThreads(effectiveTeacherBotId === 'global' ? undefined : { botId: effectiveTeacherBotId })
+          ? await authService.getMyChatThreads(mySidebarView === 'chat' ? { botId: 'all' } : (effectiveTeacherBotId === 'global' ? undefined : { botId: effectiveTeacherBotId }))
           : await authService.getMyChatThreads({ subject });
         const threads = Array.isArray(threadsResp.threads) ? threadsResp.threads : [];
         setMyThreads(threads);
@@ -816,7 +829,7 @@ const AiChatModal: React.FC<{
                 )}
               </div>
 
-              {isTeacher && mySidebarView === 'bot' && (
+	              {isTeacher && mySidebarView === 'bot' && (
                 <div className="mb-4">
                   <div className="flex items-center justify-between mb-2">
                     <div className="text-xs font-black text-gray-600">我的 BOT</div>
@@ -965,10 +978,10 @@ const AiChatModal: React.FC<{
                 </div>
               )}
 
-              {mySidebarView === 'chat' && (
-              <div className="mb-4">
-                <div className="flex items-center justify-between mb-2">
-                  <div className="text-xs font-black text-gray-600">資料夾</div>
+	              {mySidebarView === 'chat' && (
+	              <div className="mb-4">
+	                <div className="flex items-center justify-between mb-2">
+	                  <div className="text-xs font-black text-gray-600">資料夾</div>
                   <button
                     type="button"
                     onClick={() => setCreatingFolder((v) => !v)}
@@ -998,24 +1011,35 @@ const AiChatModal: React.FC<{
                   </div>
                 )}
 
-                <div className="space-y-2">
-                  <button
-                    type="button"
-                    onClick={() => setSelectedFolderId('all')}
-                    className={`w-full flex items-center gap-2 px-3 py-2 rounded-2xl border-2 font-black ${selectedFolderId === 'all'
-                      ? 'bg-[#FDEEAD] border-brand-brown text-brand-brown'
-                      : 'bg-white border-gray-200 text-gray-700 hover:border-brand-brown'
-                      }`}
-                  >
-                    <Folder className="w-4 h-4" />
-                    全部
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setSelectedFolderId('unfiled')}
-                    className={`w-full flex items-center gap-2 px-3 py-2 rounded-2xl border-2 font-black ${selectedFolderId === 'unfiled'
-                      ? 'bg-[#FDEEAD] border-brand-brown text-brand-brown'
-                      : 'bg-white border-gray-200 text-gray-700 hover:border-brand-brown'
+	                <div className="space-y-2">
+	                  <button
+	                    type="button"
+	                    onClick={() => setSelectedFolderId('all')}
+	                    className={`w-full flex items-center gap-2 px-3 py-2 rounded-2xl border-2 font-black ${selectedFolderId === 'all'
+	                      ? 'bg-[#FDEEAD] border-brand-brown text-brand-brown'
+	                      : 'bg-white border-gray-200 text-gray-700 hover:border-brand-brown'
+	                      }`}
+	                  >
+	                    <Folder className="w-4 h-4" />
+	                    全部
+	                  </button>
+	                  <button
+	                    type="button"
+	                    onClick={() => setSelectedFolderId('filed')}
+	                    className={`w-full flex items-center gap-2 px-3 py-2 rounded-2xl border-2 font-black ${selectedFolderId === 'filed'
+	                      ? 'bg-[#FDEEAD] border-brand-brown text-brand-brown'
+	                      : 'bg-white border-gray-200 text-gray-700 hover:border-brand-brown'
+	                      }`}
+	                  >
+	                    <Folder className="w-4 h-4" />
+	                    已分類
+	                  </button>
+	                  <button
+	                    type="button"
+	                    onClick={() => setSelectedFolderId('unfiled')}
+	                    className={`w-full flex items-center gap-2 px-3 py-2 rounded-2xl border-2 font-black ${selectedFolderId === 'unfiled'
+	                      ? 'bg-[#FDEEAD] border-brand-brown text-brand-brown'
+	                      : 'bg-white border-gray-200 text-gray-700 hover:border-brand-brown'
                       }`}
                   >
                     <Folder className="w-4 h-4" />
@@ -1084,17 +1108,18 @@ const AiChatModal: React.FC<{
 
               <div className="text-xs font-black text-gray-600 mb-2">歷史</div>
               <div className="space-y-2">
-                {(() => {
-                  const q = myThreadSearch.trim().toLowerCase();
-                  const filtered = myThreads.filter((t: any) => {
-                    const title = String(t?.title || '新對話').toLowerCase();
-                    const folderOk = (() => {
-                      if (selectedFolderId === 'all') return true;
-                      if (selectedFolderId === 'unfiled') return !t.folderId;
-                      return String(t.folderId || '') === String(selectedFolderId);
-                    })();
-                    return folderOk && (!q || title.includes(q));
-                  });
+	                {(() => {
+	                  const q = myThreadSearch.trim().toLowerCase();
+	                  const filtered = myThreads.filter((t: any) => {
+	                    const title = String(t?.title || '新對話').toLowerCase();
+	                    const folderOk = (() => {
+	                      if (selectedFolderId === 'all') return true;
+	                      if (selectedFolderId === 'filed') return !!t.folderId;
+	                      if (selectedFolderId === 'unfiled') return !t.folderId;
+	                      return String(t.folderId || '') === String(selectedFolderId);
+	                    })();
+	                    return folderOk && (!q || title.includes(q));
+	                  });
 
                   if (filtered.length === 0) {
                     return (
@@ -1122,16 +1147,16 @@ const AiChatModal: React.FC<{
                       <div key={key}>
                         <div className="text-xs font-black text-gray-500 px-1 mb-1">{label}</div>
                         <div className="space-y-2">
-                          {items.map((t: any) => (
-                            <button
-                              key={t.id}
-                              type="button"
-                              onClick={() => openMyThread(String(t.id))}
-                              className={`w-full text-left px-3 py-3 rounded-2xl border-2 transition-colors ${String(t.id) === String(myThreadId)
-                                ? 'bg-[#FDEEAD] border-brand-brown'
-                                : 'bg-gray-50 border-gray-200 hover:border-brand-brown'
-                                }`}
-                            >
+	                          {items.map((t: any) => (
+	                            <button
+	                              key={t.id}
+	                              type="button"
+	                              onClick={() => openMyThread(String(t.id), t)}
+	                              className={`w-full text-left px-3 py-3 rounded-2xl border-2 transition-colors ${String(t.id) === String(myThreadId)
+	                                ? 'bg-[#FDEEAD] border-brand-brown'
+	                                : 'bg-gray-50 border-gray-200 hover:border-brand-brown'
+	                                }`}
+	                            >
                               <div className="flex items-start gap-2 group">
                                 {editingThreadId === String(t.id) ? (
                                   <input
