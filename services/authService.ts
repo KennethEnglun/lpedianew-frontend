@@ -230,6 +230,7 @@ class AuthService {
   async sendChatMessage(payload: {
     subject?: string;
     threadId?: string | null;
+    botId?: string;
     message: string;
   }): Promise<{
     threadId: string;
@@ -247,6 +248,7 @@ class AuthService {
   async sendChatMessageStream(payload: {
     subject?: string;
     threadId?: string | null;
+    botId?: string;
     message: string;
   }, options?: { signal?: AbortSignal }): Promise<Response> {
     return fetch(`${this.API_BASE}/chats/send-stream`, {
@@ -260,9 +262,10 @@ class AuthService {
     });
   }
 
-  async getMyChatThreads(params?: { subject?: string }): Promise<{ threads: any[] }> {
+  async getMyChatThreads(params?: { subject?: string; botId?: string }): Promise<{ threads: any[] }> {
     const searchParams = new URLSearchParams();
     if (params?.subject) searchParams.append('subject', params.subject);
+    if (params?.botId) searchParams.append('botId', params.botId);
     const query = searchParams.toString() ? `?${searchParams.toString()}` : '';
     const response = await fetch(`${this.API_BASE}/chats/me/threads${query}`, {
       headers: this.getAuthHeaders()
@@ -270,7 +273,7 @@ class AuthService {
     return this.handleResponse(response);
   }
 
-  async createMyChatThread(payload: { subject?: string }): Promise<{ thread: any }> {
+  async createMyChatThread(payload: { subject?: string; botId?: string }): Promise<{ thread: any }> {
     const response = await fetch(`${this.API_BASE}/chats/me/threads`, {
       method: 'POST',
       headers: this.getAuthHeaders(),
@@ -323,6 +326,39 @@ class AuthService {
 
   async deleteMyChatFolder(folderId: string): Promise<void> {
     const response = await fetch(`${this.API_BASE}/chats/me/folders/${folderId}`, {
+      method: 'DELETE',
+      headers: this.getAuthHeaders()
+    });
+    await this.handleResponse(response);
+  }
+
+  async getMyChatBots(): Promise<{ bots: any[] }> {
+    const response = await fetch(`${this.API_BASE}/chats/me/bots`, {
+      headers: this.getAuthHeaders()
+    });
+    return this.handleResponse(response);
+  }
+
+  async createMyChatBot(payload: { name: string; prompt?: string }): Promise<{ bot: any }> {
+    const response = await fetch(`${this.API_BASE}/chats/me/bots`, {
+      method: 'POST',
+      headers: this.getAuthHeaders(),
+      body: JSON.stringify(payload)
+    });
+    return this.handleResponse(response);
+  }
+
+  async updateMyChatBot(botId: string, payload: { name?: string; prompt?: string }): Promise<{ bot: any }> {
+    const response = await fetch(`${this.API_BASE}/chats/me/bots/${botId}`, {
+      method: 'PATCH',
+      headers: this.getAuthHeaders(),
+      body: JSON.stringify(payload)
+    });
+    return this.handleResponse(response);
+  }
+
+  async deleteMyChatBot(botId: string): Promise<void> {
+    const response = await fetch(`${this.API_BASE}/chats/me/bots/${botId}`, {
       method: 'DELETE',
       headers: this.getAuthHeaders()
     });

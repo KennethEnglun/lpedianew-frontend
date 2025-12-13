@@ -157,6 +157,9 @@ const AiChatModal: React.FC<{
   const [subject, setSubject] = useState<string>(defaultSubject || String(Subject.CHINESE)); // student: active subject; teacher: optional filter for students tab ('' = all)
 
   // My chat
+  const [mySidebarView, setMySidebarView] = useState<'chat' | 'bot'>('chat');
+  const [myBotId, setMyBotId] = useState<string>('global');
+  const [myBots, setMyBots] = useState<any[]>([]);
   const [myThreadId, setMyThreadId] = useState<string | null>(null);
   const [myThreads, setMyThreads] = useState<any[]>([]);
   const [myThreadSearch, setMyThreadSearch] = useState('');
@@ -175,6 +178,12 @@ const AiChatModal: React.FC<{
   const [myError, setMyError] = useState('');
   const abortRef = useRef<AbortController | null>(null);
   const [copiedMessageId, setCopiedMessageId] = useState<string | null>(null);
+  const [creatingBot, setCreatingBot] = useState(false);
+  const [newBotName, setNewBotName] = useState('');
+  const [newBotPrompt, setNewBotPrompt] = useState('');
+  const [editingBotId, setEditingBotId] = useState<string | null>(null);
+  const [editingBotName, setEditingBotName] = useState('');
+  const [editingBotPrompt, setEditingBotPrompt] = useState('');
 
   // Teacher view
   const [studentSearch, setStudentSearch] = useState('');
@@ -184,6 +193,13 @@ const AiChatModal: React.FC<{
   const [selectedStudentInfo, setSelectedStudentInfo] = useState<any>(null);
   const [studentMessages, setStudentMessages] = useState<ChatMessage[]>([]);
   const [studentError, setStudentError] = useState('');
+
+  const currentBot = useMemo(() => {
+    if (myBotId === 'global') return { id: 'global', name: '通用 Bot', prompt: '' };
+    const found = myBots.find((b: any) => String(b?.id) === String(myBotId));
+    if (found) return found;
+    return { id: myBotId, name: 'BOT', prompt: '' };
+  }, [myBotId, myBots]);
 
   const endRef = useRef<HTMLDivElement | null>(null);
   useEffect(() => {
@@ -196,28 +212,39 @@ const AiChatModal: React.FC<{
     if (isTeacher) {
       setSubject(''); // teacher: no top subject selector; default show all subjects in student threads
       setTab('students');
+      setMySidebarView('chat');
+      setMyBotId('global');
     } else {
       const initial = defaultSubject || String(Subject.CHINESE);
       setSubject(String(initial || Subject.CHINESE));
       setTab('my');
+      setMySidebarView('chat');
+      setMyBotId('global');
     }
   }, [defaultSubject, isTeacher, open, teacherSubjects]);
 
-  const loadMyChat = async (nextSubject: string) => {
+  const loadMyChat = async (nextSubject: string, nextBotId: string) => {
     try {
       setMyLoading(true);
       setMyError('');
       setMyMessages([]);
+      const foldersResp = await authService.getMyChatFolders();
+      setMyFolders(Array.isArray(foldersResp.folders) ? foldersResp.folders : []);
+
       if (isTeacher) {
-        const foldersResp = await authService.getMyChatFolders();
-        setMyFolders(Array.isArray(foldersResp.folders) ? foldersResp.folders : []);
+        try {
+          const botsResp = await authService.getMyChatBots();
+          setMyBots(Array.isArray(botsResp.bots) ? botsResp.bots : []);
+        } catch {
+          setMyBots([]);
+        }
       } else {
-        const foldersResp = await authService.getMyChatFolders();
-        setMyFolders(Array.isArray(foldersResp.folders) ? foldersResp.folders : []);
+        setMyBots([]);
       }
+
       const threadsResp = isTeacher
-        ? await authService.getMyChatThreads()
-        : await authService.getMyChatThreads({ subject: nextSubject });
+        ? await authService.getMyChatThreads({ botId: nextBotId })
+        : await authService.getMyChatThreads({ subject: nextSubject, botId: 'global' });
       const threads = Array.isArray(threadsResp.threads) ? threadsResp.threads : [];
       setMyThreads(threads);
       const selected = threads.find((t: any) => t?.id === myThreadId) || threads[0] || null;
@@ -273,7 +300,7 @@ const AiChatModal: React.FC<{
       setMyLoading(true);
       setMyError('');
       setMyMessages([]);
-      const resp = await authService.createMyChatThread({ subject: isTeacher ? undefined : subject });
+      const resp = await authService.createMyChatThread({ subject: isTeacher ? undefined : subject, botId: isTeacher ? myBotId : 'global' });
       const thread = resp?.thread;
       if (thread?.id) {
         const nextId = String(thread.id);
@@ -309,10 +336,10 @@ const AiChatModal: React.FC<{
 
   useEffect(() => {
     if (!open) return;
-    if (tab === 'my') loadMyChat(subject);
+    if (tab === 'my') loadMyChat(subject, myBotId);
     else loadTeacherThreads(subject);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, subject, tab]);
+  }, [open, subject, tab, myBotId]);
 
   const openTeacherThread = async (threadId: string) => {
     try {
@@ -415,6 +442,50 @@ const AiChatModal: React.FC<{
     if (selectedFolderId === folderId) setSelectedFolderId('all');
   };
 
+  const selectBot = (nextBotId: string) => {
+    setMyBotId(String(nextBotId || 'global'));
+    setMyThreadId(null);
+    setMyMessages([]);
+    setMySidebarView('chat');
+  };
+
+  const createBot = async () => {
+    const name = String(newBotName || '').trim();
+    const prompt = String(newBotPrompt || '').trim();
+    if (!name) return;
+    const resp = await authService.createMyChatBot({ name, prompt });
+    setMyBots((prev) => [resp.bot, ...prev]);
+    setCreatingBot(false);
+    setNewBotName('');
+    setNewBotPrompt('');
+  };
+
+  const startEditBot = (bot: any) => {
+    setEditingBotId(String(bot?.id));
+    setEditingBotName(String(bot?.name || ''));
+    setEditingBotPrompt(String(bot?.prompt || ''));
+  };
+
+  const saveBot = async (botId: string) => {
+    const name = String(editingBotName || '').trim();
+    const prompt = String(editingBotPrompt || '').trim();
+    if (!name) return;
+    const resp = await authService.updateMyChatBot(botId, { name, prompt });
+    setMyBots((prev) => prev.map((b) => (String(b?.id) === String(botId) ? resp.bot : b)));
+    setEditingBotId(null);
+    setEditingBotName('');
+    setEditingBotPrompt('');
+  };
+
+  const removeBot = async (botId: string) => {
+    if (!confirm('確定要刪除這個 BOT 嗎？（不會刪除已存在的對話記錄）')) return;
+    await authService.deleteMyChatBot(botId);
+    setMyBots((prev) => prev.filter((b) => String(b?.id) !== String(botId)));
+    if (String(myBotId) === String(botId)) {
+      selectBot('global');
+    }
+  };
+
   const send = async () => {
     if (!draft.trim()) return;
     try {
@@ -442,11 +513,11 @@ const AiChatModal: React.FC<{
       ]));
 
       const streamResp = await authService.sendChatMessageStream(
-        { subject: isTeacher ? undefined : subject, threadId: myThreadId, message: text },
+        { subject: isTeacher ? undefined : subject, threadId: myThreadId, botId: isTeacher ? myBotId : 'global', message: text },
         { signal: abortRef.current?.signal }
       );
       if (!streamResp.ok || !streamResp.body) {
-        const fallback = await authService.sendChatMessage({ subject: isTeacher ? undefined : subject, threadId: myThreadId, message: text });
+        const fallback = await authService.sendChatMessage({ subject: isTeacher ? undefined : subject, threadId: myThreadId, botId: isTeacher ? myBotId : 'global', message: text });
         setMyThreadId(fallback.threadId);
         const content = String(fallback.assistantMessage?.content || '');
         setMyMessages((prev) => prev.map((m) => (m.id === tempAssistantId ? { ...m, content } : m)));
@@ -493,7 +564,9 @@ const AiChatModal: React.FC<{
 
       // Refresh thread list to pick up title + ordering
       try {
-        const threadsResp = isTeacher ? await authService.getMyChatThreads() : await authService.getMyChatThreads({ subject });
+        const threadsResp = isTeacher
+          ? await authService.getMyChatThreads({ botId: myBotId })
+          : await authService.getMyChatThreads({ subject, botId: 'global' });
         const threads = Array.isArray(threadsResp.threads) ? threadsResp.threads : [];
         setMyThreads(threads);
       } catch {
@@ -710,11 +783,170 @@ const AiChatModal: React.FC<{
               </button>
 
               <div className="space-y-2 mb-4">
-                <div className="px-3 py-2 rounded-2xl bg-[#FDEEAD] border-2 border-brand-brown font-black text-brand-brown">聊天</div>
+                <button
+                  type="button"
+                  onClick={() => setMySidebarView('chat')}
+                  className={`w-full px-3 py-2 rounded-2xl border-2 font-black text-left ${mySidebarView === 'chat'
+                    ? 'bg-[#FDEEAD] border-brand-brown text-brand-brown'
+                    : 'bg-white border-gray-200 text-gray-700 hover:border-brand-brown'
+                    }`}
+                >
+                  聊天
+                  {isTeacher && myBotId !== 'global' && (
+                    <span className="ml-2 text-xs font-black text-gray-500">（{String(currentBot?.name || 'BOT')}）</span>
+                  )}
+                </button>
                 <div className="px-3 py-2 rounded-2xl bg-white border-2 border-gray-200 text-gray-400 font-black">語音（開發中）</div>
                 <div className="px-3 py-2 rounded-2xl bg-white border-2 border-gray-200 text-gray-400 font-black">Imagine（開發中）</div>
-                <div className="px-3 py-2 rounded-2xl bg-white border-2 border-gray-200 text-gray-400 font-black">專案（開發中）</div>
+                {isTeacher ? (
+                  <button
+                    type="button"
+                    onClick={() => setMySidebarView('bot')}
+                    className={`w-full px-3 py-2 rounded-2xl border-2 font-black text-left ${mySidebarView === 'bot'
+                      ? 'bg-[#FDEEAD] border-brand-brown text-brand-brown'
+                      : 'bg-white border-gray-200 text-gray-700 hover:border-brand-brown'
+                      }`}
+                  >
+                    BOT
+                  </button>
+                ) : (
+                  <div className="px-3 py-2 rounded-2xl bg-white border-2 border-gray-200 text-gray-400 font-black">BOT（教師專用）</div>
+                )}
               </div>
+
+              {isTeacher && mySidebarView === 'bot' && (
+                <div className="mb-4">
+                  <div className="flex items-center justify-between mb-2">
+                    <div className="text-xs font-black text-gray-600">我的 BOT</div>
+                    <button
+                      type="button"
+                      onClick={() => setCreatingBot((v) => !v)}
+                      className="inline-flex items-center gap-1 px-2 py-1 rounded-lg border border-gray-200 bg-white hover:border-brand-brown text-xs font-black text-gray-700"
+                      title="新增 BOT"
+                    >
+                      <Bot className="w-4 h-4" />
+                      新增
+                    </button>
+                  </div>
+
+                  {creatingBot && (
+                    <div className="space-y-2 mb-2">
+                      <input
+                        value={newBotName}
+                        onChange={(e) => setNewBotName(e.target.value)}
+                        placeholder="BOT 名稱"
+                        className="w-full px-3 py-2 border-2 border-gray-300 rounded-xl"
+                      />
+                      <textarea
+                        value={newBotPrompt}
+                        onChange={(e) => setNewBotPrompt(e.target.value)}
+                        placeholder="BOT 指令（可選）"
+                        className="w-full px-3 py-2 border-2 border-gray-300 rounded-xl min-h-[110px]"
+                      />
+                      <div className="flex gap-2">
+                        <button
+                          type="button"
+                          onClick={createBot}
+                          className="flex-1 px-3 py-2 rounded-xl border-2 border-brand-brown bg-[#FDEEAD] font-black text-brand-brown"
+                        >
+                          建立
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => { setCreatingBot(false); setNewBotName(''); setNewBotPrompt(''); }}
+                          className="px-3 py-2 rounded-xl border-2 border-gray-300 bg-white font-black text-gray-700"
+                        >
+                          取消
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="space-y-2">
+                    <button
+                      type="button"
+                      onClick={() => selectBot('global')}
+                      className={`w-full flex items-center gap-2 px-3 py-2 rounded-2xl border-2 font-black ${myBotId === 'global'
+                        ? 'bg-[#FDEEAD] border-brand-brown text-brand-brown'
+                        : 'bg-white border-gray-200 text-gray-700 hover:border-brand-brown'
+                        }`}
+                    >
+                      <Bot className="w-4 h-4" />
+                      通用 Bot
+                    </button>
+                    {myBots.map((b: any) => (
+                      <div key={b.id} className={`w-full px-3 py-2 rounded-2xl border-2 ${myBotId === String(b.id) ? 'bg-[#FDEEAD] border-brand-brown' : 'bg-white border-gray-200'} group`}>
+                        <div className="flex items-start gap-2">
+                          <button
+                            type="button"
+                            onClick={() => selectBot(String(b.id))}
+                            className={`flex-1 flex items-start gap-2 text-left font-black ${myBotId === String(b.id) ? 'text-brand-brown' : 'text-gray-800'}`}
+                          >
+                            <Bot className="w-4 h-4 mt-0.5" />
+                            {editingBotId === String(b.id) ? (
+                              <div className="flex-1 space-y-2">
+                                <input
+                                  value={editingBotName}
+                                  onChange={(e) => setEditingBotName(e.target.value)}
+                                  onClick={(e) => e.stopPropagation()}
+                                  className="w-full px-2 py-1 border border-gray-300 rounded"
+                                  placeholder="BOT 名稱"
+                                />
+                                <textarea
+                                  value={editingBotPrompt}
+                                  onChange={(e) => setEditingBotPrompt(e.target.value)}
+                                  onClick={(e) => e.stopPropagation()}
+                                  className="w-full px-2 py-1 border border-gray-300 rounded min-h-[90px]"
+                                  placeholder="BOT 指令（可選）"
+                                />
+                                <div className="flex gap-2">
+                                  <button
+                                    type="button"
+                                    onClick={(e) => { e.stopPropagation(); saveBot(String(b.id)); }}
+                                    className="flex-1 px-2 py-1 rounded-lg border border-brand-brown bg-[#FDEEAD] text-brand-brown font-black text-xs"
+                                  >
+                                    儲存
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={(e) => { e.stopPropagation(); setEditingBotId(null); setEditingBotName(''); setEditingBotPrompt(''); }}
+                                    className="px-2 py-1 rounded-lg border border-gray-300 bg-white text-gray-700 font-black text-xs"
+                                  >
+                                    取消
+                                  </button>
+                                </div>
+                              </div>
+                            ) : (
+                              <span className="flex-1">{b.name}</span>
+                            )}
+                          </button>
+
+                          {editingBotId !== String(b.id) && (
+                            <>
+                              <button
+                                type="button"
+                                onClick={() => startEditBot(b)}
+                                className="opacity-0 group-hover:opacity-100 p-1 rounded hover:bg-gray-100"
+                                title="編輯"
+                              >
+                                <Pencil className="w-4 h-4 text-gray-700" />
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => removeBot(String(b.id))}
+                                className="opacity-0 group-hover:opacity-100 p-1 rounded hover:bg-gray-100"
+                                title="刪除"
+                              >
+                                <Trash2 className="w-4 h-4 text-red-600" />
+                              </button>
+                            </>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
 
               <div className="mb-4">
                 <div className="flex items-center justify-between mb-2">
