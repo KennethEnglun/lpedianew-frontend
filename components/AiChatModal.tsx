@@ -16,7 +16,39 @@ type ChatMessage = {
 
 const subjectOptions = Object.values(Subject);
 
-const bubbleBase = 'max-w-[85%] rounded-2xl px-4 py-3 border-2 whitespace-pre-wrap break-words';
+const bubbleBase = 'max-w-[85%] rounded-2xl px-4 py-3 border-2 break-words';
+
+const escapeHtml = (input: string) =>
+  input
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+
+const markdownToSafeHtml = (markdown: string) => {
+  const raw = String(markdown || '');
+  const escaped = escapeHtml(raw);
+
+  const codeBlocks: string[] = [];
+  const withBlocks = escaped.replace(/```([a-zA-Z0-9_-]+)?\n([\s\S]*?)```/g, (_m, lang, code) => {
+    const idx = codeBlocks.length;
+    const language = typeof lang === 'string' && lang ? `language-${lang}` : '';
+    codeBlocks.push(
+      `<pre class="bg-gray-900 text-gray-100 rounded-2xl p-4 overflow-x-auto border-2 border-gray-700"><code class="${language}">${code}</code></pre>`
+    );
+    return `@@CODEBLOCK_${idx}@@`;
+  });
+
+  const inline = withBlocks
+    .replace(/`([^`]+)`/g, (_m, code) => `<code class="bg-gray-200 border border-gray-300 rounded px-1 py-0.5 font-mono text-sm">${code}</code>`)
+    .replace(/\*\*([^*]+)\*\*/g, (_m, t) => `<strong>${t}</strong>`)
+    .replace(/\*([^*]+)\*/g, (_m, t) => `<em>${t}</em>`)
+    .replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g, (_m, text, url) => `<a href="${url}" target="_blank" rel="noreferrer" class="underline text-blue-700">${text}</a>`);
+
+  const withBreaks = inline.replace(/\n/g, '<br/>');
+  return withBreaks.replace(/@@CODEBLOCK_(\d+)@@/g, (_m, n) => codeBlocks[Number(n)] || '');
+};
 
 const AiChatModal: React.FC<{
   open: boolean;
@@ -42,6 +74,7 @@ const AiChatModal: React.FC<{
   const [sending, setSending] = useState(false);
   const [myLoading, setMyLoading] = useState(false);
   const [myError, setMyError] = useState('');
+  const abortRef = useRef<AbortController | null>(null);
 
   // Teacher view
   const [studentSearch, setStudentSearch] = useState('');
@@ -158,6 +191,9 @@ const AiChatModal: React.FC<{
       const text = draft.trim();
       setDraft('');
 
+      abortRef.current?.abort();
+      abortRef.current = new AbortController();
+
       const tempUser: ChatMessage = {
         id: `temp-user-${Date.now()}`,
         sender: 'user',
@@ -167,18 +203,57 @@ const AiChatModal: React.FC<{
       };
       setMyMessages((prev) => [...prev, tempUser]);
 
-      const res = await authService.sendChatMessage({ subject: isTeacher ? undefined : subject, threadId: myThreadId, message: text });
-      setMyThreadId(res.threadId);
-      if (res.assistantMessage) {
-        const assistant: ChatMessage = {
-          id: String(res.assistantMessage.id || `assistant-${Date.now()}`),
-          sender: 'assistant',
-          content: String(res.assistantMessage.content || ''),
-          createdAt: res.assistantMessage.createdAt
-        };
-        setMyMessages((prev) => [...prev, assistant]);
-      } else {
-        await loadMyChat(subject);
+      const tempAssistantId = `temp-assistant-${Date.now()}`;
+      setMyMessages((prev) => ([
+        ...prev,
+        { id: tempAssistantId, sender: 'assistant', content: '', createdAt: new Date().toISOString() }
+      ]));
+
+      const streamResp = await authService.sendChatMessageStream({ subject: isTeacher ? undefined : subject, threadId: myThreadId, message: text });
+      if (!streamResp.ok || !streamResp.body) {
+        const fallback = await authService.sendChatMessage({ subject: isTeacher ? undefined : subject, threadId: myThreadId, message: text });
+        setMyThreadId(fallback.threadId);
+        const content = String(fallback.assistantMessage?.content || '');
+        setMyMessages((prev) => prev.map((m) => (m.id === tempAssistantId ? { ...m, content } : m)));
+        return;
+      }
+
+      const reader = streamResp.body.getReader();
+      const decoder = new TextDecoder('utf-8');
+      let buffer = '';
+      let assembled = '';
+
+      const applyDelta = (delta: string) => {
+        assembled += delta;
+        setMyMessages((prev) => prev.map((m) => (m.id === tempAssistantId ? { ...m, content: assembled } : m)));
+      };
+
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const chunks = buffer.split('\n\n');
+        buffer = chunks.pop() || '';
+        for (const chunk of chunks) {
+          const lines = chunk.split('\n').map((l) => l.trim()).filter(Boolean);
+          const eventLine = lines.find((l) => l.startsWith('event:'));
+          const dataLine = lines.find((l) => l.startsWith('data:'));
+          const event = eventLine ? eventLine.slice(6).trim() : '';
+          const data = dataLine ? dataLine.slice(5).trim() : '';
+          if (!data) continue;
+          try {
+            const payload = JSON.parse(data);
+            if (event === 'meta' && payload.threadId) {
+              setMyThreadId(String(payload.threadId));
+            } else if (event === 'delta' && typeof payload.delta === 'string') {
+              applyDelta(payload.delta);
+            } else if (event === 'error' && payload.message) {
+              setMyError(String(payload.message));
+            }
+          } catch {
+            // ignore
+          }
+        }
       }
     } catch (error) {
       const message = error instanceof Error ? error.message : '發送失敗';
@@ -343,7 +418,7 @@ const AiChatModal: React.FC<{
                         : 'bg-[#E0D2F8] border-purple-300 text-gray-800'
                         }`}
                     >
-                      {m.content}
+                      <div dangerouslySetInnerHTML={{ __html: markdownToSafeHtml(m.content) }} />
                       {m.createdAt && (
                         <div className="text-[10px] text-gray-500 mt-2">
                           {new Date(m.createdAt).toLocaleString()}
@@ -381,7 +456,7 @@ const AiChatModal: React.FC<{
                           : 'bg-[#E0D2F8] border-purple-300 text-gray-800'
                           }`}
                       >
-                        {m.content}
+                        <div dangerouslySetInnerHTML={{ __html: markdownToSafeHtml(m.content) }} />
                         {m.createdAt && (
                           <div className="text-[10px] text-gray-500 mt-2">
                             {new Date(m.createdAt).toLocaleString()}

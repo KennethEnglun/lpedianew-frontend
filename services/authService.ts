@@ -244,6 +244,21 @@ class AuthService {
     return this.handleResponse(response);
   }
 
+  async sendChatMessageStream(payload: {
+    subject?: string;
+    threadId?: string | null;
+    message: string;
+  }): Promise<Response> {
+    return fetch(`${this.API_BASE}/chats/send-stream`, {
+      method: 'POST',
+      headers: {
+        ...this.getAuthHeaders(),
+        'Accept': 'text/event-stream'
+      },
+      body: JSON.stringify(payload)
+    });
+  }
+
   async getMyChatThreads(params?: { subject?: string }): Promise<{ threads: any[] }> {
     const searchParams = new URLSearchParams();
     if (params?.subject) searchParams.append('subject', params.subject);
