@@ -1417,7 +1417,7 @@ const TeacherDashboard: React.FC = () => {
                   className="bg-[#D2EFFF] hover:bg-[#BCE0FF]"
                   onClick={closeSidebar}
                 >
-                  派發自建 AI Bot
+                  AI對話
                 </Button>
                 <Button
                   fullWidth
@@ -1472,7 +1472,7 @@ const TeacherDashboard: React.FC = () => {
                   🎮 創建小遊戲
                 </Button>
                 <Button fullWidth className="bg-[#FAD5BE] hover:bg-[#F8C4A6]" onClick={closeSidebar}>
-                  更多功能
+                  更多功能開發中⋯⋯
                 </Button>
               </nav>
             </div>
@@ -1512,7 +1512,7 @@ const TeacherDashboard: React.FC = () => {
             fullWidth
             className="bg-[#D2EFFF] hover:bg-[#BCE0FF] text-lg"
           >
-            派發自建 AI Bot
+            AI對話
           </Button>
           <Button
             fullWidth
@@ -1547,7 +1547,7 @@ const TeacherDashboard: React.FC = () => {
 	          >
 	            🎮 創建小遊戲
 	          </Button>
-          <Button fullWidth className="bg-[#FAD5BE] hover:bg-[#F8C4A6] text-lg">更多功能</Button>
+          <Button fullWidth className="bg-[#FAD5BE] hover:bg-[#F8C4A6] text-lg">更多功能開發中⋯⋯</Button>
         </nav>
       </aside>
 
