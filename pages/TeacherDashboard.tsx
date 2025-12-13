@@ -1414,21 +1414,30 @@ const TeacherDashboard: React.FC = () => {
               <nav className="space-y-3">
                 <Button
                   fullWidth
-                  className="bg-[#FDEEAD] hover:bg-[#FCE690] flex items-center justify-center gap-2"
-                  onClick={() => {
-                    setShowQuizModal(true);
-                    closeSidebar();
-                  }}
-                >
-                  <HelpCircle className="w-5 h-5" />
-                  派發小測驗
-                </Button>
-                <Button
-                  fullWidth
                   className="bg-[#D2EFFF] hover:bg-[#BCE0FF]"
                   onClick={closeSidebar}
                 >
                   派發自建 AI Bot
+                </Button>
+                <Button
+                  fullWidth
+                  className="bg-[#E0D2F8] hover:bg-[#D0BCF5]"
+                  onClick={() => {
+                    openStudentProgress();
+                    closeSidebar();
+                  }}
+                >
+                  學生進度
+                </Button>
+                <Button
+                  fullWidth
+                  className="bg-[#C0E2BE] hover:bg-[#A9D8A7]"
+                  onClick={() => {
+                    openAssignmentManagement();
+                    closeSidebar();
+                  }}
+                >
+                  作業管理
                 </Button>
                 <Button
                   fullWidth
@@ -1443,13 +1452,14 @@ const TeacherDashboard: React.FC = () => {
                 </Button>
                 <Button
                   fullWidth
-                  className="bg-[#C0E2BE] hover:bg-[#A9D8A7]"
+                  className="bg-[#FDEEAD] hover:bg-[#FCE690] flex items-center justify-center gap-2"
                   onClick={() => {
-                    openAssignmentManagement();
+                    setShowQuizModal(true);
                     closeSidebar();
                   }}
                 >
-                  作業管理
+                  <HelpCircle className="w-5 h-5" />
+                  派發小測驗
                 </Button>
                 <Button
                   fullWidth
@@ -1460,16 +1470,6 @@ const TeacherDashboard: React.FC = () => {
                   }}
                 >
                   🎮 創建小遊戲
-                </Button>
-                <Button
-                  fullWidth
-                  className="bg-[#E0D2F8] hover:bg-[#D0BCF5]"
-                  onClick={() => {
-                    openStudentProgress();
-                    closeSidebar();
-                  }}
-                >
-                  學生進度
                 </Button>
                 <Button fullWidth className="bg-[#FAD5BE] hover:bg-[#F8C4A6]" onClick={closeSidebar}>
                   更多功能
@@ -1510,13 +1510,20 @@ const TeacherDashboard: React.FC = () => {
         <nav className="flex-1 space-y-4 px-2">
           <Button
             fullWidth
-            className="bg-[#FDEEAD] hover:bg-[#FCE690] text-lg flex items-center justify-center gap-2"
-            onClick={() => setShowQuizModal(true)}
+            className="bg-[#D2EFFF] hover:bg-[#BCE0FF] text-lg"
           >
-            <HelpCircle className="w-5 h-5" />
-            派發小測驗
+            派發自建 AI Bot
           </Button>
-          <Button fullWidth className="bg-[#D2EFFF] hover:bg-[#BCE0FF] text-lg">派發自建 AI Bot</Button>
+          <Button
+            fullWidth
+            className="bg-[#E0D2F8] hover:bg-[#D0BCF5] text-lg"
+            onClick={openStudentProgress}
+          >
+            學生進度
+          </Button>
+          <Button fullWidth className="bg-[#C0E2BE] hover:bg-[#A9D8A7] text-lg" onClick={openAssignmentManagement}>
+            作業管理
+          </Button>
           <Button
             fullWidth
             className="bg-[#F8C5C5] hover:bg-[#F0B5B5] text-lg flex items-center justify-center gap-2"
@@ -1525,8 +1532,13 @@ const TeacherDashboard: React.FC = () => {
             <MessageSquare className="w-5 h-5" />
             派發討論串
           </Button>
-          <Button fullWidth className="bg-[#C0E2BE] hover:bg-[#A9D8A7] text-lg" onClick={openAssignmentManagement}>
-            作業管理
+          <Button
+            fullWidth
+            className="bg-[#FDEEAD] hover:bg-[#FCE690] text-lg flex items-center justify-center gap-2"
+            onClick={() => setShowQuizModal(true)}
+          >
+            <HelpCircle className="w-5 h-5" />
+            派發小測驗
           </Button>
 	          <Button
 	            fullWidth
@@ -1535,9 +1547,6 @@ const TeacherDashboard: React.FC = () => {
 	          >
 	            🎮 創建小遊戲
 	          </Button>
-          <Button fullWidth className="bg-[#E0D2F8] hover:bg-[#D0BCF5] text-lg" onClick={openStudentProgress}>
-            學生進度
-          </Button>
           <Button fullWidth className="bg-[#FAD5BE] hover:bg-[#F8C4A6] text-lg">更多功能</Button>
         </nav>
       </aside>
