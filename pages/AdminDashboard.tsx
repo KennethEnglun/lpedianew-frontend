@@ -4,6 +4,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { authService } from '../services/authService';
 import Button from '../components/Button';
 import Input from '../components/Input';
+import UiSettingsModal from '../components/UiSettingsModal';
 import { useNavigate } from 'react-router-dom';
 
 interface AdminUser {
@@ -79,6 +80,7 @@ const mockUsers: AdminUser[] = [
 const AdminDashboard: React.FC = () => {
   const navigate = useNavigate();
   const { logout } = useAuth();
+  const [showUiSettings, setShowUiSettings] = useState(false);
   const [users, setUsers] = useState<AdminUser[]>([]);
   const [filterRole, setFilterRole] = useState<'all' | 'teacher' | 'student'>('all');
   const [searchTerm, setSearchTerm] = useState('');
@@ -378,9 +380,9 @@ const AdminDashboard: React.FC = () => {
   };
 
   return (
-    <div className="h-full bg-gray-50 font-sans">
+    <div className="min-h-full bg-gray-50 font-sans">
       {/* Background */}
-      <div
+      <div 
         className="absolute inset-0 z-0 pointer-events-none"
         style={{
           backgroundImage: `url('/teacherpagebg.png')`,
@@ -396,7 +398,11 @@ const AdminDashboard: React.FC = () => {
           <h1 className="text-4xl font-black text-brand-brown font-rounded">Lpedia Admin</h1>
         </div>
         <div className="flex gap-4">
-          <button className="w-12 h-12 bg-white rounded-full border-2 border-brand-brown shadow-comic flex items-center justify-center hover:scale-105 transition-transform">
+          <button
+            onClick={() => setShowUiSettings(true)}
+            className="w-12 h-12 bg-white rounded-full border-2 border-brand-brown shadow-comic flex items-center justify-center hover:scale-105 transition-transform"
+            title="介面顯示設定"
+          >
             <Settings className="text-brand-brown w-6 h-6" />
           </button>
           <button
@@ -414,6 +420,8 @@ const AdminDashboard: React.FC = () => {
           </button>
         </div>
       </header>
+
+      <UiSettingsModal open={showUiSettings} onClose={() => setShowUiSettings(false)} />
 
       {/* Main Content */}
       <div className="relative z-10 max-w-7xl mx-auto p-6">

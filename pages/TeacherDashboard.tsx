@@ -1,9 +1,10 @@
 import React, { useRef, useState, useEffect } from 'react';
-import { Settings, User, LogOut, MessageSquare, Plus, X, Image, Link, Code, Bold, Italic, Underline, Type, Palette, Upload, Trash, Filter, Eye, HelpCircle, Clock } from 'lucide-react';
+import { Menu, Settings, SlidersHorizontal, User, LogOut, MessageSquare, Plus, X, Image, Link, Code, Bold, Italic, Underline, Type, Palette, Upload, Trash, Filter, Eye, HelpCircle, Clock } from 'lucide-react';
 import Button from '../components/Button';
 import Select from '../components/Select';
 import Input from '../components/Input';
 import AiQuestionGeneratorModal from '../components/AiQuestionGeneratorModal';
+import UiSettingsModal from '../components/UiSettingsModal';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { authService } from '../services/authService';
@@ -20,6 +21,8 @@ const TeacherDashboard: React.FC = () => {
   const [aiKeyVisible, setAiKeyVisible] = useState(false);
   const [aiLoading, setAiLoading] = useState(false);
   const [aiSaving, setAiSaving] = useState(false);
+  const [showUiSettings, setShowUiSettings] = useState(false);
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 
   const [showDiscussionModal, setShowDiscussionModal] = useState(false);
   const [discussionForm, setDiscussionForm] = useState({
@@ -729,8 +732,10 @@ const TeacherDashboard: React.FC = () => {
     }
   };
 
+  const closeSidebar = () => setIsSidebarOpen(false);
+
   return (
-    <div className="h-full bg-gray-50 flex overflow-hidden font-sans">
+    <div className="min-h-full bg-gray-50 flex flex-col lg:flex-row overflow-x-hidden font-sans">
       {/* Background */}
       <div
         className="absolute inset-0 z-0 pointer-events-none"
@@ -742,32 +747,183 @@ const TeacherDashboard: React.FC = () => {
         }}
       />
 
+      {/* Mobile Top Bar */}
+      <div className="sticky top-0 z-30 lg:hidden bg-[#D9F3D5]/95 backdrop-blur border-b-4 border-brand-brown">
+        <div className="px-4 py-3 flex items-center justify-between gap-3">
+          <button
+            onClick={() => setIsSidebarOpen(true)}
+            className="w-10 h-10 bg-white rounded-full border-2 border-brand-brown shadow-comic flex items-center justify-center"
+            aria-label="開啟選單"
+          >
+            <Menu className="text-brand-brown w-5 h-5" />
+          </button>
+          <div className="flex-1 text-center">
+            <div className="text-lg font-black text-brand-brown font-rounded leading-none">教師中心</div>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={openAiSettings}
+              className="w-10 h-10 bg-white rounded-full border-2 border-brand-brown shadow-comic flex items-center justify-center"
+              title="設定（AI）"
+            >
+              <Settings className="text-brand-brown w-5 h-5" />
+            </button>
+            <button
+              onClick={() => setShowUiSettings(true)}
+              className="w-10 h-10 bg-white rounded-full border-2 border-brand-brown shadow-comic flex items-center justify-center"
+              title="介面顯示設定"
+            >
+              <SlidersHorizontal className="text-brand-brown w-5 h-5" />
+            </button>
+            <button
+              onClick={() => navigate('/')}
+              className="w-10 h-10 bg-white rounded-full border-2 border-brand-brown shadow-comic flex items-center justify-center"
+              title="返回登入"
+            >
+              <User className="text-brand-brown w-5 h-5" />
+            </button>
+            <button
+              onClick={logout}
+              className="w-10 h-10 bg-white rounded-full border-2 border-brand-brown shadow-comic flex items-center justify-center"
+              title="登出"
+            >
+              <LogOut className="text-brand-brown w-5 h-5" />
+            </button>
+          </div>
+        </div>
+      </div>
+
       {/* Header Icons */}
-      <header className="fixed top-4 right-6 z-20 flex gap-4">
+      <header className="hidden lg:flex fixed top-4 right-4 sm:right-6 z-20 gap-3 sm:gap-4">
         <button
           onClick={openAiSettings}
-          className="w-12 h-12 bg-white rounded-full border-2 border-brand-brown shadow-comic flex items-center justify-center hover:scale-105 transition-transform"
+          className="w-10 h-10 sm:w-12 sm:h-12 bg-white rounded-full border-2 border-brand-brown shadow-comic flex items-center justify-center hover:scale-105 transition-transform"
           title="設定（AI）"
         >
-          <Settings className="text-brand-brown w-6 h-6" />
+          <Settings className="text-brand-brown w-5 h-5 sm:w-6 sm:h-6" />
+        </button>
+        <button
+          onClick={() => setShowUiSettings(true)}
+          className="w-10 h-10 sm:w-12 sm:h-12 bg-white rounded-full border-2 border-brand-brown shadow-comic flex items-center justify-center hover:scale-105 transition-transform"
+          title="介面顯示設定"
+        >
+          <SlidersHorizontal className="text-brand-brown w-5 h-5 sm:w-6 sm:h-6" />
         </button>
         <button
           onClick={() => navigate('/')}
-          className="w-12 h-12 bg-white rounded-full border-2 border-brand-brown shadow-comic flex items-center justify-center hover:scale-105 transition-transform"
+          className="w-10 h-10 sm:w-12 sm:h-12 bg-white rounded-full border-2 border-brand-brown shadow-comic flex items-center justify-center hover:scale-105 transition-transform"
         >
-          <User className="text-brand-brown w-6 h-6" />
+          <User className="text-brand-brown w-5 h-5 sm:w-6 sm:h-6" />
         </button>
         <button
           onClick={logout}
-          className="w-12 h-12 bg-white rounded-full border-2 border-brand-brown shadow-comic flex items-center justify-center hover:scale-105 transition-transform"
+          className="w-10 h-10 sm:w-12 sm:h-12 bg-white rounded-full border-2 border-brand-brown shadow-comic flex items-center justify-center hover:scale-105 transition-transform"
           title="登出"
         >
-          <LogOut className="text-brand-brown w-6 h-6" />
+          <LogOut className="text-brand-brown w-5 h-5 sm:w-6 sm:h-6" />
         </button>
       </header>
 
+      <UiSettingsModal open={showUiSettings} onClose={() => setShowUiSettings(false)} />
+
+      {/* Mobile Drawer Sidebar */}
+      {isSidebarOpen && (
+        <div className="fixed inset-0 z-40 lg:hidden">
+          <button
+            className="absolute inset-0 bg-black/50"
+            aria-label="關閉選單"
+            onClick={closeSidebar}
+          />
+          <aside className="absolute inset-y-0 left-0 w-[min(22rem,85vw)] bg-[#D9F3D5] border-r-4 border-brand-brown shadow-2xl overflow-y-auto">
+            <div className="p-6">
+              <div className="flex items-center justify-between mb-4">
+                <h1 className="text-2xl font-black text-brand-brown font-rounded">Lpedia</h1>
+                <button
+                  onClick={closeSidebar}
+                  className="w-10 h-10 rounded-full bg-white border-2 border-brand-brown hover:bg-gray-100 flex items-center justify-center"
+                  aria-label="關閉"
+                >
+                  <X className="w-6 h-6 text-brand-brown" />
+                </button>
+              </div>
+
+              {/* User Profile Section */}
+              <div className="text-center mb-6">
+                <div className="w-20 h-20 rounded-full border-4 border-brand-brown bg-white mb-3 overflow-hidden mx-auto">
+                  <img src="/teacher_login.png" alt="Teacher Avatar" className="w-full h-full object-cover" />
+                </div>
+                <div className="text-lg font-bold text-brand-brown">{user?.profile?.name || '教師'}</div>
+                <div className="text-sm text-gray-600">{user?.username}</div>
+              </div>
+
+              <div className="text-center mb-6 border-b-4 border-brand-brown pb-3 mx-2">
+                <h2 className="text-xl font-bold text-brand-brown">教師工具包</h2>
+              </div>
+
+              <nav className="space-y-3">
+                <Button
+                  fullWidth
+                  className="bg-[#FDEEAD] hover:bg-[#FCE690] flex items-center justify-center gap-2"
+                  onClick={() => {
+                    setShowQuizModal(true);
+                    closeSidebar();
+                  }}
+                >
+                  <HelpCircle className="w-5 h-5" />
+                  派發小測驗
+                </Button>
+                <Button
+                  fullWidth
+                  className="bg-[#D2EFFF] hover:bg-[#BCE0FF]"
+                  onClick={closeSidebar}
+                >
+                  派發自建 AI Bot
+                </Button>
+                <Button
+                  fullWidth
+                  className="bg-[#F8C5C5] hover:bg-[#F0B5B5] flex items-center justify-center gap-2"
+                  onClick={() => {
+                    setShowDiscussionModal(true);
+                    closeSidebar();
+                  }}
+                >
+                  <MessageSquare className="w-5 h-5" />
+                  派發討論串
+                </Button>
+                <Button
+                  fullWidth
+                  className="bg-[#C0E2BE] hover:bg-[#A9D8A7]"
+                  onClick={() => {
+                    openAssignmentManagement();
+                    closeSidebar();
+                  }}
+                >
+                  作業管理
+                </Button>
+                <Button
+                  fullWidth
+                  className="bg-[#E8F5E9] hover:bg-[#C8E6C9] flex items-center justify-center gap-2"
+                  onClick={() => {
+                    openGameCreator();
+                    closeSidebar();
+                  }}
+                >
+                  🎮 創建小遊戲
+                </Button>
+                <Button fullWidth className="bg-[#E0D2F8] hover:bg-[#D0BCF5]" onClick={closeSidebar}>
+                  學生進度
+                </Button>
+                <Button fullWidth className="bg-[#FAD5BE] hover:bg-[#F8C4A6]" onClick={closeSidebar}>
+                  更多功能
+                </Button>
+              </nav>
+            </div>
+          </aside>
+        </div>
+      )}
+
       {/* Sidebar */}
-      <aside className="relative z-10 w-80 bg-[#D9F3D5] min-h-fit my-auto ml-0 rounded-r-[3rem] border-y-4 border-r-4 border-brand-brown shadow-2xl flex flex-col p-6">
+      <aside className="hidden lg:flex relative z-10 w-full lg:w-80 bg-[#D9F3D5] min-h-fit my-0 lg:my-auto ml-0 rounded-b-[3rem] lg:rounded-b-none lg:rounded-r-[3rem] border-4 lg:border-l-0 border-brand-brown shadow-2xl flex-col p-6">
         <div className="flex items-center justify-center mb-2">
           <h1 className="text-4xl font-black text-brand-brown font-rounded">Lpedia</h1>
         </div>
@@ -827,7 +983,7 @@ const TeacherDashboard: React.FC = () => {
       </aside>
 
       {/* Main Content Area */}
-      <main className="flex-1 relative z-10 flex items-center justify-center p-8">
+      <main className="flex-1 relative z-10 flex items-center justify-center p-4 sm:p-8">
 
         {/* Welcome Message */}
         <div className="bg-[#FEF7EC] w-full max-w-2xl rounded-[2rem] border-4 border-brand-brown shadow-comic-xl p-8 relative">

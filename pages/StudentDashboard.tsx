@@ -7,6 +7,7 @@ import { authService } from '../services/authService';
 import { sanitizeHtml } from '../services/sanitizeHtml';
 import { MazeGame } from '../components/MazeGame';
 import TowerDefenseGame from '../components/TowerDefenseGame';
+import UiSettingsModal from '../components/UiSettingsModal';
 
 interface Discussion {
   id: string;
@@ -126,6 +127,7 @@ const StudentDashboard: React.FC = () => {
   const [submittingResponse, setSubmittingResponse] = useState(false);
   const [responseStatus, setResponseStatus] = useState<Record<string, { hasResponded: boolean, response?: any }>>({});
   const [allResponses, setAllResponses] = useState<Record<string, any[]>>({});
+  const [showUiSettings, setShowUiSettings] = useState(false);
 
   // 小测验相关状态
   const [showQuizModal, setShowQuizModal] = useState(false);
@@ -920,9 +922,9 @@ const StudentDashboard: React.FC = () => {
   const subjectConfig = SUBJECT_CONFIG[selectedSubject];
 
   return (
-    <div className="h-full font-sans flex flex-col relative overflow-hidden" style={{ backgroundColor: '#D9F3D5' }}>
-      {/* Background */}
-      <div
+    <div className="min-h-full font-sans flex flex-col relative overflow-x-hidden" style={{ backgroundColor: '#D9F3D5' }}>
+       {/* Background */}
+       <div 
         className="absolute inset-0 z-0 pointer-events-none opacity-80"
         style={{
           backgroundImage: `url('/studentpagebg.png')`,
@@ -939,7 +941,11 @@ const StudentDashboard: React.FC = () => {
           <h1 className="text-4xl font-black text-brand-brown font-rounded tracking-wider">Lpedia</h1>
         </div>
         <div className="flex gap-3">
-          <button className="w-10 h-10 bg-brand-cream rounded-full border-2 border-brand-brown flex items-center justify-center hover:bg-white">
+          <button
+            onClick={() => setShowUiSettings(true)}
+            className="w-10 h-10 bg-brand-cream rounded-full border-2 border-brand-brown flex items-center justify-center hover:bg-white"
+            title="介面顯示設定"
+          >
             <Settings className="w-6 h-6 text-brand-brown" />
           </button>
           <button
@@ -955,6 +961,8 @@ const StudentDashboard: React.FC = () => {
       <div className="relative z-20 bg-[#A1D9AE] border-b-4 border-brand-brown py-2 flex justify-center shadow-comic">
         <h2 className="text-2xl font-bold text-brand-brown tracking-[0.2em]">學生中心</h2>
       </div>
+
+      <UiSettingsModal open={showUiSettings} onClose={() => setShowUiSettings(false)} />
 
       {/* Main Layout */}
       <div className="flex-1 relative z-10 p-4 md:p-8 flex flex-col md:flex-row gap-6 max-w-7xl mx-auto w-full">

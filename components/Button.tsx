@@ -1,4 +1,5 @@
 import React from 'react';
+import { useUi } from '../contexts/UiContext';
 
 interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
   variant?: 'primary' | 'secondary' | 'success' | 'danger' | 'ghost';
@@ -12,7 +13,15 @@ const Button: React.FC<ButtonProps> = ({
   className = '', 
   ...props 
 }) => {
-  const baseStyles = "font-rounded font-bold py-3 px-6 rounded-2xl border-2 border-brand-brown transition-all duration-100 active:translate-y-1 active:shadow-none shadow-comic";
+  const { density } = useUi();
+  const sizeStyles =
+    density === 'compact'
+      ? 'py-2 px-4 text-sm'
+      : density === 'standard'
+        ? 'py-3 px-6 text-base'
+        : 'py-4 px-7 text-lg';
+
+  const baseStyles = `font-rounded font-bold rounded-2xl border-2 border-brand-brown transition-all duration-100 active:translate-y-1 active:shadow-none shadow-comic ${sizeStyles}`;
   
   const variants = {
     primary: "bg-brand-yellow hover:bg-[#FDEFCB] text-brand-brown",

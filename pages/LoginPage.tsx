@@ -110,7 +110,7 @@ const LoginPage: React.FC = () => {
 
   if (isLoading) {
     return (
-      <div className="h-full flex items-center justify-center bg-gray-50">
+      <div className="min-h-full flex items-center justify-center bg-gray-50">
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
           <p className="text-gray-600">載入中...</p>
@@ -121,7 +121,7 @@ const LoginPage: React.FC = () => {
 
   return (
     <div 
-      className="h-full w-full flex flex-col items-center justify-center p-4 md:p-8"
+      className="min-h-full w-full flex flex-col items-center justify-start p-4 md:p-8"
       style={{
         backgroundImage: `url('/bg.png')`,
         backgroundSize: 'cover',
@@ -129,22 +129,23 @@ const LoginPage: React.FC = () => {
         backgroundRepeat: 'no-repeat'
       }}
     >
-      <div className="mb-8 md:mb-12 text-center">
-        <h1 className="text-6xl md:text-8xl font-rounded font-black text-brand-green-light drop-shadow-[0_4px_0_rgba(94,76,64,1)] text-stroke" style={{ transform: 'translateY(-50px)' }}>
-          <span className="text-white drop-shadow-md" style={{ textShadow: '4px 4px 0 #5E4C40, -2px -2px 0 #5E4C40, 2px -2px 0 #5E4C40, -2px 2px 0 #5E4C40' }}>Lpedia</span>
-        </h1>
-        <h2 className="text-xl md:text-3xl font-rounded font-bold text-yellow-100 mt-2" style={{ textShadow: '2px 2px 4px rgba(0,0,0,0.8), 1px 1px 2px rgba(0,0,0,0.6)', transform: 'translateY(-30px)' }}>
-          九龍婦女福利會李炳紀念學校校本AI學習平台
-        </h2>
-
+      <div className="w-full max-w-5xl mx-auto flex flex-col items-center">
+        <div className="mb-8 md:mb-12 text-center mt-2 md:mt-6">
+          <h1 className="text-6xl sm:text-7xl md:text-8xl font-rounded font-black text-brand-green-light drop-shadow-[0_4px_0_rgba(94,76,64,1)] text-stroke leading-none">
+            <span className="text-white drop-shadow-md" style={{ textShadow: '4px 4px 0 #5E4C40, -2px -2px 0 #5E4C40, 2px -2px 0 #5E4C40, -2px 2px 0 #5E4C40' }}>Lpedia</span>
+          </h1>
+          <h2 className="text-base sm:text-lg md:text-2xl lg:text-3xl font-rounded font-bold text-yellow-100 mt-3" style={{ textShadow: '2px 2px 4px rgba(0,0,0,0.8), 1px 1px 2px rgba(0,0,0,0.6)' }}>
+            九龍婦女福利會李炳紀念學校校本AI學習平台
+          </h2>
+        </div>
       </div>
 
-      <div className="flex flex-col lg:flex-row gap-12 lg:gap-24 w-full max-w-5xl justify-center items-center lg:items-start">
+      <div className="w-full max-w-5xl mx-auto grid grid-cols-1 md:grid-cols-2 gap-8 md:gap-12 items-start">
         
         {/* Teacher Login Card */}
-        <div className="w-full max-w-md bg-brand-yellow-light border-4 border-brand-brown rounded-[2rem] p-8 shadow-comic-lg relative lg:-translate-x-[180px]">
+        <div className="w-full max-w-md bg-brand-yellow-light border-4 border-brand-brown rounded-[2rem] p-6 sm:p-8 shadow-comic-lg">
           <div className="flex flex-col items-center mb-6">
-            <div className="w-24 h-24 rounded-full border-4 border-brand-brown bg-white mb-4 overflow-hidden relative">
+            <div className="w-20 h-20 sm:w-24 sm:h-24 rounded-full border-4 border-brand-brown bg-white mb-4 overflow-hidden relative">
                <img
                 src="/teacher_login.png"
                 alt="Teacher"
@@ -169,7 +170,7 @@ const LoginPage: React.FC = () => {
             <Button
               fullWidth
               type="submit"
-              className="mt-4 text-xl"
+              className="mt-4"
               disabled={isSubmitting}
             >
               {isSubmitting ? '登入中...' : '登入'}
@@ -192,9 +193,9 @@ const LoginPage: React.FC = () => {
 
 
         {/* Student Login Card */}
-        <div className="w-full max-w-md bg-brand-green-light border-4 border-brand-green-dark rounded-[2rem] p-8 shadow-comic-lg relative lg:translate-x-[180px]">
+        <div className="w-full max-w-md bg-brand-green-light border-4 border-brand-green-dark rounded-[2rem] p-6 sm:p-8 shadow-comic-lg">
           <div className="flex flex-col items-center mb-6">
-            <div className="w-24 h-24 rounded-full border-4 border-brand-brown bg-white mb-4 overflow-hidden">
+            <div className="w-20 h-20 sm:w-24 sm:h-24 rounded-full border-4 border-brand-brown bg-white mb-4 overflow-hidden">
               <img
                 src="/student_login.png"
                 alt="Student"
@@ -222,7 +223,7 @@ const LoginPage: React.FC = () => {
               fullWidth
               type="submit"
               variant="success"
-              className="mt-4 text-xl border-brand-green-dark bg-[#A1D9AE] hover:bg-[#8ECF9D] text-brand-green-dark"
+              className="mt-4 border-brand-green-dark bg-[#A1D9AE] hover:bg-[#8ECF9D] text-brand-green-dark"
               disabled={isSubmitting}
             >
               {isSubmitting ? '登入中...' : '登入'}
@@ -230,16 +231,16 @@ const LoginPage: React.FC = () => {
           </form>
         </div>
 
-        {/* Error Message */}
-        {error && (
-          <div className="mt-6 max-w-md mx-auto">
-            <div className="bg-red-100 border-4 border-red-500 rounded-2xl p-4 text-center">
-              <p className="text-red-700 font-bold">{error}</p>
-            </div>
-          </div>
-        )}
-
       </div>
+
+      {/* Error Message */}
+      {error && (
+        <div className="mt-6 w-full max-w-md mx-auto">
+          <div className="bg-red-100 border-4 border-red-500 rounded-2xl p-4 text-center">
+            <p className="text-red-700 font-bold">{error}</p>
+          </div>
+        </div>
+      )}
 
       {/* Admin Password Modal */}
       {showAdminModal && (
