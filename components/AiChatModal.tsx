@@ -630,11 +630,10 @@ const AiChatModal: React.FC<{
             <div className="w-10 h-10 rounded-full bg-white border-2 border-brand-brown flex items-center justify-center">
               <Bot className="w-6 h-6 text-brand-brown" />
             </div>
-            <div>
-              <div className="text-2xl font-black text-brand-brown">AI對話</div>
-              <div className="text-xs text-gray-600 font-bold">通用 Bot（將來可擴展派發 Bot 任務）</div>
-            </div>
-          </div>
+	            <div>
+	              <div className="text-2xl font-black text-brand-brown">AI對話</div>
+	            </div>
+	          </div>
           <button
             onClick={onClose}
             className="w-10 h-10 rounded-full bg-white border-2 border-brand-brown hover:bg-gray-100 flex items-center justify-center"
