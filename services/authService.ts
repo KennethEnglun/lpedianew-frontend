@@ -165,6 +165,38 @@ class AuthService {
     return this.handleResponse(response);
   }
 
+  // 獲取學生名單（教師/管理員可用）
+  async getStudentRoster(params?: {
+    search?: string;
+    class?: string;
+    page?: number;
+    limit?: number;
+  }): Promise<{
+    users: User[];
+    pagination: {
+      total: number;
+      page: number;
+      limit: number;
+      totalPages: number;
+    };
+  }> {
+    const searchParams = new URLSearchParams();
+    if (params) {
+      Object.entries(params).forEach(([key, value]) => {
+        if (value !== undefined && value !== null && String(value).length > 0) {
+          searchParams.append(key, value.toString());
+        }
+      });
+    }
+
+    const query = searchParams.toString() ? `?${searchParams.toString()}` : '';
+    const response = await fetch(`${this.API_BASE}/users/students${query}`, {
+      headers: this.getAuthHeaders()
+    });
+
+    return this.handleResponse(response);
+  }
+
   // 創建用戶（管理員專用）
   async createUser(userData: {
     username: string;

@@ -527,7 +527,7 @@ const TeacherDashboard: React.FC = () => {
 	    await loadAssignments();
     // Fetch all students for completion tracking
     try {
-      const usersData = await authService.getUsers({ role: 'student', limit: 1000 });
+      const usersData = await authService.getStudentRoster({ limit: 2000 });
       setAllStudents(usersData.users || []);
     } catch (err) {
       console.error('Failed to load students list', err);
@@ -645,7 +645,7 @@ const TeacherDashboard: React.FC = () => {
       setHiddenTaskKeys(teacherHidden);
 
       const [studentsData, assignmentData, quizData, gameData] = await Promise.all([
-        authService.getUsers({ role: 'student', limit: 2000 }),
+        authService.getStudentRoster({ limit: 2000 }),
         authService.getTeacherAssignments(progressFilterSubject || undefined, progressFilterClass || undefined),
         authService.getTeacherQuizzes(progressFilterSubject || undefined, progressFilterClass || undefined),
         authService.getTeacherGames(progressFilterSubject || undefined, progressFilterClass || undefined)
@@ -726,7 +726,12 @@ const TeacherDashboard: React.FC = () => {
       setProgressRows(rows);
     } catch (error) {
       console.error('載入學生進度失敗:', error);
-      setProgressError(error instanceof Error ? error.message : '載入失敗');
+      const message = error instanceof Error ? error.message : '載入失敗';
+      setProgressError(
+        message.includes('權限不足')
+          ? '權限不足：後端需要更新以支援教師讀取學生名單（/api/users/students）。'
+          : message
+      );
       setProgressRows([]);
     } finally {
       setProgressLoading(false);
