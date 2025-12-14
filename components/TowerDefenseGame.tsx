@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Subject, SUBJECT_CONFIG } from '../types';
 
 type Difficulty = 'easy' | 'medium' | 'hard';
-type TowerType = 'soldier' | 'archer' | 'cannon';
+type TowerType = 'soldier' | 'archer' | 'cannon' | 'mage-ice' | 'mage-lightning';
 type EnemyKind = 'slime' | 'runner' | 'tank' | 'shooter';
 
 type TowerDefenseQuestionRaw =
@@ -46,6 +46,8 @@ interface Enemy {
   hp: number;
   size: number;
   color: string;
+  slowUntil?: number;
+  slowFactor?: number;
   attackDamage?: number;
   attackRange?: number;
   attackCooldown?: number;
@@ -79,6 +81,9 @@ interface Projectile {
   color: string;
   life: number;
   targetId: number;
+  effect?: 'ice' | 'lightning';
+  chainRadius?: number;
+  chainMax?: number;
 }
 
 interface Particle {
@@ -427,7 +432,9 @@ export const TowerDefenseGame: React.FC<Props> = ({ questions, subject, difficul
   const towerCatalog = useMemo(() => {
     // Stationery towers (visual theme)
     return [
-      { type: 'soldier' as const, label: '鉛筆守衛', cost: 25, range: 125, damage: 8, fireRate: 0.9, projectileSpeed: 330, maxHp: 36, color: '#FBBF24' },
+      { type: 'soldier' as const, label: '貓守衛', cost: 25, range: 125, damage: 8.2, fireRate: 0.85, projectileSpeed: 350, maxHp: 38, color: '#F59E0B' },
+      { type: 'mage-ice' as const, label: '冰法師貓', cost: 40, range: 185, damage: 5.6, fireRate: 0.65, projectileSpeed: 420, maxHp: 28, color: '#93C5FD' },
+      { type: 'mage-lightning' as const, label: '雷法師貓', cost: 55, range: 200, damage: 8.8, fireRate: 0.95, projectileSpeed: 520, maxHp: 26, color: '#A78BFA' },
       { type: 'archer' as const, label: '螢光筆塔', cost: 35, range: 170, damage: 6.2, fireRate: 0.55, projectileSpeed: 440, maxHp: 30, color: '#34D399' },
       { type: 'cannon' as const, label: '橡皮砲台', cost: 50, range: 195, damage: 14.5, fireRate: 1.2, projectileSpeed: 270, maxHp: 44, color: '#F472B6' }
     ];
@@ -731,8 +738,10 @@ export const TowerDefenseGame: React.FC<Props> = ({ questions, subject, difficul
 	    const counts = { runner: 0, tank: 0, shooter: 0, slime: 0 };
 	    list.forEach(e => { (counts as any)[e.kind] = ((counts as any)[e.kind] || 0) + 1; });
 	    const total = Math.max(1, list.length);
-	    if (counts.tank / total >= 0.28) return 'cannon';
-	    if (counts.runner / total >= 0.35) return 'archer';
+	    if (list.length >= 14) return 'mage-lightning';
+	    if (counts.runner / total >= 0.32) return 'mage-ice';
+	    if (counts.tank / total >= 0.26) return 'cannon';
+	    if (list.length >= 9) return 'archer';
 	    return 'soldier';
 	  };
 
@@ -949,7 +958,20 @@ export const TowerDefenseGame: React.FC<Props> = ({ questions, subject, difficul
     if (dist === 0) return null;
     const vx = (dx / dist) * tower.projectileSpeed;
     const vy = (dy / dist) * tower.projectileSpeed;
-    const color = tower.type === 'cannon' ? '#F472B6' : tower.type === 'archer' ? '#34D399' : '#FBBF24';
+    const meta = (() => {
+      switch (tower.type) {
+        case 'mage-ice':
+          return { color: '#93C5FD', effect: 'ice' as const };
+        case 'mage-lightning':
+          return { color: '#A78BFA', effect: 'lightning' as const, chainRadius: 86, chainMax: 3 };
+        case 'cannon':
+          return { color: '#F472B6' };
+        case 'archer':
+          return { color: '#34D399' };
+        default:
+          return { color: '#F59E0B' };
+      }
+    })();
 
     tower.lastShotAt = now;
     return {
@@ -959,9 +981,12 @@ export const TowerDefenseGame: React.FC<Props> = ({ questions, subject, difficul
       vx,
       vy,
       damage: tower.damage * damageFactor,
-      color,
+      color: meta.color,
       life: 2.0,
-      targetId: target.id
+      targetId: target.id,
+      effect: meta.effect,
+      chainRadius: meta.chainRadius,
+      chainMax: meta.chainMax
     };
   }
 
@@ -1023,8 +1048,9 @@ export const TowerDefenseGame: React.FC<Props> = ({ questions, subject, difficul
 
 	    const movedEnemies: Enemy[] = [];
 	    const pathLen = pathCellsRef.current.length || DEFAULT_PATH.length;
-	    for (const enemy of enemiesSnapshot) {
-	      const nextIndex = enemy.pathIndex + enemy.speed * moveFactor * simDeltaSeconds;
+    for (const enemy of enemiesSnapshot) {
+	      const personalSlow = enemy.slowUntil && simNow < enemy.slowUntil ? (enemy.slowFactor ?? 1) : 1;
+	      const nextIndex = enemy.pathIndex + enemy.speed * personalSlow * moveFactor * simDeltaSeconds;
       if (nextIndex >= pathLen - 0.2) {
         if (livesEnabled) {
           setLives(v => {
@@ -1069,6 +1095,31 @@ export const TowerDefenseGame: React.FC<Props> = ({ questions, subject, difficul
           anyHit = true;
           spawnParticles(targetPos.x, targetPos.y - 6, 8, projectile.color);
           spawnShockwave(targetPos.x, targetPos.y - 6, projectile.color, 6, 220, 0.22, 4);
+
+          if (projectile.effect === 'ice') {
+            target.slowUntil = Math.max(target.slowUntil || 0, simNow + 1.6);
+            target.slowFactor = 0.6;
+            spawnParticles(targetPos.x, targetPos.y - 6, 8, '#93C5FD');
+          }
+
+          if (projectile.effect === 'lightning') {
+            const radius = projectile.chainRadius ?? 86;
+            const max = projectile.chainMax ?? 3;
+            let chained = 0;
+            for (const other of enemyMap.values()) {
+              if (other.id === target.id) continue;
+              if (other.hp <= 0) continue;
+              if (chained >= max) break;
+              const p = getEnemyPosition(other);
+              const d2 = Math.hypot(p.x - targetPos.x, p.y - targetPos.y);
+              if (d2 > radius) continue;
+              other.hp -= projectile.damage * 0.55;
+              chained++;
+              spawnShockwave(p.x, p.y - 6, '#A78BFA', 6, 260, 0.18, 3);
+              spawnParticles(p.x, p.y - 6, 10, '#A78BFA');
+            }
+            if (chained > 0) startShake(2.2, 0.1);
+          }
           continue;
         }
         afterCollision.push(projectile);
@@ -1428,33 +1479,201 @@ export const TowerDefenseGame: React.FC<Props> = ({ questions, subject, difficul
       ctx.lineWidth = 4;
 
       if (tower.type === 'soldier') {
-        // Pencil guard
+        // Cat guard
         ctx.save();
-        ctx.fillStyle = '#FBBF24';
-        ctx.beginPath();
-        ctx.moveTo(0, -34);
-        ctx.lineTo(10, -16);
-        ctx.lineTo(-10, -16);
-        ctx.closePath();
-        ctx.fill();
-        ctx.stroke();
-
+        // body
         ctx.fillStyle = '#FDE68A';
-        drawRoundRect(ctx, -10, -16, 20, 38, 8);
+        drawRoundRect(ctx, -16, -10, 32, 34, 14);
         ctx.fill();
         ctx.stroke();
 
-        // lead tip
-        ctx.fillStyle = '#2B1E12';
+        // head
+        ctx.fillStyle = '#F59E0B';
         ctx.beginPath();
-        ctx.moveTo(0, -34);
-        ctx.lineTo(5, -24);
-        ctx.lineTo(-5, -24);
+        ctx.arc(0, -24, 16, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+
+        // ears
+        ctx.fillStyle = '#F59E0B';
+        ctx.beginPath();
+        ctx.moveTo(-12, -36);
+        ctx.lineTo(-4, -28);
+        ctx.lineTo(-16, -24);
         ctx.closePath();
         ctx.fill();
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.moveTo(12, -36);
+        ctx.lineTo(16, -24);
+        ctx.lineTo(4, -28);
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
 
-        // small badge indicates level
+        // face
+        ctx.save();
+        ctx.translate(0, -24);
+        drawCuteFace(ctx, 14, 'smile');
+        ctx.restore();
+
+        // sword
+        ctx.save();
+        ctx.strokeStyle = '#E5E7EB';
+        ctx.lineWidth = 4;
+        ctx.beginPath();
+        ctx.moveTo(14, 4);
+        ctx.lineTo(24, -10);
+        ctx.stroke();
         ctx.fillStyle = '#2B1E12';
+        ctx.beginPath();
+        ctx.arc(14, 4, 4, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+
+        // level badge
+        ctx.fillStyle = '#2B1E12';
+        ctx.font = 'bold 12px system-ui';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(String(level), 0, 12);
+        ctx.restore();
+      } else if (tower.type === 'mage-ice') {
+        // Ice mage cat
+        ctx.save();
+        // robe
+        ctx.fillStyle = '#93C5FD';
+        drawRoundRect(ctx, -18, -6, 36, 32, 14);
+        ctx.fill();
+        ctx.stroke();
+
+        // head
+        ctx.fillStyle = '#FDE68A';
+        ctx.beginPath();
+        ctx.arc(0, -22, 15, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+        // ears
+        ctx.beginPath();
+        ctx.moveTo(-10, -34);
+        ctx.lineTo(-3, -26);
+        ctx.lineTo(-14, -23);
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.moveTo(10, -34);
+        ctx.lineTo(14, -23);
+        ctx.lineTo(3, -26);
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+
+        ctx.save();
+        ctx.translate(0, -22);
+        drawCuteFace(ctx, 13, 'wink');
+        ctx.restore();
+
+        // hat
+        ctx.fillStyle = '#1E3A8A';
+        ctx.beginPath();
+        ctx.moveTo(0, -46);
+        ctx.lineTo(14, -30);
+        ctx.lineTo(-14, -30);
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+
+        // staff
+        ctx.strokeStyle = '#2B1E12';
+        ctx.lineWidth = 4;
+        ctx.beginPath();
+        ctx.moveTo(-22, 18);
+        ctx.lineTo(-10, -10);
+        ctx.stroke();
+        ctx.fillStyle = '#93C5FD';
+        ctx.beginPath();
+        ctx.arc(-10, -10, 6, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+
+        ctx.fillStyle = '#1F2937';
+        ctx.font = 'bold 12px system-ui';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(String(level), 0, 10);
+        ctx.restore();
+      } else if (tower.type === 'mage-lightning') {
+        // Lightning mage cat
+        ctx.save();
+        // robe
+        ctx.fillStyle = '#A78BFA';
+        drawRoundRect(ctx, -18, -6, 36, 32, 14);
+        ctx.fill();
+        ctx.stroke();
+
+        // head
+        ctx.fillStyle = '#FDE68A';
+        ctx.beginPath();
+        ctx.arc(0, -22, 15, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+        // ears
+        ctx.beginPath();
+        ctx.moveTo(-10, -34);
+        ctx.lineTo(-3, -26);
+        ctx.lineTo(-14, -23);
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.moveTo(10, -34);
+        ctx.lineTo(14, -23);
+        ctx.lineTo(3, -26);
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+
+        ctx.save();
+        ctx.translate(0, -22);
+        drawCuteFace(ctx, 13, 'grit');
+        ctx.restore();
+
+        // hat with bolt
+        ctx.fillStyle = '#4C1D95';
+        ctx.beginPath();
+        ctx.moveTo(0, -46);
+        ctx.lineTo(14, -30);
+        ctx.lineTo(-14, -30);
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+        ctx.fillStyle = '#FDE68A';
+        ctx.beginPath();
+        ctx.moveTo(0, -44);
+        ctx.lineTo(6, -34);
+        ctx.lineTo(2, -34);
+        ctx.lineTo(8, -26);
+        ctx.lineTo(-2, -34);
+        ctx.lineTo(2, -34);
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+
+        // staff
+        ctx.strokeStyle = '#2B1E12';
+        ctx.lineWidth = 4;
+        ctx.beginPath();
+        ctx.moveTo(22, 18);
+        ctx.lineTo(10, -10);
+        ctx.stroke();
+        ctx.fillStyle = '#A78BFA';
+        ctx.beginPath();
+        ctx.arc(10, -10, 6, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+
+        ctx.fillStyle = '#1F2937';
         ctx.font = 'bold 12px system-ui';
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
