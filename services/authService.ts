@@ -1090,6 +1090,46 @@ class AuthService {
     });
     return this.handleResponse(response);
   }
+
+  async listAppStudioFolders(): Promise<{ folders: any[] }> {
+    const response = await fetch(`${this.API_BASE}/app-studio/me/folders`, {
+      headers: this.getAuthHeaders()
+    });
+    return this.handleResponse(response);
+  }
+
+  async createAppStudioFolder(payload: { name: string }): Promise<{ folder: any }> {
+    const response = await fetch(`${this.API_BASE}/app-studio/me/folders`, {
+      method: 'POST',
+      headers: this.getAuthHeaders(),
+      body: JSON.stringify(payload)
+    });
+    return this.handleResponse(response);
+  }
+
+  async updateAppStudioFolder(folderId: string, payload: { name: string }): Promise<{ folder: any }> {
+    const response = await fetch(`${this.API_BASE}/app-studio/me/folders/${folderId}`, {
+      method: 'PATCH',
+      headers: this.getAuthHeaders(),
+      body: JSON.stringify(payload)
+    });
+    return this.handleResponse(response);
+  }
+
+  async deleteAppStudioFolder(folderId: string): Promise<any> {
+    const response = await fetch(`${this.API_BASE}/app-studio/me/folders/${folderId}`, {
+      method: 'DELETE',
+      headers: this.getAuthHeaders()
+    });
+    return this.handleResponse(response);
+  }
+
+  async listAppStudioForks(appId: string): Promise<{ forks: any[] }> {
+    const response = await fetch(`${this.API_BASE}/app-studio/apps/${appId}/forks`, {
+      headers: this.getAuthHeaders()
+    });
+    return this.handleResponse(response);
+  }
 }
 
 export const authService = new AuthService();

@@ -1,8 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Code2, Copy, Folder, Globe, Loader2, Plus, Save, Send, X } from 'lucide-react';
+import { Code2, Copy, Folder, FolderPlus, Globe, Loader2, Plus, Save, Send, Users, X } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import Button from './Button';
-import Input from './Input';
 import { authService } from '../services/authService';
 
 type StudioApp = {
@@ -24,6 +23,10 @@ const AppStudioModal: React.FC<{
 
   const [tab, setTab] = useState<'my' | 'public'>('my');
   const [search, setSearch] = useState('');
+  const [folderId, setFolderId] = useState<string>('all');
+  const [folders, setFolders] = useState<any[]>([]);
+  const [creatingFolder, setCreatingFolder] = useState(false);
+  const [newFolderName, setNewFolderName] = useState('');
   const [apps, setApps] = useState<StudioApp[]>([]);
   const [publicApps, setPublicApps] = useState<StudioApp[]>([]);
   const [loadingApps, setLoadingApps] = useState(false);
@@ -44,6 +47,12 @@ const AppStudioModal: React.FC<{
   const [previewKey, setPreviewKey] = useState(0);
   const [submittedAt, setSubmittedAt] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [showSubmissions, setShowSubmissions] = useState(false);
+  const [submissions, setSubmissions] = useState<any[]>([]);
+  const [loadingSubmissions, setLoadingSubmissions] = useState(false);
+  const [showForks, setShowForks] = useState(false);
+  const [forks, setForks] = useState<any[]>([]);
+  const [loadingForks, setLoadingForks] = useState(false);
 
   const iframeRef = useRef<HTMLIFrameElement | null>(null);
 
@@ -58,12 +67,14 @@ const AppStudioModal: React.FC<{
     try {
       setLoadingApps(true);
       setAppsError('');
-      const [mine, pub] = await Promise.all([
+      const [mine, pub, folderResp] = await Promise.all([
         authService.listAppStudioApps({ scope: 'my' }),
         authService.listAppStudioApps({ scope: 'public' })
+        , authService.listAppStudioFolders()
       ]);
       setApps(Array.isArray(mine.apps) ? mine.apps : []);
       setPublicApps(Array.isArray(pub.apps) ? pub.apps : []);
+      setFolders(Array.isArray(folderResp.folders) ? folderResp.folders : []);
     } catch (e) {
       setAppsError(e instanceof Error ? e.message : '載入失敗');
     } finally {
@@ -97,6 +108,7 @@ const AppStudioModal: React.FC<{
     if (!open) return;
     setTab('my');
     setSearch('');
+    setFolderId('all');
     setSelectedAppId(null);
     setVersions([]);
     setSelectedVersionId(null);
@@ -112,8 +124,16 @@ const AppStudioModal: React.FC<{
   const visibleApps = useMemo(() => {
     const pool = tab === 'public' ? publicApps : apps;
     const q = search.trim().toLowerCase();
-    if (!q) return pool;
-    return pool.filter((a) => String(a.title || '').toLowerCase().includes(q));
+    return pool.filter((a: any) => {
+      if (tab === 'my' && folderId !== 'all') {
+        const aFolder = String(a?.folderId || '');
+        if (folderId === 'unfiled') {
+          if (aFolder) return false;
+        } else if (aFolder !== folderId) return false;
+      }
+      if (!q) return true;
+      return String(a.title || '').toLowerCase().includes(q);
+    });
   }, [apps, publicApps, search, tab]);
 
   const openApp = async (appId: string) => {
@@ -156,8 +176,13 @@ const AppStudioModal: React.FC<{
   };
 
   const saveAsVersion = async () => {
+    if (!generatedHtml.trim()) return;
     if (!selectedAppId) {
       await createNewApp();
+      return;
+    }
+    if (!canEditSelected) {
+      await fork();
       return;
     }
     if (!generatedHtml.trim()) return;
@@ -269,6 +294,32 @@ const AppStudioModal: React.FC<{
               />
             </div>
 
+            {tab === 'my' && (
+              <div className="mb-3">
+                <div className="flex items-center justify-between mb-1">
+                  <label className="block text-xs font-black text-gray-600">資料夾</label>
+                  <button
+                    type="button"
+                    onClick={() => setCreatingFolder(true)}
+                    className="text-xs font-black text-brand-brown underline"
+                  >
+                    新增
+                  </button>
+                </div>
+                <select
+                  value={folderId}
+                  onChange={(e) => setFolderId(e.target.value)}
+                  className="w-full px-3 py-2 border-2 border-gray-300 rounded-xl bg-white font-bold"
+                >
+                  <option value="all">全部</option>
+                  <option value="unfiled">未分類</option>
+                  {folders.map((f) => (
+                    <option key={String(f.id)} value={String(f.id)}>{String(f.name || '資料夾')}</option>
+                  ))}
+                </select>
+              </div>
+            )}
+
             <div className="flex items-center gap-2 mb-3">
               <Button
                 fullWidth
@@ -340,6 +391,27 @@ const AppStudioModal: React.FC<{
                   >
                     Fork
                   </Button>
+                  {isTeacher && canEditSelected && (
+                    <Button
+                      className="bg-white hover:bg-gray-50 border-2 border-brand-brown text-brand-brown"
+                      onClick={async () => {
+                        if (!selectedAppId) return;
+                        try {
+                          setLoadingForks(true);
+                          setShowForks(true);
+                          const resp = await authService.listAppStudioForks(selectedAppId);
+                          setForks(Array.isArray(resp.forks) ? resp.forks : []);
+                        } catch (e) {
+                          alert(e instanceof Error ? e.message : '載入失敗');
+                        } finally {
+                          setLoadingForks(false);
+                        }
+                      }}
+                    >
+                      <Users className="w-4 h-4 mr-2" />
+                      查看副本
+                    </Button>
+                  )}
                   {canEditSelected && (
                     <Button
                       className="bg-white hover:bg-gray-50 border-2 border-brand-brown text-brand-brown"
@@ -356,6 +428,26 @@ const AppStudioModal: React.FC<{
                     <Send className={`w-4 h-4 mr-2 ${submitting ? 'animate-pulse' : ''}`} />
                     提交
                   </Button>
+                  {isTeacher && canEditSelected && (
+                    <Button
+                      className="bg-white hover:bg-gray-50 border-2 border-brand-brown text-brand-brown"
+                      onClick={async () => {
+                        if (!selectedAppId) return;
+                        try {
+                          setLoadingSubmissions(true);
+                          setShowSubmissions(true);
+                          const resp = await authService.listAppStudioSubmissions(selectedAppId);
+                          setSubmissions(Array.isArray(resp.submissions) ? resp.submissions : []);
+                        } catch (e) {
+                          alert(e instanceof Error ? e.message : '載入失敗');
+                        } finally {
+                          setLoadingSubmissions(false);
+                        }
+                      }}
+                    >
+                      查看提交
+                    </Button>
+                  )}
                 </>
               )}
             </div>
@@ -379,7 +471,7 @@ const AppStudioModal: React.FC<{
                       disabled={!generatedHtml.trim()}
                     >
                       <Save className="w-4 h-4 mr-2" />
-                      儲存版本
+                      {canEditSelected ? '儲存版本' : 'Fork 並儲存'}
                     </Button>
                   </div>
                 </div>
@@ -461,27 +553,160 @@ const AppStudioModal: React.FC<{
 
             {isTeacher && selectedAppId && (
               <div className="p-4 border-t-2 border-gray-200 bg-white">
-                <Button
-                  className="bg-white hover:bg-gray-50 border-2 border-brand-brown text-brand-brown"
-                  onClick={async () => {
-                    try {
-                      const resp = await authService.listAppStudioSubmissions(selectedAppId);
-                      alert(`提交記錄：${Array.isArray(resp.submissions) ? resp.submissions.length : 0}`);
-                    } catch (e) {
-                      alert(e instanceof Error ? e.message : '載入失敗');
-                    }
-                  }}
-                >
-                  查看提交記錄
-                </Button>
+                <div className="text-xs text-gray-500 font-bold">
+                  提示：作品以「按提交」作完成記錄；公開作品可被全站 fork。
+                </div>
               </div>
             )}
           </div>
         </div>
       </div>
+
+      {creatingFolder && (
+        <div className="fixed inset-0 z-[90] bg-black/50 flex items-center justify-center p-4">
+          <div className="bg-white w-full max-w-md rounded-3xl border-4 border-brand-brown shadow-comic-xl p-5">
+            <div className="flex items-center gap-2 mb-4">
+              <FolderPlus className="w-5 h-5 text-brand-brown" />
+              <div className="text-xl font-black text-brand-brown">新增資料夾</div>
+              <button
+                type="button"
+                onClick={() => { setCreatingFolder(false); setNewFolderName(''); }}
+                className="ml-auto w-9 h-9 rounded-full bg-white border-2 border-brand-brown hover:bg-gray-100 flex items-center justify-center"
+                aria-label="關閉"
+              >
+                <X className="w-5 h-5 text-brand-brown" />
+              </button>
+            </div>
+            <input
+              value={newFolderName}
+              onChange={(e) => setNewFolderName(e.target.value)}
+              placeholder="資料夾名稱"
+              className="w-full px-3 py-2 border-2 border-gray-300 rounded-xl font-bold"
+            />
+            <div className="mt-4 flex gap-2">
+              <Button
+                fullWidth
+                className="bg-white hover:bg-gray-50 border-2 border-brand-brown text-brand-brown"
+                onClick={() => { setCreatingFolder(false); setNewFolderName(''); }}
+              >
+                取消
+              </Button>
+              <Button
+                fullWidth
+                className="bg-emerald-500 hover:bg-emerald-600 text-white"
+                onClick={async () => {
+                  const name = String(newFolderName || '').trim();
+                  if (!name) return;
+                  try {
+                    await authService.createAppStudioFolder({ name });
+                    setCreatingFolder(false);
+                    setNewFolderName('');
+                    await loadLists();
+                  } catch (e) {
+                    alert(e instanceof Error ? e.message : '新增失敗');
+                  }
+                }}
+              >
+                新增
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showSubmissions && (
+        <div className="fixed inset-0 z-[90] bg-black/50 flex items-center justify-center p-4">
+          <div className="bg-white w-full max-w-3xl max-h-[80vh] overflow-hidden rounded-3xl border-4 border-brand-brown shadow-comic-xl flex flex-col">
+            <div className="p-4 border-b-4 border-brand-brown bg-[#D2EFFF] flex items-center gap-2">
+              <div className="text-xl font-black text-brand-brown">提交記錄</div>
+              <button
+                type="button"
+                onClick={() => setShowSubmissions(false)}
+                className="ml-auto w-9 h-9 rounded-full bg-white border-2 border-brand-brown hover:bg-gray-100 flex items-center justify-center"
+                aria-label="關閉"
+              >
+                <X className="w-5 h-5 text-brand-brown" />
+              </button>
+            </div>
+            <div className="p-4 overflow-y-auto">
+              {loadingSubmissions ? (
+                <div className="text-sm text-gray-500 font-bold flex items-center gap-2">
+                  <Loader2 className="w-4 h-4 animate-spin" /> 載入中...
+                </div>
+              ) : submissions.length === 0 ? (
+                <div className="text-sm text-gray-500 font-bold">未有提交</div>
+              ) : (
+                <div className="border-2 border-gray-200 rounded-2xl overflow-hidden">
+                  <table className="w-full text-sm">
+                    <thead className="bg-gray-50">
+                      <tr>
+                        <th className="text-left p-3 font-black text-gray-700">學生</th>
+                        <th className="text-left p-3 font-black text-gray-700">班別</th>
+                        <th className="text-left p-3 font-black text-gray-700">時間</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {submissions.map((s) => (
+                        <tr key={String(s.id)} className="border-t border-gray-200">
+                          <td className="p-3 font-bold text-gray-800">
+                            {String(s.user?.profile?.name || s.user?.username || s.userId || '')}
+                          </td>
+                          <td className="p-3 font-bold text-gray-600">
+                            {String(s.user?.profile?.class || '')}
+                          </td>
+                          <td className="p-3 font-bold text-gray-600">
+                            {s.createdAt ? new Date(s.createdAt).toLocaleString() : ''}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showForks && (
+        <div className="fixed inset-0 z-[90] bg-black/50 flex items-center justify-center p-4">
+          <div className="bg-white w-full max-w-3xl max-h-[80vh] overflow-hidden rounded-3xl border-4 border-brand-brown shadow-comic-xl flex flex-col">
+            <div className="p-4 border-b-4 border-brand-brown bg-[#FEF7EC] flex items-center gap-2">
+              <div className="text-xl font-black text-brand-brown">作品副本（Fork）</div>
+              <button
+                type="button"
+                onClick={() => setShowForks(false)}
+                className="ml-auto w-9 h-9 rounded-full bg-white border-2 border-brand-brown hover:bg-gray-100 flex items-center justify-center"
+                aria-label="關閉"
+              >
+                <X className="w-5 h-5 text-brand-brown" />
+              </button>
+            </div>
+            <div className="p-4 overflow-y-auto">
+              {loadingForks ? (
+                <div className="text-sm text-gray-500 font-bold flex items-center gap-2">
+                  <Loader2 className="w-4 h-4 animate-spin" /> 載入中...
+                </div>
+              ) : forks.length === 0 ? (
+                <div className="text-sm text-gray-500 font-bold">未有副本</div>
+              ) : (
+                <div className="space-y-2">
+                  {forks.map((f) => (
+                    <div key={String(f.id)} className="bg-white border-2 border-gray-200 rounded-2xl p-3">
+                      <div className="font-black text-brand-brown">{String(f.title || '')}</div>
+                      <div className="text-xs text-gray-600 font-bold mt-1">
+                        由 {String(f.owner?.profile?.name || f.owner?.username || f.ownerId)} 建立 • {f.updatedAt ? new Date(f.updatedAt).toLocaleString() : ''}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
 
 export default AppStudioModal;
-
