@@ -47,6 +47,13 @@ const AppStudioModal: React.FC<{
   const [generatedHtml, setGeneratedHtml] = useState('');
   const [generating, setGenerating] = useState(false);
   const [generateError, setGenerateError] = useState('');
+  const [generateStage, setGenerateStage] = useState(0);
+  const generateStages = useMemo(() => ([
+    '讀取需求描述',
+    '整理功能與介面',
+    '生成 HTML / CSS / JS',
+    '安全檢查與整理輸出'
+  ]), []);
 
   const [previewKey, setPreviewKey] = useState(0);
   const [previewStopped, setPreviewStopped] = useState(false);
@@ -136,6 +143,7 @@ const AppStudioModal: React.FC<{
     setSubmitTeacherId('');
     setSubmitTeacherName('');
     setShowSubmitPicker(false);
+    setGenerateStage(0);
     setPreviewStopped(false);
     setPreviewFullscreen(false);
     setDiffOpen(false);
@@ -262,6 +270,7 @@ const AppStudioModal: React.FC<{
     }
     try {
       setGenerating(true);
+      setGenerateStage(0);
       setGenerateError('');
       const resp = await authService.generateAppStudio({ prompt: p });
       setGeneratedTitle(String(resp.title || '小程式'));
@@ -274,6 +283,18 @@ const AppStudioModal: React.FC<{
       setGenerating(false);
     }
   };
+
+  useEffect(() => {
+    if (!open) return;
+    if (!generating) return;
+    setGenerateStage(0);
+    let i = 0;
+    const t = window.setInterval(() => {
+      i = Math.min(i + 1, generateStages.length - 1);
+      setGenerateStage(i);
+    }, 900);
+    return () => window.clearInterval(t);
+  }, [generating, generateStages.length, open]);
 
   const ensureEditableApp = async (): Promise<string | null> => {
     if (selectedAppId && canEditSelected) return selectedAppId;
@@ -843,12 +864,16 @@ const AppStudioModal: React.FC<{
                       查看提交
                     </Button>
                   )}
-                  {isTeacher && canEditSelected && (
+                  {isTeacher && selectedApp && (selectedApp.visibility === 'public' || canEditSelected) && (
                     <Button
                       className="bg-white hover:bg-gray-50 border-2 border-red-300 text-red-700"
                       onClick={async () => {
                         if (!selectedAppId) return;
-                        if (!confirm('確定要刪除這個作品？（版本與提交記錄會一併刪除）')) return;
+                        const isOwner = selectedApp?.ownerId === user?.id;
+                        const msg = isOwner
+                          ? '確定要刪除這個作品？（版本與提交記錄會一併刪除）'
+                          : '你正在刪除其他人已公開的作品（版本與提交記錄會一併刪除），確定？';
+                        if (!confirm(msg)) return;
                         try {
                           await authService.deleteAppStudioApp(selectedAppId);
                           setSelectedAppId(null);
@@ -912,7 +937,7 @@ const AppStudioModal: React.FC<{
                 </div>
               </div>
 
-              <div className="h-[280px] min-h-[240px] max-h-[360px] flex flex-col bg-white border-2 border-gray-200 rounded-2xl overflow-hidden">
+              <div className="h-[210px] min-h-[180px] max-h-[270px] flex flex-col bg-white border-2 border-gray-200 rounded-2xl overflow-hidden">
                 <div className="p-3 border-b-2 border-gray-200 bg-gray-50 flex items-center gap-2">
                   <div className="font-black text-gray-700">需求描述</div>
                   <div className="ml-auto flex items-center gap-2">
@@ -941,6 +966,24 @@ const AppStudioModal: React.FC<{
                     placeholder="例如：做一個可以輸入英文單字、按下開始後每 5 秒顯示一個提示的練習小工具..."
                     className="w-full flex-1 min-h-[120px] resize-none px-3 py-2 border-2 border-gray-300 rounded-xl font-bold"
                   />
+                  {generating && (
+                    <div className="text-sm text-gray-700 font-bold bg-[#F7FAFF] border-2 border-[#BBD7FF] rounded-2xl p-3">
+                      <div className="flex items-center gap-2">
+                        <Loader2 className="w-4 h-4 animate-spin text-blue-600" />
+                        <div className="font-black text-blue-700">AI 生成中</div>
+                      </div>
+                      <div className="mt-2 space-y-1 text-xs text-gray-700">
+                        {generateStages.map((s, idx) => (
+                          <div key={s} className={idx === generateStage ? 'text-blue-700 font-black' : 'text-gray-600'}>
+                            {idx + 1}. {s}{idx === generateStage ? '…' : ''}
+                          </div>
+                        ))}
+                      </div>
+                      <div className="mt-2 text-[11px] text-gray-500 font-bold">
+                        提示：為安全原因，這裡只顯示生成進度，不展示模型內部推理細節。
+                      </div>
+                    </div>
+                  )}
                   {generateError && <div className="text-sm text-red-600 font-bold">{generateError}</div>}
                   {submittedAt && (
                     <div className="text-sm text-emerald-700 font-black">
