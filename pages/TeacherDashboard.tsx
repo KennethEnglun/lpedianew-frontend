@@ -6,6 +6,7 @@ import Input from '../components/Input';
 import AiQuestionGeneratorModal from '../components/AiQuestionGeneratorModal';
 import UiSettingsModal from '../components/UiSettingsModal';
 import AiChatModal from '../components/AiChatModal';
+import AppStudioModal from '../components/AppStudioModal';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { authService } from '../services/authService';
@@ -25,6 +26,7 @@ const TeacherDashboard: React.FC = () => {
   const [showUiSettings, setShowUiSettings] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [showAiChat, setShowAiChat] = useState(false);
+  const [showAppStudio, setShowAppStudio] = useState(false);
 
   const [teacherSettingsDraft, setTeacherSettingsDraft] = useState<{
     homeroomClass: string;
@@ -1325,6 +1327,10 @@ const TeacherDashboard: React.FC = () => {
         open={showAiChat}
         onClose={() => setShowAiChat(false)}
       />
+      <AppStudioModal
+        open={showAppStudio}
+        onClose={() => setShowAppStudio(false)}
+      />
 
       {/* Student Progress Modal */}
       {showStudentProgressModal && (
@@ -1518,6 +1524,17 @@ const TeacherDashboard: React.FC = () => {
                 </Button>
                 <Button
                   fullWidth
+                  className="bg-[#E8F5E9] hover:bg-[#C8E6C9] flex items-center justify-center gap-2"
+                  onClick={() => {
+                    setShowAppStudio(true);
+                    closeSidebar();
+                  }}
+                >
+                  <Code className="w-5 h-5" />
+                  小程式工作坊
+                </Button>
+                <Button
+                  fullWidth
                   className="bg-[#E0D2F8] hover:bg-[#D0BCF5]"
                   onClick={() => {
                     openStudentProgress();
@@ -1622,6 +1639,14 @@ const TeacherDashboard: React.FC = () => {
             onClick={() => setShowAiChat(true)}
           >
             AI對話
+          </Button>
+          <Button
+            fullWidth
+            className="bg-[#E8F5E9] hover:bg-[#C8E6C9] text-lg flex items-center justify-center gap-2"
+            onClick={() => setShowAppStudio(true)}
+          >
+            <Code className="w-5 h-5" />
+            小程式工作坊
           </Button>
           <Button
             fullWidth

@@ -997,6 +997,99 @@ class AuthService {
     });
     return this.handleResponse(response);
   }
+
+  // === App Studio (WebSim-like) ===
+  async generateAppStudio(payload: { prompt: string }): Promise<{ title: string; indexHtml: string; externalScripts: string[]; externalStyles: string[] }> {
+    const response = await fetch(`${this.API_BASE}/app-studio/generate`, {
+      method: 'POST',
+      headers: this.getAuthHeaders(),
+      body: JSON.stringify(payload)
+    });
+    return this.handleResponse(response);
+  }
+
+  async listAppStudioApps(params?: { scope?: 'my' | 'public' | 'all' }): Promise<{ apps: any[] }> {
+    const sp = new URLSearchParams();
+    if (params?.scope) sp.append('scope', params.scope);
+    const query = sp.toString() ? `?${sp.toString()}` : '';
+    const response = await fetch(`${this.API_BASE}/app-studio/apps${query}`, {
+      headers: this.getAuthHeaders()
+    });
+    return this.handleResponse(response);
+  }
+
+  async createAppStudioApp(payload?: { title?: string; visibility?: 'private' | 'public' }): Promise<{ app: any }> {
+    const response = await fetch(`${this.API_BASE}/app-studio/apps`, {
+      method: 'POST',
+      headers: this.getAuthHeaders(),
+      body: JSON.stringify(payload || {})
+    });
+    return this.handleResponse(response);
+  }
+
+  async getAppStudioApp(appId: string): Promise<{ app: any }> {
+    const response = await fetch(`${this.API_BASE}/app-studio/apps/${appId}`, {
+      headers: this.getAuthHeaders()
+    });
+    return this.handleResponse(response);
+  }
+
+  async updateAppStudioApp(appId: string, patch: { title?: string; visibility?: 'private' | 'public'; folderId?: string | null }): Promise<{ app: any }> {
+    const response = await fetch(`${this.API_BASE}/app-studio/apps/${appId}`, {
+      method: 'PATCH',
+      headers: this.getAuthHeaders(),
+      body: JSON.stringify(patch || {})
+    });
+    return this.handleResponse(response);
+  }
+
+  async forkAppStudioApp(appId: string, payload?: { versionId?: string }): Promise<{ app: any; version: any }> {
+    const response = await fetch(`${this.API_BASE}/app-studio/apps/${appId}/fork`, {
+      method: 'POST',
+      headers: this.getAuthHeaders(),
+      body: JSON.stringify(payload || {})
+    });
+    return this.handleResponse(response);
+  }
+
+  async listAppStudioVersions(appId: string): Promise<{ versions: any[] }> {
+    const response = await fetch(`${this.API_BASE}/app-studio/apps/${appId}/versions`, {
+      headers: this.getAuthHeaders()
+    });
+    return this.handleResponse(response);
+  }
+
+  async getAppStudioVersion(appId: string, versionId: string): Promise<{ version: any }> {
+    const response = await fetch(`${this.API_BASE}/app-studio/apps/${appId}/versions/${versionId}`, {
+      headers: this.getAuthHeaders()
+    });
+    return this.handleResponse(response);
+  }
+
+  async createAppStudioVersion(appId: string, payload: { title?: string; prompt?: string; indexHtml: string }): Promise<{ version: any }> {
+    const response = await fetch(`${this.API_BASE}/app-studio/apps/${appId}/versions`, {
+      method: 'POST',
+      headers: this.getAuthHeaders(),
+      body: JSON.stringify(payload)
+    });
+    return this.handleResponse(response);
+  }
+
+  async submitAppStudio(appId: string, payload?: { versionId?: string }): Promise<{ submission: any }> {
+    const response = await fetch(`${this.API_BASE}/app-studio/apps/${appId}/submit`, {
+      method: 'POST',
+      headers: this.getAuthHeaders(),
+      body: JSON.stringify(payload || {})
+    });
+    return this.handleResponse(response);
+  }
+
+  async listAppStudioSubmissions(appId: string): Promise<{ submissions: any[] }> {
+    const response = await fetch(`${this.API_BASE}/app-studio/apps/${appId}/submissions`, {
+      headers: this.getAuthHeaders()
+    });
+    return this.handleResponse(response);
+  }
 }
 
 export const authService = new AuthService();

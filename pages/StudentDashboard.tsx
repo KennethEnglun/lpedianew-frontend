@@ -1,5 +1,5 @@
 import React, { useMemo, useState, useEffect, useRef, useCallback } from 'react';
-import { Settings, LogOut, MessageSquare, HelpCircle, Bot, RefreshCw, X, Eye, EyeOff } from 'lucide-react';
+import { Settings, LogOut, MessageSquare, HelpCircle, Bot, RefreshCw, X, Eye, EyeOff, Code2 } from 'lucide-react';
 import { Subject, SUBJECT_CONFIG, Task } from '../types';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
@@ -10,6 +10,7 @@ import TowerDefenseGame from '../components/TowerDefenseGame';
 import UiSettingsModal from '../components/UiSettingsModal';
 import AiChatModal from '../components/AiChatModal';
 import BotTaskChatModal from '../components/BotTaskChatModal';
+import AppStudioModal from '../components/AppStudioModal';
 import { loadHiddenTaskKeys, makeTaskKey, saveHiddenTaskKeys } from '../services/taskVisibility';
 
 interface Discussion {
@@ -134,6 +135,7 @@ const StudentDashboard: React.FC = () => {
   const [hiddenTaskKeys, setHiddenTaskKeys] = useState<Set<string>>(() => new Set());
   const [showHiddenTasks, setShowHiddenTasks] = useState(false);
   const [showAiChat, setShowAiChat] = useState(false);
+  const [showAppStudio, setShowAppStudio] = useState(false);
   const [showBotTaskChat, setShowBotTaskChat] = useState(false);
   const [selectedBotTaskId, setSelectedBotTaskId] = useState<string | null>(null);
 
@@ -1104,6 +1106,10 @@ const StudentDashboard: React.FC = () => {
         open={showAiChat}
         onClose={() => setShowAiChat(false)}
       />
+      <AppStudioModal
+        open={showAppStudio}
+        onClose={() => setShowAppStudio(false)}
+      />
       <BotTaskChatModal
         open={showBotTaskChat}
         taskId={selectedBotTaskId}
@@ -1175,6 +1181,16 @@ const StudentDashboard: React.FC = () => {
             >
               <Bot className="w-6 h-6 text-brand-brown" />
               <span className="text-lg font-bold text-brand-brown flex-1 text-left">AI對話</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setShowAppStudio(true)}
+              className="w-[calc(100%-10px)] flex items-center gap-3 px-4 py-2 rounded-2xl border-4 transition-all duration-150 border-brand-brown bg-[#E8F5E9] hover:bg-white shadow-comic"
+              title="小程式工作坊"
+            >
+              <Code2 className="w-6 h-6 text-brand-brown" />
+              <span className="text-lg font-bold text-brand-brown flex-1 text-left">小程式工作坊</span>
             </button>
 
             {Object.values(Subject).map((subject) => {
