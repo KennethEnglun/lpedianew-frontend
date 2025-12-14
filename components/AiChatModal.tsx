@@ -4,7 +4,6 @@ import Button from './Button';
 import Input from './Input';
 import { useAuth } from '../contexts/AuthContext';
 import { authService } from '../services/authService';
-import { Subject } from '../types';
 
 type ChatMessage = {
   id: string;
@@ -13,8 +12,6 @@ type ChatMessage = {
   createdAt?: string;
   userRole?: string | null;
 };
-
-const subjectOptions = Object.values(Subject);
 
 const bubbleBase = 'max-w-[85%] rounded-2xl px-4 py-3 border-2 break-words';
 
@@ -142,19 +139,11 @@ const markdownToSafeHtml = (markdown: string) => {
 const AiChatModal: React.FC<{
   open: boolean;
   onClose: () => void;
-  defaultSubject?: string;
-}> = ({ open, onClose, defaultSubject }) => {
+}> = ({ open, onClose }) => {
   const { user } = useAuth();
   const isTeacher = user?.role === 'teacher' || user?.role === 'admin';
 
-  const teacherSubjects = useMemo(() => {
-    const profile: any = user?.profile || {};
-    const arr = Array.isArray(profile.subjectsTaught) ? profile.subjectsTaught.filter((s: any) => typeof s === 'string') : [];
-    return arr.length > 0 ? arr : subjectOptions;
-  }, [user?.profile]);
-
   const [tab, setTab] = useState<'my' | 'students'>('my');
-  const [subject, setSubject] = useState<string>(defaultSubject || String(Subject.CHINESE)); // student: active subject; teacher: optional filter for students tab ('' = all)
 
   // My chat
   const [mySidebarView, setMySidebarView] = useState<'chat' | 'bot' | 'image'>('chat');
@@ -214,20 +203,17 @@ const AiChatModal: React.FC<{
   useEffect(() => {
     if (!open) return;
     if (isTeacher) {
-      setSubject(''); // teacher: no top subject selector
       setTab('my');
       setMySidebarView('chat');
       setMyChatBotId('global');
     } else {
-      const initial = defaultSubject || String(Subject.CHINESE);
-      setSubject(String(initial || Subject.CHINESE));
       setTab('my');
       setMySidebarView('chat');
       setMyChatBotId('global');
     }
-  }, [defaultSubject, isTeacher, open, teacherSubjects]);
+  }, [isTeacher, open]);
 
-  const loadMyChat = async (nextSubject: string, nextBotId: string) => {
+  const loadMyChat = async (nextBotId: string) => {
     try {
       setMyLoading(true);
       setMyError('');
@@ -248,7 +234,7 @@ const AiChatModal: React.FC<{
 
       const threadsResp = isTeacher
         ? await authService.getMyChatThreads(mySidebarView === 'chat' ? { botId: 'all' } : (nextBotId === 'global' ? undefined : { botId: nextBotId }))
-        : await authService.getMyChatThreads({ subject: nextSubject });
+        : await authService.getMyChatThreads();
       const threads = Array.isArray(threadsResp.threads) ? threadsResp.threads : [];
       setMyThreads(threads);
       const selected = threads.find((t: any) => t?.id === myThreadId) || threads[0] || null;
@@ -318,7 +304,6 @@ const AiChatModal: React.FC<{
       setMyError('');
       setMyMessages([]);
       const resp = await authService.createMyChatThread({
-        subject: isTeacher ? undefined : subject,
         ...(isTeacher && effectiveTeacherBotId !== 'global' ? { botId: effectiveTeacherBotId } : null)
       });
       const thread = resp?.thread;
@@ -356,10 +341,10 @@ const AiChatModal: React.FC<{
 
   useEffect(() => {
     if (!open) return;
-    if (tab === 'my') loadMyChat(subject, effectiveTeacherBotId);
-    else loadTeacherThreads(subject);
+    if (tab === 'my') loadMyChat(effectiveTeacherBotId);
+    else loadTeacherThreads('');
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, subject, tab, effectiveTeacherBotId]);
+  }, [open, tab, effectiveTeacherBotId]);
 
   const openTeacherThread = async (threadId: string) => {
     try {
@@ -544,7 +529,6 @@ const AiChatModal: React.FC<{
 
       const streamResp = await authService.sendChatMessageStream(
         {
-          subject: isTeacher ? undefined : subject,
           threadId: myThreadId,
           ...(isTeacher && effectiveTeacherBotId !== 'global' ? { botId: effectiveTeacherBotId } : null),
           message: text
@@ -553,7 +537,6 @@ const AiChatModal: React.FC<{
       );
       if (!streamResp.ok || !streamResp.body) {
         const fallback = await authService.sendChatMessage({
-          subject: isTeacher ? undefined : subject,
           threadId: myThreadId,
           ...(isTeacher && effectiveTeacherBotId !== 'global' ? { botId: effectiveTeacherBotId } : null),
           message: text
@@ -606,7 +589,7 @@ const AiChatModal: React.FC<{
       try {
         const threadsResp = isTeacher
           ? await authService.getMyChatThreads(mySidebarView === 'chat' ? { botId: 'all' } : (effectiveTeacherBotId === 'global' ? undefined : { botId: effectiveTeacherBotId }))
-          : await authService.getMyChatThreads({ subject });
+          : await authService.getMyChatThreads();
         const threads = Array.isArray(threadsResp.threads) ? threadsResp.threads : [];
         setMyThreads(threads);
       } catch {
@@ -643,23 +626,8 @@ const AiChatModal: React.FC<{
           </button>
         </div>
 
-        <div className="p-4 border-b-2 border-gray-200 bg-gray-50 flex flex-col md:flex-row items-start md:items-center gap-3">
-          {!isTeacher && (
-            <div className="w-full md:w-56">
-              <label className="block text-xs font-black text-gray-600 mb-1">科目</label>
-              <select
-                value={subject}
-                onChange={(e) => setSubject(e.target.value)}
-                className="w-full px-3 py-2 border-2 border-gray-300 rounded-xl bg-white"
-              >
-                {subjectOptions.map((s) => (
-                  <option key={s} value={s}>{s}</option>
-                ))}
-              </select>
-            </div>
-          )}
-
-          {isTeacher && <div className="text-sm text-gray-600 font-bold">我的對話</div>}
+        <div className="p-4 border-b-2 border-gray-200 bg-gray-50 flex items-center">
+          <div className="text-sm text-gray-600 font-bold">我的對話</div>
         </div>
 
         <div className="flex-1 min-h-0 flex flex-col md:flex-row bg-gray-50">

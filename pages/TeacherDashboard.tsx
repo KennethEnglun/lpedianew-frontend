@@ -1324,7 +1324,6 @@ const TeacherDashboard: React.FC = () => {
       <AiChatModal
         open={showAiChat}
         onClose={() => setShowAiChat(false)}
-        defaultSubject={filterSubject || String(Subject.CHINESE)}
       />
 
       {/* Student Progress Modal */}

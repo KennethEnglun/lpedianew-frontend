@@ -1079,13 +1079,6 @@ const StudentDashboard: React.FC = () => {
         </div>
         <div className="flex gap-3">
           <button
-            onClick={() => setShowAiChat(true)}
-            className="w-10 h-10 bg-brand-cream rounded-full border-2 border-brand-brown flex items-center justify-center hover:bg-white"
-            title="AI對話"
-          >
-            <Bot className="w-6 h-6 text-brand-brown" />
-          </button>
-          <button
             onClick={() => setShowUiSettings(true)}
             className="w-10 h-10 bg-brand-cream rounded-full border-2 border-brand-brown flex items-center justify-center hover:bg-white"
             title="介面顯示設定"
@@ -1110,7 +1103,6 @@ const StudentDashboard: React.FC = () => {
       <AiChatModal
         open={showAiChat}
         onClose={() => setShowAiChat(false)}
-        defaultSubject={String(selectedSubject)}
       />
       <BotTaskChatModal
         open={showBotTaskChat}
@@ -1175,6 +1167,16 @@ const StudentDashboard: React.FC = () => {
           </div>
 
           <nav className="flex-1 space-y-3 overflow-y-auto">
+            <button
+              type="button"
+              onClick={() => setShowAiChat(true)}
+              className="w-[calc(100%-10px)] flex items-center gap-3 px-4 py-2 rounded-2xl border-4 transition-all duration-150 border-brand-brown bg-[#D2EFFF] hover:bg-white shadow-comic"
+              title="AI對話"
+            >
+              <Bot className="w-6 h-6 text-brand-brown" />
+              <span className="text-lg font-bold text-brand-brown flex-1 text-left">AI對話</span>
+            </button>
+
             {Object.values(Subject).map((subject) => {
               const config = SUBJECT_CONFIG[subject];
               const isSelected = selectedSubject === subject;
