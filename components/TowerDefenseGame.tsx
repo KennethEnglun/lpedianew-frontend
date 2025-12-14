@@ -1230,32 +1230,35 @@ export const TowerDefenseGame: React.FC<Props> = ({ questions, subject, difficul
 	        </div>
 	      )}
 
-	      <div ref={containerRef} className="relative flex-1 rounded-2xl border-4 border-brand-brown bg-[#101418] overflow-hidden shadow-comic-xl">
+	      <div ref={containerRef} className="flex-1 min-h-0 rounded-2xl border-4 border-brand-brown bg-[#101418] overflow-hidden shadow-comic-xl">
 	        <canvas
 	          ref={canvasRef}
 	          className="w-full h-full"
 	        />
-	        {!isRunning && !gameOver && (
-	          <div className="absolute inset-0 flex items-center justify-center bg-black/35">
-	            <div className="bg-white/95 border-4 border-brand-brown rounded-3xl px-6 py-5 shadow-comic-xl text-center max-w-md">
-	              <div className="text-2xl font-black text-brand-brown mb-2">準備階段</div>
-	              <div className="text-sm text-gray-700 mb-4">
-	                系統會自動部署防禦與技能；按「開始」後請專心答題。
-	              </div>
-	              <button
-	                onClick={startGame}
-	                className="px-6 py-3 bg-emerald-500 hover:bg-emerald-600 text-white font-black rounded-2xl border-2 border-brand-brown shadow-comic"
-              >
-                開始
-              </button>
-	            </div>
-	          </div>
-	        )}
 	      </div>
 
-	      {questionOpen && currentQuestion && (
-	        <div className="absolute inset-0 bg-black/55 flex items-center justify-center z-40 p-4">
-	          <div className="bg-white border-4 border-brand-brown rounded-3xl w-full max-w-2xl p-6 shadow-comic-xl">
+	      <div className="mt-3 bg-white border-4 border-brand-brown rounded-3xl p-4 shadow-comic-xl">
+	        {!isRunning && !gameOver ? (
+	          <div className="flex flex-col md:flex-row md:items-center gap-3">
+	            <div className="flex-1">
+	              <div className="text-lg font-black text-brand-brown">準備階段</div>
+	              <div className="text-sm text-gray-600 font-bold">
+	                系統會自動部署防禦與技能；按「開始」後請專心答題。
+	              </div>
+	            </div>
+	            <button
+	              onClick={startGame}
+	              className="px-6 py-3 bg-emerald-500 hover:bg-emerald-600 text-white font-black rounded-2xl border-2 border-brand-brown shadow-comic"
+	            >
+	              開始
+	            </button>
+	          </div>
+	        ) : gameOver ? (
+	          <div className="text-center text-gray-500 font-bold">遊戲已結束</div>
+	        ) : !questionOpen || !currentQuestion ? (
+	          <div className="text-center text-gray-500 font-bold">準備出題中…</div>
+	        ) : (
+	          <>
 	            <div className="flex items-center gap-2 mb-3">
 	              <span className={`px-2 py-0.5 rounded-full text-xs font-black border-2 ${currentQuestion.kind === 'match' ? 'bg-lime-100 border-lime-300 text-lime-900' : 'bg-blue-100 border-blue-300 text-blue-900'}`}>
 	                {currentQuestion.kind === 'match' ? '配對' : '四選一'}
@@ -1263,14 +1266,17 @@ export const TowerDefenseGame: React.FC<Props> = ({ questions, subject, difficul
 	              <span className="text-xs text-gray-500 font-bold">
 	                已答：{totalAnswered}／正確：{correctAnswers}
 	              </span>
+	              <span className="ml-auto text-xs text-gray-400 font-bold">
+	                連對：{combo}
+	              </span>
 	            </div>
 
-	            <h3 className="text-2xl font-black text-brand-brown mb-4">
+	            <h3 className="text-xl md:text-2xl font-black text-brand-brown mb-3">
 	              {currentQuestion.kind === 'match' ? `選出與「${currentQuestion.stem}」相符的答案` : currentQuestion.stem}
 	            </h3>
 
 	            {answerResult && (
-	              <div className={`mb-4 px-4 py-3 rounded-2xl border-2 font-black ${answerResult.isCorrect ? 'bg-emerald-50 border-emerald-200 text-emerald-800' : 'bg-red-50 border-red-200 text-red-700'}`}>
+	              <div className={`mb-3 px-4 py-3 rounded-2xl border-2 font-black ${answerResult.isCorrect ? 'bg-emerald-50 border-emerald-200 text-emerald-800' : 'bg-red-50 border-red-200 text-red-700'}`}>
 	                {answerResult.effectText}
 	              </div>
 	            )}
@@ -1280,9 +1286,9 @@ export const TowerDefenseGame: React.FC<Props> = ({ questions, subject, difficul
 	                const locked = Boolean(answerResult);
 	                const isCorrect = idx === currentCorrectIndex;
 	                const isChosen = answerResult?.selectedIndex === idx;
-	                const base = 'px-4 py-3 border-4 rounded-2xl font-black shadow-comic transition-transform';
+	                const base = 'px-4 py-3 border-4 rounded-2xl font-black shadow-comic';
 	                const state = (() => {
-	                  if (!locked) return 'bg-[#FEF7EC] hover:bg-[#FDEFCB] border-brand-brown text-brand-brown hover:scale-105';
+	                  if (!locked) return 'bg-[#FEF7EC] hover:bg-[#FDEFCB] border-brand-brown text-brand-brown';
 	                  if (isCorrect) return 'bg-emerald-100 border-emerald-500 text-emerald-900';
 	                  if (isChosen && !isCorrect) return 'bg-red-100 border-red-500 text-red-900';
 	                  return 'bg-gray-100 border-gray-200 text-gray-400';
@@ -1299,9 +1305,9 @@ export const TowerDefenseGame: React.FC<Props> = ({ questions, subject, difficul
 	                );
 	              })}
 	            </div>
-	          </div>
-	        </div>
-	      )}
+	          </>
+	        )}
+	      </div>
 
       <div className="mt-3 text-xs text-gray-400 text-center">
         題庫會循環出題；每次選項隨機排列。
