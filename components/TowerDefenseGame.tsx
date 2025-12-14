@@ -842,6 +842,177 @@ function drawCuteCat(
   }
 }
 
+function drawCuteCatHead(
+  ctx: CanvasRenderingContext2D,
+  opts: {
+    fur: string;
+    furShadow: string;
+    accent?: string;
+    mood?: 'smile' | 'wink' | 'grit';
+    levelText?: string;
+  }
+) {
+  const outline = COLORS.border;
+  const mood = opts.mood || 'smile';
+
+  // size tuned to be closer to enemy units
+  const headR = 18;
+
+  ctx.save();
+
+  // head base
+  ctx.fillStyle = opts.fur;
+  ctx.strokeStyle = outline;
+  ctx.lineWidth = 5;
+  ctx.beginPath();
+  ctx.arc(0, 0, headR, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.stroke();
+
+  // subtle shadow patch (bottom)
+  ctx.save();
+  ctx.globalAlpha = 0.28;
+  ctx.fillStyle = opts.furShadow;
+  ctx.beginPath();
+  ctx.ellipse(0, headR * 0.35, headR * 0.75, headR * 0.45, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
+
+  // ears
+  const ear = (sx: number) => {
+    ctx.save();
+    ctx.fillStyle = opts.fur;
+    ctx.strokeStyle = outline;
+    ctx.lineWidth = 5;
+    ctx.beginPath();
+    ctx.moveTo(sx * 6, -10);
+    ctx.lineTo(sx * 18, -24);
+    ctx.lineTo(sx * 20, -1);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+
+    ctx.fillStyle = '#F8B5E0';
+    ctx.beginPath();
+    ctx.moveTo(sx * 8, -10);
+    ctx.lineTo(sx * 16, -18);
+    ctx.lineTo(sx * 17, -6);
+    ctx.closePath();
+    ctx.fill();
+    ctx.restore();
+  };
+  ear(-1);
+  ear(1);
+
+  // eyes
+  const eye = (x: number, wink = false) => {
+    ctx.save();
+    if (wink) {
+      ctx.strokeStyle = 'rgba(20,16,14,0.85)';
+      ctx.lineWidth = 4;
+      ctx.lineCap = 'round';
+      ctx.beginPath();
+      ctx.moveTo(x - 6, -1);
+      ctx.lineTo(x + 6, -1);
+      ctx.stroke();
+    } else {
+      ctx.fillStyle = 'rgba(20,16,14,0.92)';
+      ctx.beginPath();
+      ctx.ellipse(x, -1, 3.4, 4.1, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = 'rgba(255,255,255,0.9)';
+      ctx.beginPath();
+      ctx.arc(x - 1.1, -2.4, 1.05, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.restore();
+  };
+  if (mood === 'wink') {
+    eye(-7, false);
+    eye(8, true);
+  } else {
+    eye(-7.5, false);
+    eye(7.5, false);
+  }
+
+  // blush
+  ctx.save();
+  ctx.globalAlpha = 0.55;
+  ctx.fillStyle = '#FCA5A5';
+  ctx.beginPath();
+  ctx.arc(-12, 8, 4.4, 0, Math.PI * 2);
+  ctx.arc(12, 8, 4.4, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
+
+  // nose + mouth (cat "w")
+  ctx.save();
+  ctx.fillStyle = '#F472B6';
+  ctx.strokeStyle = outline;
+  ctx.lineWidth = 2.4;
+  ctx.beginPath();
+  ctx.moveTo(0, 5.5);
+  ctx.lineTo(-3, 8.5);
+  ctx.lineTo(3, 8.5);
+  ctx.closePath();
+  ctx.fill();
+  ctx.stroke();
+
+  ctx.strokeStyle = 'rgba(20,16,14,0.85)';
+  ctx.lineWidth = 3;
+  ctx.lineCap = 'round';
+  ctx.beginPath();
+  if (mood === 'grit') {
+    ctx.moveTo(-7, 11);
+    ctx.lineTo(7, 11);
+  } else {
+    ctx.moveTo(-2, 11);
+    ctx.quadraticCurveTo(-7, 13, -10, 10.5);
+    ctx.moveTo(2, 11);
+    ctx.quadraticCurveTo(7, 13, 10, 10.5);
+  }
+  ctx.stroke();
+  ctx.restore();
+
+  // whiskers
+  ctx.save();
+  ctx.strokeStyle = 'rgba(20,16,14,0.6)';
+  ctx.lineWidth = 2;
+  ctx.lineCap = 'round';
+  for (const side of [-1, 1] as const) {
+    const sx = side;
+    ctx.beginPath();
+    ctx.moveTo(sx * 8.5, 9);
+    ctx.lineTo(sx * 19, 7);
+    ctx.moveTo(sx * 8.5, 11);
+    ctx.lineTo(sx * 19, 11);
+    ctx.moveTo(sx * 8.5, 13);
+    ctx.lineTo(sx * 19, 15);
+    ctx.stroke();
+  }
+  ctx.restore();
+
+  // level badge
+  if (opts.levelText) {
+    ctx.save();
+    ctx.fillStyle = opts.accent || '#FDE68A';
+    ctx.strokeStyle = outline;
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.arc(0, 16, 9.5, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+    ctx.fillStyle = '#1F2937';
+    ctx.font = 'bold 12px system-ui';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(opts.levelText, 0, 16);
+    ctx.restore();
+  }
+
+  ctx.restore();
+}
+
 export const TowerDefenseGame: React.FC<Props> = ({ questions, subject, difficulty, durationSeconds, livesLimit, onExit, onStart, onComplete }) => {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -1958,14 +2129,16 @@ export const TowerDefenseGame: React.FC<Props> = ({ questions, subject, difficul
       ctx.lineWidth = 4;
 
       if (tower.type === 'soldier') {
-        drawCuteCat(ctx, {
+        ctx.save();
+        ctx.translate(0, -10);
+        drawCuteCatHead(ctx, {
           fur: '#F59E0B',
           furShadow: '#FDE68A',
           mood: 'smile',
-          weapon: { type: 'sword', color: '#E5E7EB' },
           levelText: String(level),
           accent: '#FDE68A'
         });
+        ctx.restore();
       } else if (tower.type === 'mage-ice') {
         drawCuteCat(ctx, {
           fur: '#FDE68A',
