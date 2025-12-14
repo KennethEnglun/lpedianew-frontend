@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Code2, Copy, Folder, FolderPlus, Globe, Loader2, Plus, Save, Send, StopCircle, Users, X } from 'lucide-react';
+import { Code2, Copy, Folder, FolderPlus, Globe, Loader2, Maximize2, Plus, Save, Send, StopCircle, Trash2, Users, X } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import Button from './Button';
 import { authService } from '../services/authService';
@@ -50,8 +50,14 @@ const AppStudioModal: React.FC<{
 
   const [previewKey, setPreviewKey] = useState(0);
   const [previewStopped, setPreviewStopped] = useState(false);
+  const [previewFullscreen, setPreviewFullscreen] = useState(false);
   const [submittedAt, setSubmittedAt] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [submitTeacherId, setSubmitTeacherId] = useState<string>('');
+  const [submitTeacherName, setSubmitTeacherName] = useState<string>('');
+  const [showSubmitPicker, setShowSubmitPicker] = useState(false);
+  const [teachers, setTeachers] = useState<any[]>([]);
+  const [loadingTeachers, setLoadingTeachers] = useState(false);
   const [showSubmissions, setShowSubmissions] = useState(false);
   const [submissions, setSubmissions] = useState<any[]>([]);
   const [loadingSubmissions, setLoadingSubmissions] = useState(false);
@@ -63,6 +69,7 @@ const AppStudioModal: React.FC<{
   const [thumbHtmlByAppId, setThumbHtmlByAppId] = useState<Record<string, string>>({});
 
   const iframeRef = useRef<HTMLIFrameElement | null>(null);
+  const fullscreenIframeRef = useRef<HTMLIFrameElement | null>(null);
 
   const selectedApp: StudioApp | null = useMemo(() => {
     const pool = tab === 'public' ? publicApps : apps;
@@ -126,7 +133,11 @@ const AppStudioModal: React.FC<{
     setGeneratedHtml('');
     setGenerateError('');
     setSubmittedAt(null);
+    setSubmitTeacherId('');
+    setSubmitTeacherName('');
+    setShowSubmitPicker(false);
     setPreviewStopped(false);
+    setPreviewFullscreen(false);
     setDiffOpen(false);
     setDraftNotice(null);
     setThumbHtmlByAppId({});
@@ -336,13 +347,36 @@ const AppStudioModal: React.FC<{
     if (!selectedAppId) return;
     try {
       setSubmitting(true);
-      const resp = await authService.submitAppStudio(selectedAppId, selectedVersionId ? { versionId: selectedVersionId } : undefined);
+      const payload: any = {};
+      if (selectedVersionId) payload.versionId = selectedVersionId;
+      if (submitTeacherId) payload.teacherId = submitTeacherId;
+      const resp = await authService.submitAppStudio(selectedAppId, Object.keys(payload).length ? payload : undefined);
       setSubmittedAt(String(resp.submission?.createdAt || new Date().toISOString()));
     } catch (e) {
       setSubmittedAt(null);
       alert(e instanceof Error ? e.message : '提交失敗');
     } finally {
       setSubmitting(false);
+    }
+  };
+
+  const openSubmitPicker = async () => {
+    if (user?.role !== 'student') return;
+    if (!selectedAppId) return;
+    try {
+      setLoadingTeachers(true);
+      setSubmitTeacherId('');
+      setSubmitTeacherName('');
+      if (teachers.length === 0) {
+        const resp = await authService.listTeachers();
+        const list = Array.isArray(resp.users) ? resp.users : [];
+        setTeachers(list);
+      }
+      setShowSubmitPicker(true);
+    } catch (e) {
+      alert(e instanceof Error ? e.message : '載入老師名單失敗');
+    } finally {
+      setLoadingTeachers(false);
     }
   };
 
@@ -359,7 +393,7 @@ const AppStudioModal: React.FC<{
   const buildPreviewHtml = (html: string) => {
     const appId = selectedAppId || '';
     const versionId = selectedVersionId || '';
-    const canSubmit = Boolean(appId);
+    const canSubmit = Boolean(appId) && user?.role === 'student';
     const injector = `
 <style>
   .lpedia-submit-btn{position:fixed;right:14px;bottom:14px;z-index:2147483647;border:3px solid #5E4C40;background:#10B981;color:#fff;font-weight:900;border-radius:16px;padding:10px 14px;box-shadow:0 6px 0 rgba(0,0,0,.2);cursor:pointer}
@@ -392,22 +426,23 @@ const AppStudioModal: React.FC<{
     if (!open) return;
     const onMsg = (evt: MessageEvent) => {
       const srcWin = iframeRef.current?.contentWindow;
-      if (!srcWin || evt.source !== srcWin) return;
+      const fullWin = fullscreenIframeRef.current?.contentWindow;
+      if ((!srcWin && !fullWin) || (evt.source !== srcWin && evt.source !== fullWin)) return;
       const data: any = evt.data;
       if (!data || data.type !== 'LPEDIA_APP_SUBMIT') return;
       if (!selectedAppId) return;
-      submit();
+      openSubmitPicker();
     };
     window.addEventListener('message', onMsg);
     return () => window.removeEventListener('message', onMsg);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, selectedAppId, selectedVersionId, submitting]);
+  }, [open, selectedAppId, selectedVersionId, submitting, user?.role]);
 
   if (!open) return null;
 
   return (
     <div className="fixed inset-0 z-[80] bg-black/50 flex items-center justify-center p-4">
-      <div className="bg-white w-full max-w-7xl max-h-[92vh] overflow-hidden rounded-3xl border-4 border-brand-brown shadow-comic-xl flex flex-col">
+      <div className="bg-white w-[98vw] h-[96vh] max-w-none max-h-none overflow-hidden rounded-3xl border-4 border-brand-brown shadow-comic-xl flex flex-col">
         <div className="p-5 border-b-4 border-brand-brown bg-[#E8F5E9] flex items-center justify-between gap-4">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-full bg-white border-2 border-brand-brown flex items-center justify-center">
@@ -564,6 +599,154 @@ const AppStudioModal: React.FC<{
                 )}
               </div>
             )}
+
+            {selectedAppId && (
+              <div className="mt-4 pt-4 border-t-2 border-gray-100">
+                <div className="flex items-center gap-2 mb-2">
+                  <div className="font-black text-gray-700">版本控制</div>
+                  <div className="ml-auto text-[11px] text-gray-500 font-bold">
+                    {versions.length ? `${versions.length} 個版本` : ''}
+                  </div>
+                </div>
+
+                {draftNotice && (
+                  <div className="text-sm text-brand-brown font-black bg-[#FEF7EC] border-2 border-brand-brown rounded-2xl p-3 mb-2">
+                    發現草稿（{new Date(draftNotice.savedAt).toLocaleString()}）
+	                    <div className="mt-2 flex gap-2">
+	                      <Button
+	                        className="flex-1 bg-white hover:bg-gray-50 border-2 border-brand-brown text-brand-brown"
+	                        onClick={() => {
+	                          try {
+	                            const raw = localStorage.getItem(draftNotice.key);
+	                            if (raw) {
+                              const parsed = JSON.parse(raw);
+                              setPrompt(String(parsed?.prompt || ''));
+                              setGeneratedTitle(String(parsed?.generatedTitle || ''));
+                              setGeneratedHtml(String(parsed?.generatedHtml || ''));
+                              setPreviewStopped(false);
+                              setPreviewKey((k) => k + 1);
+                            }
+                          } catch {
+                            // ignore
+                          } finally {
+                            setDraftNotice(null);
+                          }
+                        }}
+	                      >
+	                        恢復
+	                      </Button>
+	                      <Button
+	                        className="flex-1 bg-white hover:bg-gray-50 border-2 border-brand-brown text-brand-brown"
+	                        onClick={() => setDraftNotice(null)}
+	                      >
+	                        忽略
+	                      </Button>
+	                    </div>
+                  </div>
+                )}
+
+                {versionError && <div className="text-sm text-red-600 font-bold mb-2">{versionError}</div>}
+
+                <label className="block text-xs font-black text-gray-600 mb-1">版本</label>
+                <select
+                  value={selectedVersionId || ''}
+                  onChange={async (e) => {
+                    const id = e.target.value;
+                    if (!selectedAppId || !id) return;
+                    setSelectedVersionId(id);
+                    try {
+                      setLoadingVersion(true);
+                      const v = await authService.getAppStudioVersion(selectedAppId, id);
+                      setGeneratedHtml(String(v.version?.indexHtml || ''));
+                      setGeneratedTitle(String(v.version?.title || ''));
+                      setPreviewStopped(false);
+                      setPreviewKey((k) => k + 1);
+                    } catch (err) {
+                      setVersionError(err instanceof Error ? err.message : '載入失敗');
+                    } finally {
+                      setLoadingVersion(false);
+                    }
+                  }}
+                  className="w-full px-3 py-2 border-2 border-gray-300 rounded-xl bg-white font-bold"
+                  disabled={!selectedAppId || loadingVersion}
+                >
+                  <option value="">（未選擇）</option>
+                  {versions.map((v) => (
+                    <option key={String(v.id)} value={String(v.id)}>
+                      {String(v.title || '版本')} • {v.createdAt ? new Date(v.createdAt).toLocaleString() : ''}
+                    </option>
+                  ))}
+                </select>
+
+                {loadingVersion && (
+                  <div className="mt-2 text-sm text-gray-500 font-bold flex items-center gap-2">
+                    <Loader2 className="w-4 h-4 animate-spin" /> 載入版本中...
+                  </div>
+                )}
+
+                <div className="mt-2">
+                  <Button
+                    fullWidth
+                    className="bg-white hover:bg-gray-50 border-2 border-brand-brown text-brand-brown"
+                    onClick={() => setDiffOpen(true)}
+                    disabled={!selectedAppId || !selectedVersionId}
+                  >
+                    版本差異
+                  </Button>
+                </div>
+
+                {tab === 'my' && canEditSelected && selectedAppId && (
+                  <div className="mt-2">
+                    <label className="block text-xs font-black text-gray-600 mb-1">放入資料夾</label>
+                    <select
+                      value={String(selectedApp?.folderId || 'unfiled')}
+                      onChange={(e) => moveToFolder(e.target.value)}
+                      className="w-full px-3 py-2 border-2 border-gray-300 rounded-xl bg-white font-bold"
+                    >
+                      <option value="unfiled">未分類</option>
+                      {folders.map((f) => (
+                        <option key={String(f.id)} value={String(f.id)}>{String(f.name || '資料夾')}</option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+
+                {canEditSelected && selectedAppId && selectedVersionId && (
+                  <div className="mt-2">
+                    <Button
+                      fullWidth
+                      className="bg-white hover:bg-gray-50 border-2 border-brand-brown text-brand-brown"
+                      onClick={async () => {
+                        if (!selectedAppId || !selectedVersionId) return;
+                        const v = versions.find((x) => String(x.id) === String(selectedVersionId));
+                        if (!v?.indexHtml) {
+                          try {
+                            const resp = await authService.getAppStudioVersion(selectedAppId, selectedVersionId);
+                            v.indexHtml = resp.version?.indexHtml;
+                          } catch {
+                            // ignore
+                          }
+                        }
+                        if (!confirm('回退會建立一個新版本並設為最新版本，確定？')) return;
+                        try {
+                          await authService.createAppStudioVersion(selectedAppId, {
+                            title: `${String(v?.title || selectedApp?.title || '')}（回退）`,
+                            prompt: 'rollback',
+                            indexHtml: String(v?.indexHtml || generatedHtml || '')
+                          });
+                          await loadAppVersions(selectedAppId);
+                          await loadLists();
+                        } catch (e) {
+                          alert(e instanceof Error ? e.message : '回退失敗');
+                        }
+                      }}
+                    >
+                      回退到此版本
+                    </Button>
+                  </div>
+                )}
+              </div>
+            )}
           </aside>
 
           <div className="flex-1 min-h-0 flex flex-col">
@@ -630,14 +813,16 @@ const AppStudioModal: React.FC<{
                       {selectedApp.visibility === 'public' ? '設為私人' : '設為公開'}
                     </Button>
                   )}
-                  <Button
-                    className="bg-emerald-500 hover:bg-emerald-600 text-white"
-                    onClick={submit}
-                    disabled={submitting || !selectedAppId}
-                  >
-                    <Send className={`w-4 h-4 mr-2 ${submitting ? 'animate-pulse' : ''}`} />
-                    提交
-                  </Button>
+                  {user?.role === 'student' && (
+                    <Button
+                      className="bg-emerald-500 hover:bg-emerald-600 text-white"
+                      onClick={openSubmitPicker}
+                      disabled={submitting || !selectedAppId || loadingTeachers}
+                    >
+                      <Send className={`w-4 h-4 mr-2 ${submitting ? 'animate-pulse' : ''}`} />
+                      提交
+                    </Button>
+                  )}
                   {isTeacher && canEditSelected && (
                     <Button
                       className="bg-white hover:bg-gray-50 border-2 border-brand-brown text-brand-brown"
@@ -658,179 +843,51 @@ const AppStudioModal: React.FC<{
                       查看提交
                     </Button>
                   )}
+                  {isTeacher && canEditSelected && (
+                    <Button
+                      className="bg-white hover:bg-gray-50 border-2 border-red-300 text-red-700"
+                      onClick={async () => {
+                        if (!selectedAppId) return;
+                        if (!confirm('確定要刪除這個作品？（版本與提交記錄會一併刪除）')) return;
+                        try {
+                          await authService.deleteAppStudioApp(selectedAppId);
+                          setSelectedAppId(null);
+                          setVersions([]);
+                          setSelectedVersionId(null);
+                          setGeneratedHtml('');
+                          setGeneratedTitle('');
+                          setPrompt('');
+                          setSubmittedAt(null);
+                          await loadLists();
+                        } catch (e) {
+                          alert(e instanceof Error ? e.message : '刪除失敗');
+                        }
+                      }}
+                    >
+                      <Trash2 className="w-4 h-4 mr-2" />
+                      刪除作品
+                    </Button>
+                  )}
                 </>
               )}
             </div>
 
-            <div className="flex-1 min-h-0 grid grid-cols-1 lg:grid-cols-2 gap-4 p-4">
-              <div className="min-h-0 flex flex-col bg-white border-2 border-gray-200 rounded-2xl overflow-hidden">
-                <div className="p-3 border-b-2 border-gray-200 bg-gray-50 flex items-center gap-2">
-                  <div className="font-black text-gray-700">需求描述</div>
-                  <div className="ml-auto flex items-center gap-2">
-                  <Button
-                    className="bg-blue-500 hover:bg-blue-600 text-white"
-                    onClick={generate}
-                    disabled={generating}
-                  >
-                      {generating ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : null}
-                      生成
-                    </Button>
-                    <Button
-                      className="bg-white hover:bg-gray-50 border-2 border-brand-brown text-brand-brown"
-                      onClick={saveAsVersion}
-                      disabled={!generatedHtml.trim()}
-                    >
-                      <Save className="w-4 h-4 mr-2" />
-                      {canEditSelected ? '儲存版本' : 'Fork 並儲存'}
-                    </Button>
-                    <Button
-                      className="bg-white hover:bg-gray-50 border-2 border-brand-brown text-brand-brown"
-                      onClick={() => setDiffOpen(true)}
-                      disabled={!selectedAppId || !selectedVersionId}
-                    >
-                      版本差異
-                    </Button>
-                  </div>
-                </div>
-                <div className="p-3 flex flex-col gap-2 min-h-0">
-                  <textarea
-                    value={prompt}
-                    onChange={(e) => setPrompt(e.target.value)}
-                    placeholder="例如：做一個可以輸入英文單字、按下開始後每 5 秒顯示一個提示的練習小工具..."
-                    className="w-full h-36 resize-none px-3 py-2 border-2 border-gray-300 rounded-xl font-bold"
-                  />
-                  {generateError && <div className="text-sm text-red-600 font-bold">{generateError}</div>}
-                  {versionError && <div className="text-sm text-red-600 font-bold">{versionError}</div>}
-                  {submittedAt && <div className="text-sm text-emerald-700 font-black">已提交：{new Date(submittedAt).toLocaleString()}</div>}
-                  {draftNotice && (
-                    <div className="text-sm text-brand-brown font-black bg-[#FEF7EC] border-2 border-brand-brown rounded-2xl p-3">
-                      發現草稿（{new Date(draftNotice.savedAt).toLocaleString()}）
-                      <div className="mt-2 flex gap-2">
-                        <Button
-                          className="bg-white hover:bg-gray-50 border-2 border-brand-brown text-brand-brown"
-                          onClick={() => {
-                            try {
-                              const raw = localStorage.getItem(draftNotice.key);
-                              if (raw) {
-                                const parsed = JSON.parse(raw);
-                                setPrompt(String(parsed?.prompt || ''));
-                                setGeneratedTitle(String(parsed?.generatedTitle || ''));
-                                setGeneratedHtml(String(parsed?.generatedHtml || ''));
-                                setPreviewStopped(false);
-                                setPreviewKey((k) => k + 1);
-                              }
-                            } catch {
-                              // ignore
-                            } finally {
-                              setDraftNotice(null);
-                            }
-                          }}
-                        >
-                          恢復
-                        </Button>
-                        <Button
-                          className="bg-white hover:bg-gray-50 border-2 border-brand-brown text-brand-brown"
-                          onClick={() => setDraftNotice(null)}
-                        >
-                          忽略
-                        </Button>
-                      </div>
-                    </div>
-                  )}
-
-                  <div className="mt-2 flex-1 min-h-0">
-                    <label className="block text-xs font-black text-gray-600 mb-1">版本</label>
-                    <select
-                      value={selectedVersionId || ''}
-                      onChange={async (e) => {
-                        const id = e.target.value;
-                        if (!selectedAppId || !id) return;
-                        setSelectedVersionId(id);
-                        try {
-                          setLoadingVersion(true);
-                          const v = await authService.getAppStudioVersion(selectedAppId, id);
-                          setGeneratedHtml(String(v.version?.indexHtml || ''));
-                          setGeneratedTitle(String(v.version?.title || ''));
-                          setPreviewKey((k) => k + 1);
-                        } catch (err) {
-                          setVersionError(err instanceof Error ? err.message : '載入失敗');
-                        } finally {
-                          setLoadingVersion(false);
-                        }
-                      }}
-                      className="w-full px-3 py-2 border-2 border-gray-300 rounded-xl bg-white font-bold"
-                      disabled={!selectedAppId || loadingVersion}
-                    >
-                      <option value="">（未選擇）</option>
-                      {versions.map((v) => (
-                        <option key={String(v.id)} value={String(v.id)}>
-                          {String(v.title || '版本')} • {v.createdAt ? new Date(v.createdAt).toLocaleString() : ''}
-                        </option>
-                      ))}
-                    </select>
-                    {tab === 'my' && canEditSelected && selectedAppId && (
-                      <div className="mt-2">
-                        <label className="block text-xs font-black text-gray-600 mb-1">放入資料夾</label>
-                        <select
-                          value={String(selectedApp?.folderId || 'unfiled')}
-                          onChange={(e) => moveToFolder(e.target.value)}
-                          className="w-full px-3 py-2 border-2 border-gray-300 rounded-xl bg-white font-bold"
-                        >
-                          <option value="unfiled">未分類</option>
-                          {folders.map((f) => (
-                            <option key={String(f.id)} value={String(f.id)}>{String(f.name || '資料夾')}</option>
-                          ))}
-                        </select>
-                      </div>
-                    )}
-                    {loadingVersion && (
-                      <div className="mt-2 text-sm text-gray-500 font-bold flex items-center gap-2">
-                        <Loader2 className="w-4 h-4 animate-spin" /> 載入版本中...
-                      </div>
-                    )}
-                    {canEditSelected && selectedAppId && selectedVersionId && (
-                      <div className="mt-2">
-                        <Button
-                          fullWidth
-                          className="bg-white hover:bg-gray-50 border-2 border-brand-brown text-brand-brown"
-                          onClick={async () => {
-                            if (!selectedAppId || !selectedVersionId) return;
-                            const v = versions.find((x) => String(x.id) === String(selectedVersionId));
-                            if (!v?.indexHtml) {
-                              try {
-                                const resp = await authService.getAppStudioVersion(selectedAppId, selectedVersionId);
-                                v.indexHtml = resp.version?.indexHtml;
-                              } catch {
-                                // ignore
-                              }
-                            }
-                            if (!confirm('回退會建立一個新版本並設為最新版本，確定？')) return;
-                            try {
-                              await authService.createAppStudioVersion(selectedAppId, {
-                                title: `${String(v?.title || selectedApp.title)}（回退）`,
-                                prompt: 'rollback',
-                                indexHtml: String(v?.indexHtml || generatedHtml || '')
-                              });
-                              await loadAppVersions(selectedAppId);
-                              await loadLists();
-                            } catch (e) {
-                              alert(e instanceof Error ? e.message : '回退失敗');
-                            }
-                          }}
-                        >
-                          回退到此版本
-                        </Button>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              </div>
-
-              <div className="min-h-0 flex flex-col bg-white border-2 border-gray-200 rounded-2xl overflow-hidden">
+            <div className="flex-1 min-h-0 flex flex-col gap-4 p-4">
+              <div className="flex-1 min-h-0 flex flex-col bg-white border-2 border-gray-200 rounded-2xl overflow-hidden">
                 <div className="p-3 border-b-2 border-gray-200 bg-gray-50 flex items-center gap-2">
                   <div className="font-black text-gray-700">預覽</div>
-                  <div className="ml-auto text-xs text-gray-500 font-bold">
-                    iframe sandbox
+                  <div className="ml-auto flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setPreviewFullscreen(true)}
+                      disabled={!generatedHtml.trim()}
+                      className={`w-9 h-9 rounded-full bg-white border-2 flex items-center justify-center ${generatedHtml.trim() ? 'border-brand-brown hover:bg-gray-100' : 'border-gray-200 text-gray-400 cursor-not-allowed'}`}
+                      aria-label="全螢幕"
+                      title="全螢幕"
+                    >
+                      <Maximize2 className="w-4 h-4" />
+                    </button>
+                    <div className="text-xs text-gray-500 font-bold hidden sm:block">iframe sandbox</div>
                   </div>
                 </div>
                 <div className="flex-1 min-h-0 bg-black/5">
@@ -850,6 +907,45 @@ const AppStudioModal: React.FC<{
                   ) : (
                     <div className="h-full flex items-center justify-center text-gray-500 font-bold">
                       生成後會在這裡預覽
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <div className="h-[280px] min-h-[240px] max-h-[360px] flex flex-col bg-white border-2 border-gray-200 rounded-2xl overflow-hidden">
+                <div className="p-3 border-b-2 border-gray-200 bg-gray-50 flex items-center gap-2">
+                  <div className="font-black text-gray-700">需求描述</div>
+                  <div className="ml-auto flex items-center gap-2">
+                    <Button
+                      className="bg-blue-500 hover:bg-blue-600 text-white"
+                      onClick={generate}
+                      disabled={generating}
+                    >
+                      {generating ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : null}
+                      生成
+                    </Button>
+                    <Button
+                      className="bg-white hover:bg-gray-50 border-2 border-brand-brown text-brand-brown"
+                      onClick={saveAsVersion}
+                      disabled={!generatedHtml.trim()}
+                    >
+                      <Save className="w-4 h-4 mr-2" />
+                      {canEditSelected ? '儲存版本' : 'Fork 並儲存'}
+                    </Button>
+                  </div>
+                </div>
+                <div className="p-3 flex-1 min-h-0 flex flex-col gap-2 overflow-y-auto">
+                  <textarea
+                    value={prompt}
+                    onChange={(e) => setPrompt(e.target.value)}
+                    placeholder="例如：做一個可以輸入英文單字、按下開始後每 5 秒顯示一個提示的練習小工具..."
+                    className="w-full flex-1 min-h-[120px] resize-none px-3 py-2 border-2 border-gray-300 rounded-xl font-bold"
+                  />
+                  {generateError && <div className="text-sm text-red-600 font-bold">{generateError}</div>}
+                  {submittedAt && (
+                    <div className="text-sm text-emerald-700 font-black">
+                      {submitTeacherName ? `已提交給 ${submitTeacherName}：` : '已提交：'}
+                      {new Date(submittedAt).toLocaleString()}
                     </div>
                   )}
                 </div>
@@ -1011,6 +1107,71 @@ const AppStudioModal: React.FC<{
         </div>
       )}
 
+      {showSubmitPicker && user?.role === 'student' && (
+        <div className="fixed inset-0 z-[95] bg-black/50 flex items-center justify-center p-4">
+          <div className="bg-white w-full max-w-lg rounded-3xl border-4 border-brand-brown shadow-comic-xl overflow-hidden">
+            <div className="p-4 border-b-4 border-brand-brown bg-[#E8F5E9] flex items-center gap-2">
+              <div className="text-xl font-black text-brand-brown">選擇提交老師</div>
+              <button
+                type="button"
+                onClick={() => setShowSubmitPicker(false)}
+                className="ml-auto w-9 h-9 rounded-full bg-white border-2 border-brand-brown hover:bg-gray-100 flex items-center justify-center"
+                aria-label="關閉"
+              >
+                <X className="w-5 h-5 text-brand-brown" />
+              </button>
+            </div>
+            <div className="p-4">
+              <label className="block text-xs font-black text-gray-600 mb-1">提交給</label>
+              <select
+                value={submitTeacherId}
+                onChange={(e) => {
+                  const id = e.target.value;
+                  setSubmitTeacherId(id);
+                  const t = teachers.find((x) => String(x?.id) === String(id));
+                  setSubmitTeacherName(String(t?.profile?.name || t?.username || ''));
+                }}
+                className="w-full px-3 py-2 border-2 border-gray-300 rounded-xl bg-white font-bold"
+              >
+                <option value="">請選擇老師</option>
+                {teachers.map((t) => (
+                  <option key={String(t.id)} value={String(t.id)}>
+                    {String(t.profile?.name || t.username || '')}
+                  </option>
+                ))}
+              </select>
+              <div className="mt-4 flex gap-2">
+                <Button
+                  fullWidth
+                  className="bg-white hover:bg-gray-50 border-2 border-brand-brown text-brand-brown"
+                  onClick={() => setShowSubmitPicker(false)}
+                >
+                  取消
+                </Button>
+                <Button
+                  fullWidth
+                  className="bg-emerald-500 hover:bg-emerald-600 text-white"
+                  onClick={async () => {
+                    if (!submitTeacherId) {
+                      alert('請先選擇老師');
+                      return;
+                    }
+                    setShowSubmitPicker(false);
+                    await submit();
+                  }}
+                  disabled={submitting}
+                >
+                  確認提交
+                </Button>
+              </div>
+              <div className="mt-3 text-xs text-gray-500 font-bold">
+                提示：提交後老師會看到你的提交記錄；你也可以先 fork 再修改。
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {diffOpen && selectedAppId && selectedVersionId && (
         <DiffModal
           onClose={() => setDiffOpen(false)}
@@ -1018,6 +1179,44 @@ const AppStudioModal: React.FC<{
           selectedVersionId={selectedVersionId}
           appId={selectedAppId}
         />
+      )}
+
+      {previewFullscreen && (
+        <div className="fixed inset-0 z-[94] bg-black/70 flex items-center justify-center p-4">
+          <div className="bg-white w-[98vw] h-[96vh] max-w-none max-h-none overflow-hidden rounded-3xl border-4 border-brand-brown shadow-comic-xl flex flex-col">
+            <div className="p-4 border-b-4 border-brand-brown bg-[#D2EFFF] flex items-center gap-2">
+              <div className="text-xl font-black text-brand-brown">預覽（全螢幕）</div>
+              <button
+                type="button"
+                onClick={() => setPreviewFullscreen(false)}
+                className="ml-auto w-9 h-9 rounded-full bg-white border-2 border-brand-brown hover:bg-gray-100 flex items-center justify-center"
+                aria-label="關閉"
+              >
+                <X className="w-5 h-5 text-brand-brown" />
+              </button>
+            </div>
+            <div className="flex-1 min-h-0 bg-black/5">
+              {previewStopped ? (
+                <div className="h-full flex items-center justify-center text-gray-500 font-bold">
+                  已停止（按「重新執行」再次載入）
+                </div>
+              ) : generatedHtml.trim() ? (
+                <iframe
+                  key={`full-${previewKey}`}
+                  ref={fullscreenIframeRef}
+                  title="app-preview-fullscreen"
+                  sandbox="allow-scripts"
+                  className="w-full h-full bg-white"
+                  srcDoc={buildPreviewHtml(generatedHtml)}
+                />
+              ) : (
+                <div className="h-full flex items-center justify-center text-gray-500 font-bold">
+                  生成後會在這裡預覽
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

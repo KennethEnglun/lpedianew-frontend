@@ -1077,7 +1077,7 @@ class AuthService {
     return this.handleResponse(response);
   }
 
-  async submitAppStudio(appId: string, payload?: { versionId?: string }): Promise<{ submission: any }> {
+  async submitAppStudio(appId: string, payload?: { versionId?: string; teacherId?: string }): Promise<{ submission: any }> {
     const response = await fetch(`${this.API_BASE}/app-studio/apps/${appId}/submit`, {
       method: 'POST',
       headers: this.getAuthHeaders(),
@@ -1128,6 +1128,21 @@ class AuthService {
 
   async listAppStudioForks(appId: string): Promise<{ forks: any[] }> {
     const response = await fetch(`${this.API_BASE}/app-studio/apps/${appId}/forks`, {
+      headers: this.getAuthHeaders()
+    });
+    return this.handleResponse(response);
+  }
+
+  async listTeachers(): Promise<{ users: any[] }> {
+    const response = await fetch(`${this.API_BASE}/users/teachers`, {
+      headers: this.getAuthHeaders()
+    });
+    return this.handleResponse(response);
+  }
+
+  async deleteAppStudioApp(appId: string): Promise<any> {
+    const response = await fetch(`${this.API_BASE}/app-studio/apps/${appId}`, {
+      method: 'DELETE',
       headers: this.getAuthHeaders()
     });
     return this.handleResponse(response);
