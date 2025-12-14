@@ -169,14 +169,20 @@ function generateRandomPath(): Array<{ x: number; y: number }> {
 }
 
 const COLORS = {
-  grassTop: '#CFEFCA',
-  grassLeft: '#9DD9A8',
-  grassRight: '#7DC48D',
-  pathTop: '#C8C9CF',
-  pathLeft: '#8B8E97',
-  pathRight: '#6E717A',
+  // Classroom / chalkboard theme
+  bgTop: '#0B1F1B',
+  bgBottom: '#071413',
+
+  buildTop: '#2C8C7A',
+  buildLeft: '#236F62',
+  buildRight: '#1C5C52',
+
+  pathTop: '#B58E5A',
+  pathLeft: '#8E6F46',
+  pathRight: '#725639',
+
   border: '#5E4C40',
-  shadow: 'rgba(0,0,0,0.25)'
+  shadow: 'rgba(0,0,0,0.28)'
 };
 
 const PARTICLE_COLORS = ['#F8B5E0', '#B5D8F8', '#B5F8CE', '#F8E2B5', '#D2B5F8', '#A1D9AE'];
@@ -188,6 +194,90 @@ function shuffleArray<T>(items: T[]): T[] {
     [arr[i], arr[j]] = [arr[j], arr[i]];
   }
   return arr;
+}
+
+function hash01(a: number, b: number, c = 0) {
+  // deterministic 0..1 pseudo random
+  const n = Math.sin(a * 127.1 + b * 311.7 + c * 74.7) * 43758.5453;
+  return n - Math.floor(n);
+}
+
+function clamp01(x: number) {
+  return Math.max(0, Math.min(1, x));
+}
+
+function mixColor(hexA: string, hexB: string, t: number) {
+  const a = hexA.replace('#', '');
+  const b = hexB.replace('#', '');
+  const ar = parseInt(a.slice(0, 2), 16);
+  const ag = parseInt(a.slice(2, 4), 16);
+  const ab = parseInt(a.slice(4, 6), 16);
+  const br = parseInt(b.slice(0, 2), 16);
+  const bg = parseInt(b.slice(2, 4), 16);
+  const bb = parseInt(b.slice(4, 6), 16);
+  const rr = Math.round(ar + (br - ar) * t);
+  const rg = Math.round(ag + (bg - ag) * t);
+  const rb = Math.round(ab + (bb - ab) * t);
+  return `rgb(${rr},${rg},${rb})`;
+}
+
+function drawCuteFace(ctx: CanvasRenderingContext2D, size: number, mood: 'smile' | 'grit' | 'wink') {
+  ctx.save();
+  ctx.fillStyle = 'rgba(30,20,16,0.9)';
+  ctx.beginPath();
+  ctx.arc(-size * 0.35, -size * 0.15, size * 0.17, 0, Math.PI * 2);
+  ctx.arc(size * 0.35, -size * 0.15, size * 0.17, 0, Math.PI * 2);
+  ctx.fill();
+
+  ctx.strokeStyle = 'rgba(30,20,16,0.85)';
+  ctx.lineWidth = Math.max(2, size * 0.08);
+  ctx.lineCap = 'round';
+  ctx.beginPath();
+  if (mood === 'wink') {
+    ctx.moveTo(size * 0.22, -size * 0.15);
+    ctx.lineTo(size * 0.46, -size * 0.15);
+  }
+  ctx.stroke();
+
+  ctx.beginPath();
+  if (mood === 'grit') {
+    ctx.moveTo(-size * 0.25, size * 0.25);
+    ctx.lineTo(size * 0.25, size * 0.25);
+  } else {
+    ctx.arc(0, size * 0.18, size * 0.28, 0, Math.PI);
+  }
+  ctx.stroke();
+  ctx.restore();
+}
+
+function drawBlob(ctx: CanvasRenderingContext2D, size: number, seed: number) {
+  const bumps = 7;
+  ctx.beginPath();
+  for (let i = 0; i <= bumps; i++) {
+    const t = (i / bumps) * Math.PI * 2;
+    const b = 0.88 + hash01(seed, i, 21) * 0.22;
+    const r = size * b;
+    const x = Math.cos(t) * r;
+    const y = Math.sin(t) * r * 0.95;
+    if (i === 0) ctx.moveTo(x, y);
+    else ctx.lineTo(x, y);
+  }
+  ctx.closePath();
+}
+
+function drawRoundRect(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number) {
+  const rr = Math.max(0, Math.min(r, Math.min(w, h) / 2));
+  ctx.beginPath();
+  ctx.moveTo(x + rr, y);
+  ctx.lineTo(x + w - rr, y);
+  ctx.quadraticCurveTo(x + w, y, x + w, y + rr);
+  ctx.lineTo(x + w, y + h - rr);
+  ctx.quadraticCurveTo(x + w, y + h, x + w - rr, y + h);
+  ctx.lineTo(x + rr, y + h);
+  ctx.quadraticCurveTo(x, y + h, x, y + h - rr);
+  ctx.lineTo(x, y + rr);
+  ctx.quadraticCurveTo(x, y, x + rr, y);
+  ctx.closePath();
 }
 
 export const TowerDefenseGame: React.FC<Props> = ({ questions, subject, difficulty, durationSeconds, livesLimit, onExit, onStart, onComplete }) => {
@@ -335,10 +425,11 @@ export const TowerDefenseGame: React.FC<Props> = ({ questions, subject, difficul
   const hasQuestions = normalizedQuestions.length > 0;
 
   const towerCatalog = useMemo(() => {
+    // Stationery towers (visual theme)
     return [
-      { type: 'soldier' as const, label: '劍士', cost: 25, range: 120, damage: 8, fireRate: 0.9, projectileSpeed: 320, maxHp: 36, color: '#60a5fa' },
-      { type: 'archer' as const, label: '弓箭手', cost: 35, range: 160, damage: 6, fireRate: 0.55, projectileSpeed: 420, maxHp: 30, color: '#34d399' },
-      { type: 'cannon' as const, label: '炮兵', cost: 50, range: 190, damage: 14, fireRate: 1.2, projectileSpeed: 260, maxHp: 44, color: '#f472b6' }
+      { type: 'soldier' as const, label: '鉛筆守衛', cost: 25, range: 125, damage: 8, fireRate: 0.9, projectileSpeed: 330, maxHp: 36, color: '#FBBF24' },
+      { type: 'archer' as const, label: '螢光筆塔', cost: 35, range: 170, damage: 6.2, fireRate: 0.55, projectileSpeed: 440, maxHp: 30, color: '#34D399' },
+      { type: 'cannon' as const, label: '橡皮砲台', cost: 50, range: 195, damage: 14.5, fireRate: 1.2, projectileSpeed: 270, maxHp: 44, color: '#F472B6' }
     ];
   }, []);
 
@@ -353,15 +444,15 @@ export const TowerDefenseGame: React.FC<Props> = ({ questions, subject, difficul
     };
   }
 
-  function drawTile(ctx: CanvasRenderingContext2D, centerX: number, centerY: number, isPath: boolean) {
+  function drawTile(ctx: CanvasRenderingContext2D, centerX: number, centerY: number, isPath: boolean, seed: number) {
     const top = { x: centerX, y: centerY - TILE_H / 2 };
     const right = { x: centerX + TILE_W / 2, y: centerY };
     const bottom = { x: centerX, y: centerY + TILE_H / 2 };
     const left = { x: centerX - TILE_W / 2, y: centerY };
 
-    const topColor = isPath ? COLORS.pathTop : COLORS.grassTop;
-    const leftColor = isPath ? COLORS.pathLeft : COLORS.grassLeft;
-    const rightColor = isPath ? COLORS.pathRight : COLORS.grassRight;
+    const topColor = isPath ? COLORS.pathTop : COLORS.buildTop;
+    const leftColor = isPath ? COLORS.pathLeft : COLORS.buildLeft;
+    const rightColor = isPath ? COLORS.pathRight : COLORS.buildRight;
 
     ctx.beginPath();
     ctx.moveTo(bottom.x, bottom.y);
@@ -392,6 +483,46 @@ export const TowerDefenseGame: React.FC<Props> = ({ questions, subject, difficul
     ctx.lineWidth = 2.5;
     ctx.strokeStyle = COLORS.border;
     ctx.stroke();
+
+    // subtle texture + highlight
+    const grain = hash01(seed, 1, 9);
+    ctx.save();
+    ctx.globalAlpha = 0.12;
+    ctx.strokeStyle = isPath ? mixColor(COLORS.pathTop, '#FFFFFF', 0.55) : mixColor(COLORS.buildTop, '#FFFFFF', 0.5);
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.moveTo(top.x + (grain - 0.5) * 10, top.y + 6);
+    ctx.lineTo(right.x - 8, right.y - 2);
+    ctx.stroke();
+    ctx.restore();
+
+    // dotted chalk specks (cheap)
+    ctx.save();
+    ctx.globalAlpha = isPath ? 0.08 : 0.06;
+    ctx.fillStyle = '#FFFFFF';
+    for (let i = 0; i < 3; i++) {
+      const rx = (hash01(seed, i, 3) - 0.5) * (TILE_W * 0.55);
+      const ry = (hash01(seed, i, 7) - 0.5) * (TILE_H * 0.45);
+      ctx.beginPath();
+      ctx.arc(centerX + rx, centerY + ry - 2, 1.2, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.restore();
+
+    // path markings
+    if (isPath) {
+      ctx.save();
+      ctx.globalAlpha = 0.25;
+      ctx.strokeStyle = '#2B1E12';
+      ctx.lineWidth = 2;
+      ctx.setLineDash([6, 6]);
+      ctx.beginPath();
+      ctx.moveTo((left.x + top.x) / 2, (left.y + top.y) / 2);
+      ctx.lineTo((right.x + bottom.x) / 2, (right.y + bottom.y) / 2);
+      ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.restore();
+    }
   }
 
   function spawnParticles(x: number, y: number, count: number, color?: string) {
@@ -818,7 +949,7 @@ export const TowerDefenseGame: React.FC<Props> = ({ questions, subject, difficul
     if (dist === 0) return null;
     const vx = (dx / dist) * tower.projectileSpeed;
     const vy = (dy / dist) * tower.projectileSpeed;
-    const color = tower.type === 'cannon' ? '#f472b6' : tower.type === 'archer' ? '#34d399' : '#60a5fa';
+    const color = tower.type === 'cannon' ? '#F472B6' : tower.type === 'archer' ? '#34D399' : '#FBBF24';
 
     tower.lastShotAt = now;
     return {
@@ -1039,6 +1170,18 @@ export const TowerDefenseGame: React.FC<Props> = ({ questions, subject, difficul
     const height = canvas.height / (window.devicePixelRatio || 1);
     ctx.clearRect(0, 0, width, height);
 
+    // Chalkboard background + vignette
+    const bg = ctx.createLinearGradient(0, 0, 0, height);
+    bg.addColorStop(0, COLORS.bgTop);
+    bg.addColorStop(1, COLORS.bgBottom);
+    ctx.fillStyle = bg;
+    ctx.fillRect(0, 0, width, height);
+    const vignette = ctx.createRadialGradient(width / 2, height / 2, Math.min(width, height) * 0.2, width / 2, height / 2, Math.max(width, height) * 0.7);
+    vignette.addColorStop(0, 'rgba(0,0,0,0)');
+    vignette.addColorStop(1, 'rgba(0,0,0,0.55)');
+    ctx.fillStyle = vignette;
+    ctx.fillRect(0, 0, width, height);
+
     const simNow = simTimeRef.current;
     const frozen = simNow < freezeUntilRef.current;
     const slow = simNow < slowUntilRef.current;
@@ -1057,7 +1200,8 @@ export const TowerDefenseGame: React.FC<Props> = ({ questions, subject, difficul
     const sortedCells = [...grid].sort((a, b) => (a.x + a.y) - (b.x + b.y));
     for (const cell of sortedCells) {
       const center = isoToScreen(cell.x, cell.y);
-      drawTile(ctx, center.x, center.y, cell.isPath);
+      const seed = Math.floor(hash01(cell.x, cell.y, 11) * 100000);
+      drawTile(ctx, center.x, center.y, cell.isPath, seed);
 
       if (cell.isBuildable) {
         ctx.beginPath();
@@ -1077,12 +1221,13 @@ export const TowerDefenseGame: React.FC<Props> = ({ questions, subject, difficul
       const pos = getEnemyPosition(enemy);
       const scale = 0.9 + Math.min(0.25, pos.y / height);
       const size = enemy.size * scale;
+      const seed = Math.floor(hash01(enemy.id, enemy.kind.length, 17) * 100000);
 
       ctx.save();
       ctx.translate(pos.x, pos.y - TILE_H / 2);
       ctx.fillStyle = COLORS.shadow;
       ctx.beginPath();
-      ctx.ellipse(0, size * 0.8, size * 0.9, size * 0.4, 0, 0, Math.PI * 2);
+      ctx.ellipse(0, size * 0.85, size * 0.95, size * 0.42, 0, 0, Math.PI * 2);
       ctx.fill();
 
       if (slow) {
@@ -1090,18 +1235,108 @@ export const TowerDefenseGame: React.FC<Props> = ({ questions, subject, difficul
         ctx.strokeStyle = 'rgba(181,216,248,0.75)';
         ctx.lineWidth = 3;
         ctx.beginPath();
-        ctx.arc(0, size * 0.9, size * 1.05, 0, Math.PI * 2);
+        ctx.arc(0, size * 0.95, size * 1.08, 0, Math.PI * 2);
         ctx.stroke();
         ctx.restore();
       }
 
-      ctx.fillStyle = enemy.color;
-      ctx.strokeStyle = COLORS.border;
+      // Enemy bodies (school/ink theme)
+      const bodyFill = (() => {
+        if (enemy.kind === 'runner') return '#FDE68A';
+        if (enemy.kind === 'tank') return '#C7D2FE';
+        if (enemy.kind === 'shooter') return '#FBCFE8';
+        return '#9CA3AF'; // slime = ink blob
+      })();
+      const bodyStroke = COLORS.border;
+      ctx.strokeStyle = bodyStroke;
       ctx.lineWidth = 3;
-      ctx.beginPath();
-      ctx.arc(0, 0, size, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.stroke();
+      ctx.fillStyle = bodyFill;
+
+      if (enemy.kind === 'slime') {
+        drawBlob(ctx, size, seed);
+        ctx.fill();
+        ctx.stroke();
+
+        // highlight
+        ctx.save();
+        ctx.globalAlpha = 0.22;
+        ctx.fillStyle = '#FFFFFF';
+        ctx.beginPath();
+        ctx.ellipse(-size * 0.25, -size * 0.25, size * 0.35, size * 0.22, -0.6, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+
+        drawCuteFace(ctx, size, 'smile');
+      } else if (enemy.kind === 'runner') {
+        // runner blob + shoes + speed stripes
+        drawBlob(ctx, size * 0.96, seed + 11);
+        ctx.fill();
+        ctx.stroke();
+        ctx.save();
+        ctx.globalAlpha = 0.25;
+        ctx.strokeStyle = '#FFFFFF';
+        ctx.lineWidth = 3;
+        for (let k = 0; k < 3; k++) {
+          ctx.beginPath();
+          ctx.moveTo(-size * 1.05, -size * 0.25 + k * 10);
+          ctx.lineTo(-size * 0.55, -size * 0.35 + k * 10);
+          ctx.stroke();
+        }
+        ctx.restore();
+
+        // shoes
+        ctx.fillStyle = '#5E4C40';
+        drawRoundRect(ctx, -size * 0.55, size * 0.55, size * 0.45, size * 0.22, 6);
+        ctx.fill();
+        drawRoundRect(ctx, size * 0.1, size * 0.55, size * 0.45, size * 0.22, 6);
+        ctx.fill();
+
+        drawCuteFace(ctx, size, 'wink');
+      } else if (enemy.kind === 'tank') {
+        // tank = chunky body + shield
+        drawRoundRect(ctx, -size * 1.05, -size * 0.9, size * 2.1, size * 1.9, 12);
+        ctx.fill();
+        ctx.stroke();
+
+        // shield
+        ctx.save();
+        ctx.fillStyle = '#FDE68A';
+        ctx.strokeStyle = bodyStroke;
+        ctx.lineWidth = 3;
+        drawRoundRect(ctx, -size * 0.55, -size * 0.15, size * 1.1, size * 0.85, 12);
+        ctx.fill();
+        ctx.stroke();
+        ctx.restore();
+
+        // helmet dot
+        ctx.fillStyle = bodyStroke;
+        ctx.beginPath();
+        ctx.arc(0, -size * 0.85, size * 0.18, 0, Math.PI * 2);
+        ctx.fill();
+
+        drawCuteFace(ctx, size, 'grit');
+      } else {
+        // shooter = blob + pencil cap
+        drawBlob(ctx, size * 0.98, seed + 5);
+        ctx.fill();
+        ctx.stroke();
+
+        // pencil tip / hat
+        ctx.save();
+        ctx.fillStyle = '#FBBF24';
+        ctx.strokeStyle = bodyStroke;
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.moveTo(0, -size * 1.15);
+        ctx.lineTo(size * 0.55, -size * 0.55);
+        ctx.lineTo(-size * 0.55, -size * 0.55);
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+        ctx.restore();
+
+        drawCuteFace(ctx, size, 'smile');
+      }
 
       if (frozen) {
         ctx.save();
@@ -1120,27 +1355,6 @@ export const TowerDefenseGame: React.FC<Props> = ({ questions, subject, difficul
           ctx.stroke();
         }
         ctx.restore();
-      }
-
-      ctx.fillStyle = '#5E4C40';
-      ctx.beginPath();
-      ctx.arc(-size * 0.35, -size * 0.15, size * 0.18, 0, Math.PI * 2);
-      ctx.arc(size * 0.35, -size * 0.15, size * 0.18, 0, Math.PI * 2);
-      ctx.fill();
-
-      if (enemy.kind === 'shooter') {
-        ctx.fillStyle = COLORS.border;
-        ctx.beginPath();
-        ctx.moveTo(0, -size * 1.05);
-        ctx.lineTo(size * 0.38, -size * 0.55);
-        ctx.lineTo(-size * 0.38, -size * 0.55);
-        ctx.closePath();
-        ctx.fill();
-      } else if (enemy.kind === 'tank') {
-        ctx.fillStyle = COLORS.border;
-        ctx.beginPath();
-        ctx.arc(0, size * 0.15, size * 0.18, 0, Math.PI * 2);
-        ctx.fill();
       }
 
       const hpRatio = Math.max(0, enemy.hp / enemy.maxHp);
@@ -1188,6 +1402,7 @@ export const TowerDefenseGame: React.FC<Props> = ({ questions, subject, difficul
     for (const tower of sortedTowers) {
       const pos = isoToScreen(tower.gridX, tower.gridY);
       const baseY = pos.y - TILE_H / 2 - 4;
+      const level = tower.level || 1;
 
       ctx.save();
       ctx.translate(pos.x, baseY);
@@ -1213,35 +1428,80 @@ export const TowerDefenseGame: React.FC<Props> = ({ questions, subject, difficul
       ctx.lineWidth = 4;
 
       if (tower.type === 'soldier') {
-        ctx.fillStyle = '#60a5fa';
+        // Pencil guard
+        ctx.save();
+        ctx.fillStyle = '#FBBF24';
         ctx.beginPath();
-        ctx.moveTo(0, -26);
-        ctx.lineTo(18, 14);
-        ctx.lineTo(-18, 14);
+        ctx.moveTo(0, -34);
+        ctx.lineTo(10, -16);
+        ctx.lineTo(-10, -16);
         ctx.closePath();
         ctx.fill();
         ctx.stroke();
+
+        ctx.fillStyle = '#FDE68A';
+        drawRoundRect(ctx, -10, -16, 20, 38, 8);
+        ctx.fill();
+        ctx.stroke();
+
+        // lead tip
+        ctx.fillStyle = '#2B1E12';
+        ctx.beginPath();
+        ctx.moveTo(0, -34);
+        ctx.lineTo(5, -24);
+        ctx.lineTo(-5, -24);
+        ctx.closePath();
+        ctx.fill();
+
+        // small badge indicates level
+        ctx.fillStyle = '#2B1E12';
+        ctx.font = 'bold 12px system-ui';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(String(level), 0, 10);
+        ctx.restore();
       } else if (tower.type === 'archer') {
-        ctx.fillStyle = '#34d399';
-        ctx.beginPath();
-        ctx.arc(0, -6, 18, 0, Math.PI * 2);
+        // Highlighter tower
+        ctx.save();
+        ctx.fillStyle = '#34D399';
+        drawRoundRect(ctx, -16, -26, 32, 46, 14);
         ctx.fill();
         ctx.stroke();
-        ctx.fillStyle = '#F8E2B5';
-        ctx.beginPath();
-        ctx.arc(0, -20, 8, 0, Math.PI * 2);
+        ctx.fillStyle = '#E5E7EB';
+        drawRoundRect(ctx, -14, -24, 28, 10, 8);
         ctx.fill();
         ctx.stroke();
+
+        ctx.fillStyle = '#1F2937';
+        ctx.font = 'bold 12px system-ui';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(String(level), 0, 6);
+        ctx.restore();
       } else {
-        ctx.fillStyle = '#f472b6';
-        ctx.beginPath();
-        ctx.rect(-18, -20, 36, 34);
+        // Eraser cannon
+        ctx.save();
+        ctx.fillStyle = '#F472B6';
+        drawRoundRect(ctx, -22, -22, 44, 30, 10);
         ctx.fill();
         ctx.stroke();
-        ctx.fillStyle = '#5E4C40';
-        ctx.beginPath();
-        ctx.rect(-6, -34, 12, 14);
+
+        ctx.fillStyle = '#FDE68A';
+        drawRoundRect(ctx, -22, 8, 44, 16, 10);
         ctx.fill();
+        ctx.stroke();
+
+        // barrel
+        ctx.fillStyle = '#2B1E12';
+        drawRoundRect(ctx, -8, -36, 16, 16, 6);
+        ctx.fill();
+
+        ctx.fillStyle = '#2B1E12';
+        ctx.font = 'bold 12px system-ui';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(String(level), 0, 0);
+        ctx.restore();
       }
 
       const towerHpRatio = Math.max(0, tower.hp / tower.maxHp);
