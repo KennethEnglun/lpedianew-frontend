@@ -1147,6 +1147,29 @@ class AuthService {
     });
     return this.handleResponse(response);
   }
+
+  async listAppStudioInbox(): Promise<{ submissions: any[] }> {
+    const response = await fetch(`${this.API_BASE}/app-studio/submissions/inbox`, {
+      headers: this.getAuthHeaders()
+    });
+    return this.handleResponse(response);
+  }
+
+  async listAppStudioMySubmissions(): Promise<{ submissions: any[] }> {
+    const response = await fetch(`${this.API_BASE}/app-studio/submissions/mine`, {
+      headers: this.getAuthHeaders()
+    });
+    return this.handleResponse(response);
+  }
+
+  async reviewAppStudioSubmission(submissionId: string, payload: { status?: 'pending' | 'reviewed'; rating?: number | null; comment?: string | null }): Promise<{ submission: any }> {
+    const response = await fetch(`${this.API_BASE}/app-studio/submissions/${submissionId}`, {
+      method: 'PATCH',
+      headers: this.getAuthHeaders(),
+      body: JSON.stringify(payload)
+    });
+    return this.handleResponse(response);
+  }
 }
 
 export const authService = new AuthService();
