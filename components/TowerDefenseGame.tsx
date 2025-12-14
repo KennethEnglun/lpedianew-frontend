@@ -848,6 +848,8 @@ function drawCuteCatHead(
     fur: string;
     furShadow: string;
     accent?: string;
+    hat?: string;
+    staff?: { color: string; gem: string; side: 'left' | 'right' };
     mood?: 'smile' | 'wink' | 'grit';
     levelText?: string;
   }
@@ -859,6 +861,17 @@ function drawCuteCatHead(
   const headR = 18;
 
   ctx.save();
+
+  // small magic aura (optional)
+  if (opts.accent) {
+    ctx.save();
+    ctx.globalAlpha = 0.35;
+    ctx.fillStyle = opts.accent;
+    ctx.beginPath();
+    ctx.ellipse(0, headR * 0.9, headR * 1.25, headR * 0.55, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+  }
 
   // head base
   ctx.fillStyle = opts.fur;
@@ -991,6 +1004,49 @@ function drawCuteCatHead(
     ctx.stroke();
   }
   ctx.restore();
+
+  // hat (mage)
+  if (opts.hat) {
+    ctx.save();
+    ctx.fillStyle = opts.hat;
+    ctx.strokeStyle = outline;
+    ctx.lineWidth = 5;
+    ctx.beginPath();
+    ctx.moveTo(0, -headR - 16);
+    ctx.lineTo(16, -headR + 2);
+    ctx.lineTo(-16, -headR + 2);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+
+    // brim
+    ctx.globalAlpha = 0.25;
+    ctx.fillStyle = '#000000';
+    drawRoundRect(ctx, -18, -headR + 4, 36, 9, 8);
+    ctx.fill();
+    ctx.restore();
+  }
+
+  // staff (mage) - behind head
+  if (opts.staff) {
+    const dir = opts.staff.side === 'left' ? -1 : 1;
+    ctx.save();
+    ctx.strokeStyle = opts.staff.color;
+    ctx.lineWidth = 5;
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    ctx.moveTo(dir * 22, 18);
+    ctx.lineTo(dir * 10, -10);
+    ctx.stroke();
+    ctx.fillStyle = opts.staff.gem;
+    ctx.strokeStyle = outline;
+    ctx.lineWidth = 4;
+    ctx.beginPath();
+    ctx.arc(dir * 10, -10, 7.2, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+    ctx.restore();
+  }
 
   // level badge
   if (opts.levelText) {
@@ -2140,27 +2196,31 @@ export const TowerDefenseGame: React.FC<Props> = ({ questions, subject, difficul
         });
         ctx.restore();
       } else if (tower.type === 'mage-ice') {
-        drawCuteCat(ctx, {
+        ctx.save();
+        ctx.translate(0, -10);
+        drawCuteCatHead(ctx, {
           fur: '#FDE68A',
           furShadow: '#F59E0B',
-          outfit: '#93C5FD',
           hat: '#1E3A8A',
           staff: { color: '#2B1E12', gem: '#93C5FD', side: 'left' },
           mood: 'wink',
           levelText: String(level),
           accent: '#93C5FD'
         });
+        ctx.restore();
       } else if (tower.type === 'mage-lightning') {
-        drawCuteCat(ctx, {
+        ctx.save();
+        ctx.translate(0, -10);
+        drawCuteCatHead(ctx, {
           fur: '#FDE68A',
           furShadow: '#F59E0B',
-          outfit: '#A78BFA',
           hat: '#4C1D95',
           staff: { color: '#2B1E12', gem: '#A78BFA', side: 'right' },
           mood: 'smile',
           levelText: String(level),
           accent: '#A78BFA'
         });
+        ctx.restore();
       } else if (tower.type === 'archer') {
         // Highlighter tower
         ctx.save();
