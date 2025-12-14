@@ -201,6 +201,15 @@ function shuffleArray<T>(items: T[]): T[] {
   return arr;
 }
 
+function shuffleArrayWithRand<T>(items: T[], rand01: () => number): T[] {
+  const arr = [...items];
+  for (let i = arr.length - 1; i > 0; i--) {
+    const j = Math.floor(rand01() * (i + 1));
+    [arr[i], arr[j]] = [arr[j], arr[i]];
+  }
+  return arr;
+}
+
 function hash01(a: number, b: number, c = 0) {
   // deterministic 0..1 pseudo random
   const n = Math.sin(a * 127.1 + b * 311.7 + c * 74.7) * 43758.5453;
@@ -1075,6 +1084,30 @@ export const TowerDefenseGame: React.FC<Props> = ({ questions, subject, difficul
   const lastTimeRef = useRef<number>(0);
   const animationRef = useRef<number | null>(null);
 
+  // Per-run RNG so every game session has a different deployment/skill "director" plan.
+  const runRngStateRef = useRef<number>(0);
+  const rand01 = () => {
+    // xorshift32
+    let x = runRngStateRef.current | 0;
+    if (x === 0) x = (Date.now() | 0) ^ ((Math.random() * 0x7fffffff) | 0);
+    x ^= x << 13;
+    x ^= x >> 17;
+    x ^= x << 5;
+    runRngStateRef.current = x | 0;
+    return ((x >>> 0) / 4294967296);
+  };
+  const reseedRunRng = () => {
+    try {
+      const a = new Uint32Array(1);
+      window.crypto.getRandomValues(a);
+      runRngStateRef.current = (a[0] || 1) | 0;
+    } catch {
+      runRngStateRef.current = ((Date.now() ^ ((Math.random() * 0x7fffffff) | 0)) || 1) | 0;
+    }
+  };
+
+  const comboSkillPlanRef = useRef<Record<number, 'slow' | 'freeze' | 'frenzy'>>({});
+
   const [pathCells, setPathCells] = useState<Array<{ x: number; y: number }>>(() => generateRandomPath());
   const pathCellsRef = useRef(pathCells);
   useEffect(() => { pathCellsRef.current = pathCells; }, [pathCells]);
@@ -1376,6 +1409,12 @@ export const TowerDefenseGame: React.FC<Props> = ({ questions, subject, difficul
 
 	  function startGame() {
 	    if (gameOverRef.current || isRunningRef.current) return;
+	    reseedRunRng();
+	    // Randomize combo-skill order per run (3/5/8 combo thresholds stay, but skill order changes).
+	    const combos = [3, 5, 8];
+	    const skills = shuffleArrayWithRand(['slow', 'freeze', 'frenzy'] as const, rand01);
+	    comboSkillPlanRef.current = { [combos[0]]: skills[0], [combos[1]]: skills[1], [combos[2]]: skills[2] };
+
 	    gameOverRef.current = false;
 	    isRunningRef.current = true;
 	    completedOnceRef.current = false;
@@ -1497,7 +1536,7 @@ export const TowerDefenseGame: React.FC<Props> = ({ questions, subject, difficul
 	  const upgradeRandomTower = () => {
 	    const list = towersRef.current;
 	    if (list.length === 0) return false;
-	    const pick = list[Math.floor(Math.random() * list.length)];
+	    const pick = list[Math.floor(rand01() * list.length)];
 	    setTowers(prev => prev.map(t => {
 	      if (t.id !== pick.id) return t;
 	      const nextLevel = (t.level || 1) + 1;
@@ -1518,22 +1557,60 @@ export const TowerDefenseGame: React.FC<Props> = ({ questions, subject, difficul
 
 	  const pickTowerTypeForBattle = (): TowerType => {
 	    const list = enemiesRef.current;
-	    if (list.length === 0) return 'soldier';
+	    if (list.length === 0) return rand01() < 0.65 ? 'soldier' : 'archer';
+
 	    const counts = { runner: 0, tank: 0, shooter: 0, slime: 0 };
 	    list.forEach(e => { (counts as any)[e.kind] = ((counts as any)[e.kind] || 0) + 1; });
 	    const total = Math.max(1, list.length);
-	    if (list.length >= 14) return 'mage-lightning';
-	    if (counts.runner / total >= 0.32) return 'mage-ice';
-	    if (counts.tank / total >= 0.26) return 'cannon';
-	    if (list.length >= 9) return 'archer';
+
+	    // Weighted randomness (still "smart", but not always the same).
+	    const weights: Record<TowerType, number> = {
+	      soldier: 1.0,
+	      archer: 1.0,
+	      cannon: 1.0,
+	      'mage-ice': 1.0,
+	      'mage-lightning': 1.0
+	    };
+
+	    if (list.length >= 12) weights['mage-lightning'] += 2.2;
+	    if (list.length >= 9) weights.archer += 0.8;
+	    if (counts.runner / total >= 0.28) weights['mage-ice'] += 2.0;
+	    if (counts.tank / total >= 0.22) weights.cannon += 2.0;
+	    if (counts.shooter / total >= 0.18) weights.archer += 0.7;
+
+	    // Prefer variety: dampen types already heavily used or repeated recently.
+	    const towerCounts = towersRef.current.reduce<Record<string, number>>((acc, t) => {
+	      acc[t.type] = (acc[t.type] || 0) + 1;
+	      return acc;
+	    }, {});
+	    const recent = recentTowerTypesRef.current;
+	    for (const type of Object.keys(weights) as TowerType[]) {
+	      const c = towerCounts[type] || 0;
+	      weights[type] *= 1 / (1 + c * 0.4);
+	      if (recent.length > 0 && recent[recent.length - 1] === type) weights[type] *= 0.45;
+	      else if (recent.includes(type)) weights[type] *= 0.72;
+	      // tiny noise to break ties
+	      weights[type] *= 0.98 + rand01() * 0.08;
+	    }
+
+	    let sum = 0;
+	    for (const v of Object.values(weights)) sum += v;
+	    if (sum <= 0) return 'soldier';
+	    let r = rand01() * sum;
+	    for (const [k, v] of Object.entries(weights) as Array<[TowerType, number]>) {
+	      r -= v;
+	      if (r <= 0) return k;
+	    }
 	    return 'soldier';
 	  };
+
+	  const recentTowerTypesRef = useRef<TowerType[]>([]);
 
 	  const findBestBuildCell = (type: TowerType) => {
 	    const spec = towerCatalog.find(t => t.type === type);
 	    if (!spec) return null;
 	    const occupied = new Set(towersRef.current.map(t => `${t.gridX},${t.gridY}`));
-	    let best: { x: number; y: number; score: number } | null = null;
+	    const scored: Array<{ x: number; y: number; score: number }> = [];
 	    const path = pathCellsRef.current;
 	    const pathLen = Math.max(1, path.length);
 	    for (const cell of grid) {
@@ -1548,14 +1625,28 @@ export const TowerDefenseGame: React.FC<Props> = ({ questions, subject, difficul
 	        const d = Math.hypot(pPos.x - cPos.x, pPos.y - cPos.y);
 	        if (d <= spec.range) score += 1 + i / pathLen;
 	      }
-	      score += Math.random() * 0.05;
-	      if (!best || score > best.score) best = { x: cell.x, y: cell.y, score };
+	      score += rand01() * 0.12; // stronger randomness to avoid identical placements
+	      scored.push({ x: cell.x, y: cell.y, score });
 	    }
-	    return best ? { x: best.x, y: best.y } : null;
+	    if (scored.length === 0) return null;
+	    scored.sort((a, b) => b.score - a.score);
+	    const topK = Math.min(4, scored.length);
+	    const top = scored.slice(0, topK);
+	    // pick one of top cells with weighted randomness by score
+	    const minScore = top[topK - 1].score;
+	    const w = top.map((c) => Math.pow(Math.max(0.001, c.score - minScore + 0.15), 1.35));
+	    const wSum = w.reduce((a, b) => a + b, 0);
+	    let r = rand01() * wSum;
+	    for (let i = 0; i < top.length; i++) {
+	      r -= w[i];
+	      if (r <= 0) return { x: top[i].x, y: top[i].y };
+	    }
+	    return { x: top[0].x, y: top[0].y };
 	  };
 
 	  const autoDeployOnce = () => {
 	    const type = pickTowerTypeForBattle();
+	    recentTowerTypesRef.current = [...recentTowerTypesRef.current.slice(-2), type];
 	    const cell = findBestBuildCell(type);
 	    if (cell) {
 	      placeTowerAt(cell.x, cell.y, type);
@@ -1655,9 +1746,12 @@ export const TowerDefenseGame: React.FC<Props> = ({ questions, subject, difficul
 	      for (let i = 0; i < deployments; i++) autoDeployOnce();
 	    }
 
-	    if (isCorrect && nextCombo === 3) applySlow(2);
-	    if (isCorrect && nextCombo === 5) applyFreeze(2);
-	    if (isCorrect && nextCombo === 8) applyFrenzy(6);
+	    if (isCorrect) {
+	      const planned = comboSkillPlanRef.current[nextCombo];
+	      if (planned === 'slow') applySlow(2);
+	      if (planned === 'freeze') applyFreeze(2);
+	      if (planned === 'frenzy') applyFrenzy(6);
+	    }
 
 	    setAnswerResult({
 	      selectedIndex,
@@ -1674,7 +1768,7 @@ export const TowerDefenseGame: React.FC<Props> = ({ questions, subject, difficul
 	  }
 
   function pickEnemyKind(currentWave: number): EnemyKind {
-    const r = Math.random();
+    const r = rand01();
     if (currentWave >= 7 && r < 0.22) return 'shooter';
     if (currentWave >= 4 && r < 0.42) return 'tank';
     if (currentWave >= 2 && r < 0.68) return 'runner';
