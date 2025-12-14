@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Code2, Copy, Folder, FolderPlus, Globe, Loader2, Plus, Save, Send, Users, X } from 'lucide-react';
+import { Code2, Copy, Folder, FolderPlus, Globe, Loader2, Plus, Save, Send, StopCircle, Users, X } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import Button from './Button';
 import { authService } from '../services/authService';
@@ -11,7 +11,10 @@ type StudioApp = {
   title: string;
   visibility: 'private' | 'public';
   latestVersionId?: string | null;
+  folderId?: string | null;
   updatedAt?: string;
+  stats?: { forks?: number; submissions?: number; lastSubmissionAt?: number | null };
+  owner?: any;
 };
 
 const AppStudioModal: React.FC<{
@@ -31,6 +34,7 @@ const AppStudioModal: React.FC<{
   const [publicApps, setPublicApps] = useState<StudioApp[]>([]);
   const [loadingApps, setLoadingApps] = useState(false);
   const [appsError, setAppsError] = useState('');
+  const [publicSort, setPublicSort] = useState<'popular' | 'updated' | 'forks' | 'submits'>('popular');
 
   const [selectedAppId, setSelectedAppId] = useState<string | null>(null);
   const [versions, setVersions] = useState<any[]>([]);
@@ -45,6 +49,7 @@ const AppStudioModal: React.FC<{
   const [generateError, setGenerateError] = useState('');
 
   const [previewKey, setPreviewKey] = useState(0);
+  const [previewStopped, setPreviewStopped] = useState(false);
   const [submittedAt, setSubmittedAt] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [showSubmissions, setShowSubmissions] = useState(false);
@@ -53,6 +58,9 @@ const AppStudioModal: React.FC<{
   const [showForks, setShowForks] = useState(false);
   const [forks, setForks] = useState<any[]>([]);
   const [loadingForks, setLoadingForks] = useState(false);
+  const [diffOpen, setDiffOpen] = useState(false);
+  const [draftNotice, setDraftNotice] = useState<null | { key: string; savedAt: number }>(null);
+  const [thumbHtmlByAppId, setThumbHtmlByAppId] = useState<Record<string, string>>({});
 
   const iframeRef = useRef<HTMLIFrameElement | null>(null);
 
@@ -68,8 +76,8 @@ const AppStudioModal: React.FC<{
       setLoadingApps(true);
       setAppsError('');
       const [mine, pub, folderResp] = await Promise.all([
-        authService.listAppStudioApps({ scope: 'my' }),
-        authService.listAppStudioApps({ scope: 'public' })
+        authService.listAppStudioApps({ scope: 'my', includeStats: true, sort: 'updated' }),
+        authService.listAppStudioApps({ scope: 'public', includeStats: true, sort: publicSort })
         , authService.listAppStudioFolders()
       ]);
       setApps(Array.isArray(mine.apps) ? mine.apps : []);
@@ -109,6 +117,7 @@ const AppStudioModal: React.FC<{
     setTab('my');
     setSearch('');
     setFolderId('all');
+    setPublicSort('popular');
     setSelectedAppId(null);
     setVersions([]);
     setSelectedVersionId(null);
@@ -117,9 +126,19 @@ const AppStudioModal: React.FC<{
     setGeneratedHtml('');
     setGenerateError('');
     setSubmittedAt(null);
+    setPreviewStopped(false);
+    setDiffOpen(false);
+    setDraftNotice(null);
+    setThumbHtmlByAppId({});
     loadLists();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
+
+  useEffect(() => {
+    if (!open) return;
+    loadLists();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [publicSort]);
 
   const visibleApps = useMemo(() => {
     const pool = tab === 'public' ? publicApps : apps;
@@ -136,12 +155,81 @@ const AppStudioModal: React.FC<{
     });
   }, [apps, publicApps, search, tab]);
 
+  // Load a few thumbnails for the current list (lightweight: small number, sandboxed iframes)
+  useEffect(() => {
+    if (!open) return;
+    const pool = visibleApps.slice(0, 8);
+    let canceled = false;
+
+    const run = async () => {
+      for (const a of pool) {
+        const appId = String((a as any)?.id || '');
+        const versionId = String((a as any)?.latestVersionId || '');
+        if (!appId || !versionId) continue;
+        if (thumbHtmlByAppId[appId]) continue;
+        try {
+          const resp = await authService.getAppStudioVersion(appId, versionId);
+          const html = String(resp.version?.indexHtml || '');
+          if (!html.trim()) continue;
+          if (canceled) return;
+          setThumbHtmlByAppId((prev) => (prev[appId] ? prev : { ...prev, [appId]: html }));
+        } catch {
+          // ignore
+        }
+      }
+    };
+
+    run();
+    return () => { canceled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, tab, publicSort, folderId, search, visibleApps.length]);
+
+  const draftKey = useMemo(() => {
+    const uid = user?.id || 'anon';
+    const appId = selectedAppId || 'new';
+    return `lpedia_appstudio_draft_${uid}_${appId}`;
+  }, [selectedAppId, user?.id]);
+
+  // autosave draft
+  useEffect(() => {
+    if (!open) return;
+    const t = window.setTimeout(() => {
+      const payload = {
+        prompt,
+        generatedTitle,
+        generatedHtml,
+        updatedAt: Date.now()
+      };
+      try {
+        localStorage.setItem(draftKey, JSON.stringify(payload));
+      } catch {
+        // ignore
+      }
+    }, 900);
+    return () => window.clearTimeout(t);
+  }, [draftKey, generatedHtml, generatedTitle, open, prompt]);
+
+  const tryRestoreDraft = () => {
+    try {
+      const raw = localStorage.getItem(draftKey);
+      if (!raw) return;
+      const parsed = JSON.parse(raw);
+      const savedAt = Number(parsed?.updatedAt || 0);
+      if (!savedAt) return;
+      setDraftNotice({ key: draftKey, savedAt });
+    } catch {
+      // ignore
+    }
+  };
+
   const openApp = async (appId: string) => {
     setSelectedAppId(appId);
     setVersions([]);
     setSelectedVersionId(null);
     setSubmittedAt(null);
+    setPreviewStopped(false);
     await loadAppVersions(appId);
+    tryRestoreDraft();
   };
 
   const createNewApp = async () => {
@@ -167,6 +255,7 @@ const AppStudioModal: React.FC<{
       const resp = await authService.generateAppStudio({ prompt: p });
       setGeneratedTitle(String(resp.title || '小程式'));
       setGeneratedHtml(String(resp.indexHtml || ''));
+      setPreviewStopped(false);
       setPreviewKey((k) => k + 1);
     } catch (e) {
       setGenerateError(e instanceof Error ? e.message : '生成失敗');
@@ -175,26 +264,45 @@ const AppStudioModal: React.FC<{
     }
   };
 
+  const ensureEditableApp = async (): Promise<string | null> => {
+    if (selectedAppId && canEditSelected) return selectedAppId;
+    if (selectedAppId && !canEditSelected) {
+      const resp = await authService.forkAppStudioApp(selectedAppId, selectedVersionId ? { versionId: selectedVersionId } : undefined);
+      const app = resp.app;
+      if (app?.id) {
+        await loadLists();
+        setTab('my');
+        await openApp(String(app.id));
+        return String(app.id);
+      }
+      return null;
+    }
+    // no app yet
+    const resp = await authService.createAppStudioApp({ title: '新作品', visibility: 'private' });
+    const app = resp.app;
+    if (app?.id) {
+      await loadLists();
+      setTab('my');
+      await openApp(String(app.id));
+      return String(app.id);
+    }
+    return null;
+  };
+
   const saveAsVersion = async () => {
     if (!generatedHtml.trim()) return;
-    if (!selectedAppId) {
-      await createNewApp();
-      return;
-    }
-    if (!canEditSelected) {
-      await fork();
-      return;
-    }
+    const appId = await ensureEditableApp();
+    if (!appId) return;
     if (!generatedHtml.trim()) return;
     const title = String(generatedTitle || selectedApp?.title || '版本').trim();
-    const resp = await authService.createAppStudioVersion(selectedAppId, {
+    const resp = await authService.createAppStudioVersion(appId, {
       title,
       prompt: String(prompt || '').trim(),
       indexHtml: generatedHtml
     });
     const v = resp.version;
     await loadLists();
-    await loadAppVersions(selectedAppId);
+    await loadAppVersions(appId);
     if (v?.id) setSelectedVersionId(String(v.id));
   };
 
@@ -214,6 +322,13 @@ const AppStudioModal: React.FC<{
     if (!canEditSelected) return;
     const next = selectedApp.visibility === 'public' ? 'private' : 'public';
     await authService.updateAppStudioApp(selectedAppId, { visibility: next });
+    await loadLists();
+  };
+
+  const moveToFolder = async (nextFolderId: string) => {
+    if (!selectedAppId || !selectedApp) return;
+    if (!canEditSelected) return;
+    await authService.updateAppStudioApp(selectedAppId, { folderId: nextFolderId === 'unfiled' ? null : nextFolderId });
     await loadLists();
   };
 
@@ -240,6 +355,53 @@ const AppStudioModal: React.FC<{
       // ignore
     }
   };
+
+  const buildPreviewHtml = (html: string) => {
+    const appId = selectedAppId || '';
+    const versionId = selectedVersionId || '';
+    const canSubmit = Boolean(appId);
+    const injector = `
+<style>
+  .lpedia-submit-btn{position:fixed;right:14px;bottom:14px;z-index:2147483647;border:3px solid #5E4C40;background:#10B981;color:#fff;font-weight:900;border-radius:16px;padding:10px 14px;box-shadow:0 6px 0 rgba(0,0,0,.2);cursor:pointer}
+  .lpedia-submit-btn:active{transform:translateY(2px);box-shadow:0 3px 0 rgba(0,0,0,.2)}
+</style>
+<script>
+  (function(){
+    try{
+      if(!${canSubmit ? 'true' : 'false'}) return;
+      var btn=document.createElement('button');
+      btn.className='lpedia-submit-btn';
+      btn.type='button';
+      btn.textContent='提交';
+      btn.addEventListener('click',function(){
+        try{ parent.postMessage({type:'LPEDIA_APP_SUBMIT', appId:${JSON.stringify(appId)}, versionId:${JSON.stringify(versionId)}}, '*'); }catch(e){}
+      });
+      document.addEventListener('DOMContentLoaded',function(){ document.body.appendChild(btn); });
+      if(document.readyState==='interactive'||document.readyState==='complete'){ document.body.appendChild(btn); }
+    }catch(e){}
+  })();
+</script>`;
+    const raw = String(html || '');
+    if (raw.includes('lpedia-submit-btn')) return raw;
+    if (raw.includes('</body>')) return raw.replace('</body>', `${injector}</body>`);
+    return `${raw}${injector}`;
+  };
+
+  // in-app submit bridge
+  useEffect(() => {
+    if (!open) return;
+    const onMsg = (evt: MessageEvent) => {
+      const srcWin = iframeRef.current?.contentWindow;
+      if (!srcWin || evt.source !== srcWin) return;
+      const data: any = evt.data;
+      if (!data || data.type !== 'LPEDIA_APP_SUBMIT') return;
+      if (!selectedAppId) return;
+      submit();
+    };
+    window.addEventListener('message', onMsg);
+    return () => window.removeEventListener('message', onMsg);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, selectedAppId, selectedVersionId, submitting]);
 
   if (!open) return null;
 
@@ -319,6 +481,21 @@ const AppStudioModal: React.FC<{
                 </select>
               </div>
             )}
+            {tab === 'public' && (
+              <div className="mb-3">
+                <label className="block text-xs font-black text-gray-600 mb-1">排序</label>
+                <select
+                  value={publicSort}
+                  onChange={(e) => setPublicSort(e.target.value as any)}
+                  className="w-full px-3 py-2 border-2 border-gray-300 rounded-xl bg-white font-bold"
+                >
+                  <option value="popular">最熱門</option>
+                  <option value="updated">最新</option>
+                  <option value="forks">最多 Fork</option>
+                  <option value="submits">最多提交</option>
+                </select>
+              </div>
+            )}
 
             <div className="flex items-center gap-2 mb-3">
               <Button
@@ -347,10 +524,36 @@ const AppStudioModal: React.FC<{
                     onClick={() => openApp(a.id)}
                     className={`w-full text-left px-3 py-3 rounded-2xl border-2 font-black ${selectedAppId === a.id ? 'bg-[#FEF7EC] border-brand-brown' : 'bg-white border-gray-200 hover:border-brand-brown'}`}
                   >
+                    {tab === 'public' && (
+                      <div className="mb-2 bg-white border border-gray-200 rounded-xl overflow-hidden">
+                        <div className="h-20 overflow-hidden relative">
+                          {thumbHtmlByAppId[String(a.id)] ? (
+                            <div className="absolute inset-0 origin-top-left" style={{ transform: 'scale(0.25)' }}>
+                              <iframe
+                                title={`thumb-${a.id}`}
+                                sandbox="allow-scripts"
+                                className="w-[1200px] h-[600px] bg-white pointer-events-none"
+                                srcDoc={thumbHtmlByAppId[String(a.id)]}
+                              />
+                            </div>
+                          ) : (
+                            <div className="h-full flex items-center justify-center text-xs text-gray-500 font-bold">
+                              預覽載入中…
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    )}
                     <div className="flex items-center gap-2">
                       <span className="flex-1 text-brand-brown">{a.title || '作品'}</span>
                       {a.visibility === 'public' ? <Globe className="w-4 h-4 text-emerald-700" /> : <Folder className="w-4 h-4 text-gray-500" />}
                     </div>
+                    {tab === 'public' && a.owner?.profile?.name && (
+                      <div className="text-xs text-gray-500 font-bold mt-1">作者：{String(a.owner.profile.name)}</div>
+                    )}
+                    {a.stats && (
+                      <div className="text-xs text-gray-500 font-bold mt-1">Fork {Number(a.stats.forks || 0)} • 提交 {Number(a.stats.submissions || 0)}</div>
+                    )}
                     <div className="text-xs text-gray-500 font-bold mt-1">
                       {a.updatedAt ? new Date(a.updatedAt).toLocaleString() : ''}
                     </div>
@@ -375,6 +578,13 @@ const AppStudioModal: React.FC<{
                     onClick={() => setPreviewKey((k) => k + 1)}
                   >
                     重新執行
+                  </Button>
+                  <Button
+                    className="bg-white hover:bg-gray-50 border-2 border-brand-brown text-brand-brown"
+                    onClick={() => setPreviewStopped(true)}
+                  >
+                    <StopCircle className="w-4 h-4 mr-2" />
+                    停止
                   </Button>
                   <Button
                     className="bg-white hover:bg-gray-50 border-2 border-brand-brown text-brand-brown"
@@ -457,11 +667,11 @@ const AppStudioModal: React.FC<{
                 <div className="p-3 border-b-2 border-gray-200 bg-gray-50 flex items-center gap-2">
                   <div className="font-black text-gray-700">需求描述</div>
                   <div className="ml-auto flex items-center gap-2">
-                    <Button
-                      className="bg-blue-500 hover:bg-blue-600 text-white"
-                      onClick={generate}
-                      disabled={generating}
-                    >
+                  <Button
+                    className="bg-blue-500 hover:bg-blue-600 text-white"
+                    onClick={generate}
+                    disabled={generating}
+                  >
                       {generating ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : null}
                       生成
                     </Button>
@@ -472,6 +682,13 @@ const AppStudioModal: React.FC<{
                     >
                       <Save className="w-4 h-4 mr-2" />
                       {canEditSelected ? '儲存版本' : 'Fork 並儲存'}
+                    </Button>
+                    <Button
+                      className="bg-white hover:bg-gray-50 border-2 border-brand-brown text-brand-brown"
+                      onClick={() => setDiffOpen(true)}
+                      disabled={!selectedAppId || !selectedVersionId}
+                    >
+                      版本差異
                     </Button>
                   </div>
                 </div>
@@ -485,6 +702,41 @@ const AppStudioModal: React.FC<{
                   {generateError && <div className="text-sm text-red-600 font-bold">{generateError}</div>}
                   {versionError && <div className="text-sm text-red-600 font-bold">{versionError}</div>}
                   {submittedAt && <div className="text-sm text-emerald-700 font-black">已提交：{new Date(submittedAt).toLocaleString()}</div>}
+                  {draftNotice && (
+                    <div className="text-sm text-brand-brown font-black bg-[#FEF7EC] border-2 border-brand-brown rounded-2xl p-3">
+                      發現草稿（{new Date(draftNotice.savedAt).toLocaleString()}）
+                      <div className="mt-2 flex gap-2">
+                        <Button
+                          className="bg-white hover:bg-gray-50 border-2 border-brand-brown text-brand-brown"
+                          onClick={() => {
+                            try {
+                              const raw = localStorage.getItem(draftNotice.key);
+                              if (raw) {
+                                const parsed = JSON.parse(raw);
+                                setPrompt(String(parsed?.prompt || ''));
+                                setGeneratedTitle(String(parsed?.generatedTitle || ''));
+                                setGeneratedHtml(String(parsed?.generatedHtml || ''));
+                                setPreviewStopped(false);
+                                setPreviewKey((k) => k + 1);
+                              }
+                            } catch {
+                              // ignore
+                            } finally {
+                              setDraftNotice(null);
+                            }
+                          }}
+                        >
+                          恢復
+                        </Button>
+                        <Button
+                          className="bg-white hover:bg-gray-50 border-2 border-brand-brown text-brand-brown"
+                          onClick={() => setDraftNotice(null)}
+                        >
+                          忽略
+                        </Button>
+                      </div>
+                    </div>
+                  )}
 
                   <div className="mt-2 flex-1 min-h-0">
                     <label className="block text-xs font-black text-gray-600 mb-1">版本</label>
@@ -516,9 +768,58 @@ const AppStudioModal: React.FC<{
                         </option>
                       ))}
                     </select>
+                    {tab === 'my' && canEditSelected && selectedAppId && (
+                      <div className="mt-2">
+                        <label className="block text-xs font-black text-gray-600 mb-1">放入資料夾</label>
+                        <select
+                          value={String(selectedApp?.folderId || 'unfiled')}
+                          onChange={(e) => moveToFolder(e.target.value)}
+                          className="w-full px-3 py-2 border-2 border-gray-300 rounded-xl bg-white font-bold"
+                        >
+                          <option value="unfiled">未分類</option>
+                          {folders.map((f) => (
+                            <option key={String(f.id)} value={String(f.id)}>{String(f.name || '資料夾')}</option>
+                          ))}
+                        </select>
+                      </div>
+                    )}
                     {loadingVersion && (
                       <div className="mt-2 text-sm text-gray-500 font-bold flex items-center gap-2">
                         <Loader2 className="w-4 h-4 animate-spin" /> 載入版本中...
+                      </div>
+                    )}
+                    {canEditSelected && selectedAppId && selectedVersionId && (
+                      <div className="mt-2">
+                        <Button
+                          fullWidth
+                          className="bg-white hover:bg-gray-50 border-2 border-brand-brown text-brand-brown"
+                          onClick={async () => {
+                            if (!selectedAppId || !selectedVersionId) return;
+                            const v = versions.find((x) => String(x.id) === String(selectedVersionId));
+                            if (!v?.indexHtml) {
+                              try {
+                                const resp = await authService.getAppStudioVersion(selectedAppId, selectedVersionId);
+                                v.indexHtml = resp.version?.indexHtml;
+                              } catch {
+                                // ignore
+                              }
+                            }
+                            if (!confirm('回退會建立一個新版本並設為最新版本，確定？')) return;
+                            try {
+                              await authService.createAppStudioVersion(selectedAppId, {
+                                title: `${String(v?.title || selectedApp.title)}（回退）`,
+                                prompt: 'rollback',
+                                indexHtml: String(v?.indexHtml || generatedHtml || '')
+                              });
+                              await loadAppVersions(selectedAppId);
+                              await loadLists();
+                            } catch (e) {
+                              alert(e instanceof Error ? e.message : '回退失敗');
+                            }
+                          }}
+                        >
+                          回退到此版本
+                        </Button>
                       </div>
                     )}
                   </div>
@@ -533,14 +834,18 @@ const AppStudioModal: React.FC<{
                   </div>
                 </div>
                 <div className="flex-1 min-h-0 bg-black/5">
-                  {generatedHtml.trim() ? (
+                  {previewStopped ? (
+                    <div className="h-full flex items-center justify-center text-gray-500 font-bold">
+                      已停止（按「重新執行」再次載入）
+                    </div>
+                  ) : generatedHtml.trim() ? (
                     <iframe
                       key={previewKey}
                       ref={iframeRef}
                       title="app-preview"
                       sandbox="allow-scripts"
                       className="w-full h-full bg-white"
-                      srcDoc={generatedHtml}
+                      srcDoc={buildPreviewHtml(generatedHtml)}
                     />
                   ) : (
                     <div className="h-full flex items-center justify-center text-gray-500 font-bold">
@@ -705,8 +1010,96 @@ const AppStudioModal: React.FC<{
           </div>
         </div>
       )}
+
+      {diffOpen && selectedAppId && selectedVersionId && (
+        <DiffModal
+          onClose={() => setDiffOpen(false)}
+          versions={versions}
+          selectedVersionId={selectedVersionId}
+          appId={selectedAppId}
+        />
+      )}
     </div>
   );
 };
 
 export default AppStudioModal;
+
+const computeDiffSummary = (a: string, b: string) => {
+  const aLines = String(a || '').split('\n');
+  const bLines = String(b || '').split('\n');
+  const aSet = new Set(aLines);
+  const bSet = new Set(bLines);
+  let added = 0;
+  let removed = 0;
+  for (const line of bSet) if (!aSet.has(line)) added++;
+  for (const line of aSet) if (!bSet.has(line)) removed++;
+  return { aLines: aLines.length, bLines: bLines.length, added, removed };
+};
+
+const DiffModal: React.FC<{
+  onClose: () => void;
+  versions: any[];
+  selectedVersionId: string;
+  appId: string;
+}> = ({ onClose, versions, selectedVersionId, appId }) => {
+  const idx = versions.findIndex((v) => String(v.id) === String(selectedVersionId));
+  const cur = versions[idx] || null;
+  const prev = idx >= 0 ? (versions[idx + 1] || null) : null;
+  const [curHtml, setCurHtml] = useState<string>(String(cur?.indexHtml || ''));
+  const [prevHtml, setPrevHtml] = useState<string>(String(prev?.indexHtml || ''));
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    const run = async () => {
+      try {
+        setLoading(true);
+        if (cur && !curHtml) {
+          const resp = await authService.getAppStudioVersion(appId, String(cur.id));
+          setCurHtml(String(resp.version?.indexHtml || ''));
+        }
+        if (prev && !prevHtml) {
+          const resp = await authService.getAppStudioVersion(appId, String(prev.id));
+          setPrevHtml(String(resp.version?.indexHtml || ''));
+        }
+      } finally {
+        setLoading(false);
+      }
+    };
+    run();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [appId, selectedVersionId]);
+
+  const summary = useMemo(() => computeDiffSummary(prevHtml, curHtml), [curHtml, prevHtml]);
+
+  return (
+    <div className="fixed inset-0 z-[95] bg-black/50 flex items-center justify-center p-4">
+      <div className="bg-white w-full max-w-6xl max-h-[85vh] overflow-hidden rounded-3xl border-4 border-brand-brown shadow-comic-xl flex flex-col">
+        <div className="p-4 border-b-4 border-brand-brown bg-[#D2EFFF] flex items-center gap-2">
+          <div className="text-xl font-black text-brand-brown">版本差異</div>
+          <div className="ml-3 text-xs text-gray-600 font-bold">
+            {loading ? '載入中…' : `行數 ${summary.aLines} → ${summary.bLines} • 新增行(粗略) ${summary.added} • 刪除行(粗略) ${summary.removed}`}
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="ml-auto w-9 h-9 rounded-full bg-white border-2 border-brand-brown hover:bg-gray-100 flex items-center justify-center"
+            aria-label="關閉"
+          >
+            <X className="w-5 h-5 text-brand-brown" />
+          </button>
+        </div>
+        <div className="flex-1 min-h-0 grid grid-cols-1 lg:grid-cols-2 gap-3 p-4 overflow-y-auto">
+          <div className="bg-white border-2 border-gray-200 rounded-2xl overflow-hidden flex flex-col min-h-0">
+            <div className="p-3 border-b-2 border-gray-200 bg-gray-50 font-black text-gray-700">上一版本</div>
+            <pre className="flex-1 min-h-0 overflow-auto p-3 text-xs bg-white">{prevHtml || '（沒有上一版本）'}</pre>
+          </div>
+          <div className="bg-white border-2 border-gray-200 rounded-2xl overflow-hidden flex flex-col min-h-0">
+            <div className="p-3 border-b-2 border-gray-200 bg-gray-50 font-black text-gray-700">目前版本</div>
+            <pre className="flex-1 min-h-0 overflow-auto p-3 text-xs bg-white">{curHtml || ''}</pre>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};

@@ -1008,9 +1008,11 @@ class AuthService {
     return this.handleResponse(response);
   }
 
-  async listAppStudioApps(params?: { scope?: 'my' | 'public' | 'all' }): Promise<{ apps: any[] }> {
+  async listAppStudioApps(params?: { scope?: 'my' | 'public' | 'all'; sort?: 'updated' | 'popular' | 'forks' | 'submits'; includeStats?: boolean }): Promise<{ apps: any[] }> {
     const sp = new URLSearchParams();
     if (params?.scope) sp.append('scope', params.scope);
+    if (params?.sort) sp.append('sort', params.sort);
+    if (params?.includeStats) sp.append('includeStats', '1');
     const query = sp.toString() ? `?${sp.toString()}` : '';
     const response = await fetch(`${this.API_BASE}/app-studio/apps${query}`, {
       headers: this.getAuthHeaders()
