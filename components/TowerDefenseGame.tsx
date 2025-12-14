@@ -859,6 +859,9 @@ function drawCuteCatHead(
     accent?: string;
     hat?: string;
     staff?: { color: string; gem: string; side: 'left' | 'right' };
+    headband?: string;
+    goggles?: { frame: string; lens: string };
+    icon?: 'arrow' | 'bomb';
     mood?: 'smile' | 'wink' | 'grit';
     levelText?: string;
   }
@@ -926,6 +929,25 @@ function drawCuteCatHead(
   ear(-1);
   ear(1);
 
+  // headband (archer)
+  if (opts.headband) {
+    ctx.save();
+    ctx.strokeStyle = outline;
+    ctx.lineWidth = 5;
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    ctx.moveTo(-headR * 0.95, -headR * 0.2);
+    ctx.quadraticCurveTo(0, -headR * 0.7, headR * 0.95, -headR * 0.2);
+    ctx.stroke();
+    ctx.strokeStyle = opts.headband;
+    ctx.lineWidth = 4;
+    ctx.beginPath();
+    ctx.moveTo(-headR * 0.95, -headR * 0.2);
+    ctx.quadraticCurveTo(0, -headR * 0.7, headR * 0.95, -headR * 0.2);
+    ctx.stroke();
+    ctx.restore();
+  }
+
   // eyes
   const eye = (x: number, wink = false) => {
     ctx.save();
@@ -955,6 +977,47 @@ function drawCuteCatHead(
   } else {
     eye(-7.5, false);
     eye(7.5, false);
+  }
+
+  // goggles (bomber)
+  if (opts.goggles) {
+    ctx.save();
+    ctx.strokeStyle = outline;
+    ctx.lineWidth = 5;
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    ctx.moveTo(-headR * 1.05, -2);
+    ctx.lineTo(headR * 1.05, -2);
+    ctx.stroke();
+
+    ctx.strokeStyle = opts.goggles.frame;
+    ctx.lineWidth = 4;
+    ctx.beginPath();
+    ctx.moveTo(-headR * 1.05, -2);
+    ctx.lineTo(headR * 1.05, -2);
+    ctx.stroke();
+
+    ctx.fillStyle = opts.goggles.lens;
+    ctx.strokeStyle = outline;
+    ctx.lineWidth = 4;
+    // left lens
+    ctx.beginPath();
+    ctx.ellipse(-7.8, -2.5, 8.2, 6.2, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+    // right lens
+    ctx.beginPath();
+    ctx.ellipse(7.8, -2.5, 8.2, 6.2, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+    // lens shine
+    ctx.globalAlpha = 0.35;
+    ctx.fillStyle = '#FFFFFF';
+    ctx.beginPath();
+    ctx.arc(-10, -5.5, 2.2, 0, Math.PI * 2);
+    ctx.arc(6.5, -5.5, 2.2, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
   }
 
   // blush
@@ -1054,6 +1117,57 @@ function drawCuteCatHead(
     ctx.arc(dir * 10, -10, 7.2, 0, Math.PI * 2);
     ctx.fill();
     ctx.stroke();
+    ctx.restore();
+  }
+
+  // icon mark (role identifier)
+  if (opts.icon) {
+    ctx.save();
+    ctx.translate(0, -headR - 6);
+    ctx.fillStyle = opts.accent || '#FDE68A';
+    ctx.strokeStyle = outline;
+    ctx.lineWidth = 4;
+    ctx.beginPath();
+    ctx.arc(0, 0, 9.2, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+
+    ctx.strokeStyle = '#1F2937';
+    ctx.lineWidth = 3;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    ctx.fillStyle = '#1F2937';
+    if (opts.icon === 'arrow') {
+      ctx.beginPath();
+      ctx.moveTo(-4, 2);
+      ctx.lineTo(4, -2);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(2, -3);
+      ctx.lineTo(5, -2);
+      ctx.lineTo(4, 1);
+      ctx.closePath();
+      ctx.fill();
+    } else {
+      // bomb
+      ctx.beginPath();
+      ctx.arc(0, 1.5, 4.4, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = '#1F2937';
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.moveTo(2, -2);
+      ctx.quadraticCurveTo(6, -6, 8, -8);
+      ctx.stroke();
+      ctx.strokeStyle = '#F59E0B';
+      ctx.lineWidth = 2.5;
+      ctx.beginPath();
+      ctx.moveTo(8, -8);
+      ctx.lineTo(10, -10);
+      ctx.moveTo(8, -10);
+      ctx.lineTo(10, -8);
+      ctx.stroke();
+    }
     ctx.restore();
   }
 
@@ -1247,13 +1361,12 @@ export const TowerDefenseGame: React.FC<Props> = ({ questions, subject, difficul
   const hasQuestions = normalizedQuestions.length > 0;
 
   const towerCatalog = useMemo(() => {
-    // Stationery towers (visual theme)
     return [
       { type: 'soldier' as const, label: '貓守衛', cost: 25, range: 125, damage: 8.2, fireRate: 0.85, projectileSpeed: 350, maxHp: 38, color: '#F59E0B' },
       { type: 'mage-ice' as const, label: '冰法師貓', cost: 40, range: 185, damage: 5.6, fireRate: 0.65, projectileSpeed: 420, maxHp: 28, color: '#93C5FD' },
       { type: 'mage-lightning' as const, label: '雷法師貓', cost: 55, range: 200, damage: 8.8, fireRate: 0.95, projectileSpeed: 520, maxHp: 26, color: '#A78BFA' },
-      { type: 'archer' as const, label: '螢光筆塔', cost: 35, range: 170, damage: 6.2, fireRate: 0.55, projectileSpeed: 440, maxHp: 30, color: '#34D399' },
-      { type: 'cannon' as const, label: '橡皮砲台', cost: 50, range: 195, damage: 14.5, fireRate: 1.2, projectileSpeed: 270, maxHp: 44, color: '#F472B6' }
+      { type: 'archer' as const, label: '弓箭貓', cost: 35, range: 170, damage: 6.2, fireRate: 0.55, projectileSpeed: 440, maxHp: 30, color: '#34D399' },
+      { type: 'cannon' as const, label: '爆破貓', cost: 50, range: 195, damage: 14.5, fireRate: 1.2, projectileSpeed: 270, maxHp: 44, color: '#F472B6' }
     ];
   }, []);
 
@@ -2316,46 +2429,30 @@ export const TowerDefenseGame: React.FC<Props> = ({ questions, subject, difficul
         });
         ctx.restore();
       } else if (tower.type === 'archer') {
-        // Highlighter tower
         ctx.save();
-        ctx.fillStyle = '#34D399';
-        drawRoundRect(ctx, -16, -26, 32, 46, 14);
-        ctx.fill();
-        ctx.stroke();
-        ctx.fillStyle = '#E5E7EB';
-        drawRoundRect(ctx, -14, -24, 28, 10, 8);
-        ctx.fill();
-        ctx.stroke();
-
-        ctx.fillStyle = '#1F2937';
-        ctx.font = 'bold 12px system-ui';
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'middle';
-        ctx.fillText(String(level), 0, 6);
+        ctx.translate(0, -10);
+        drawCuteCatHead(ctx, {
+          fur: '#FDE68A',
+          furShadow: '#F59E0B',
+          headband: '#34D399',
+          icon: 'arrow',
+          mood: 'smile',
+          levelText: String(level),
+          accent: '#34D399'
+        });
         ctx.restore();
       } else {
-        // Eraser cannon
         ctx.save();
-        ctx.fillStyle = '#F472B6';
-        drawRoundRect(ctx, -22, -22, 44, 30, 10);
-        ctx.fill();
-        ctx.stroke();
-
-        ctx.fillStyle = '#FDE68A';
-        drawRoundRect(ctx, -22, 8, 44, 16, 10);
-        ctx.fill();
-        ctx.stroke();
-
-        // barrel
-        ctx.fillStyle = '#2B1E12';
-        drawRoundRect(ctx, -8, -36, 16, 16, 6);
-        ctx.fill();
-
-        ctx.fillStyle = '#2B1E12';
-        ctx.font = 'bold 12px system-ui';
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'middle';
-        ctx.fillText(String(level), 0, 0);
+        ctx.translate(0, -10);
+        drawCuteCatHead(ctx, {
+          fur: '#FDE68A',
+          furShadow: '#F59E0B',
+          goggles: { frame: '#F472B6', lens: 'rgba(251,191,36,0.55)' },
+          icon: 'bomb',
+          mood: 'grit',
+          levelText: String(level),
+          accent: '#F472B6'
+        });
         ctx.restore();
       }
 
