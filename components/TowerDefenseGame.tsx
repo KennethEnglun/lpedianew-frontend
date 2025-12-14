@@ -303,27 +303,28 @@ function drawCuteCat(
   const mood = opts.mood || 'smile';
 
   // proportions (tower coordinate space)
-  const headR = 17;
-  const bodyW = 34;
-  const bodyH = 28;
-  const headY = -24;
-  const bodyY = -6;
+  // Emphasize "bean-eye cute cat": big head, small body, simple facial features.
+  const headR = 20;
+  const bodyW = 32;
+  const bodyH = 24;
+  const headY = -26;
+  const bodyY = -4;
 
-  // tail (behind)
+  // tail (behind) - thick curled tail
   ctx.save();
   ctx.strokeStyle = outline;
-  ctx.lineWidth = 4;
+  ctx.lineWidth = 5;
   ctx.lineCap = 'round';
   ctx.beginPath();
-  ctx.moveTo(-16, 10);
-  ctx.quadraticCurveTo(-30, 2, -22, -10);
-  ctx.quadraticCurveTo(-14, -22, -28, -26);
+  ctx.moveTo(-14, 12);
+  ctx.quadraticCurveTo(-34, 6, -26, -12);
+  ctx.quadraticCurveTo(-18, -26, -34, -30);
   ctx.stroke();
   ctx.strokeStyle = opts.furShadow;
-  ctx.lineWidth = 3;
+  ctx.lineWidth = 4;
   ctx.beginPath();
-  ctx.moveTo(-16, 10);
-  ctx.quadraticCurveTo(-29, 2, -22, -10);
+  ctx.moveTo(-14, 12);
+  ctx.quadraticCurveTo(-33, 6, -26, -12);
   ctx.stroke();
   ctx.restore();
 
@@ -331,7 +332,7 @@ function drawCuteCat(
   ctx.save();
   ctx.fillStyle = opts.furShadow;
   ctx.strokeStyle = outline;
-  ctx.lineWidth = 4;
+  ctx.lineWidth = 5;
   drawRoundRect(ctx, -bodyW / 2, bodyY, bodyW, bodyH, 14);
   ctx.fill();
   ctx.stroke();
@@ -356,16 +357,29 @@ function drawCuteCat(
     ctx.restore();
   }
 
-  // paws
+  // paws (with toe beans)
   ctx.save();
   ctx.fillStyle = opts.fur;
   ctx.strokeStyle = outline;
-  ctx.lineWidth = 4;
-  ctx.beginPath();
-  ctx.arc(-10, bodyY + bodyH + 2, 6, 0, Math.PI * 2);
-  ctx.arc(10, bodyY + bodyH + 2, 6, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.stroke();
+  ctx.lineWidth = 5;
+  const paw = (x: number) => {
+    ctx.save();
+    ctx.beginPath();
+    ctx.arc(x, bodyY + bodyH + 2, 7, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+    // toe beans
+    ctx.globalAlpha = 0.55;
+    ctx.fillStyle = '#F8B5E0';
+    ctx.beginPath();
+    ctx.arc(x - 2.8, bodyY + bodyH + 1, 1.6, 0, Math.PI * 2);
+    ctx.arc(x + 2.8, bodyY + bodyH + 1, 1.6, 0, Math.PI * 2);
+    ctx.arc(x, bodyY + bodyH + 4, 2.2, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+  };
+  paw(-10);
+  paw(10);
   ctx.restore();
 
   // head
@@ -373,7 +387,7 @@ function drawCuteCat(
   ctx.translate(0, headY);
   ctx.fillStyle = opts.fur;
   ctx.strokeStyle = outline;
-  ctx.lineWidth = 4;
+  ctx.lineWidth = 5;
   ctx.beginPath();
   ctx.arc(0, 0, headR, 0, Math.PI * 2);
   ctx.fill();
@@ -384,20 +398,20 @@ function drawCuteCat(
     ctx.save();
     ctx.fillStyle = opts.fur;
     ctx.strokeStyle = outline;
-    ctx.lineWidth = 4;
+    ctx.lineWidth = 5;
     ctx.beginPath();
-    ctx.moveTo(sx * 9, -10);
-    ctx.lineTo(sx * 18, -20);
-    ctx.lineTo(sx * 20, -4);
+    ctx.moveTo(sx * 8, -12);
+    ctx.lineTo(sx * 20, -26);
+    ctx.lineTo(sx * 22, -2);
     ctx.closePath();
     ctx.fill();
     ctx.stroke();
 
     ctx.fillStyle = '#F8B5E0';
     ctx.beginPath();
-    ctx.moveTo(sx * 11, -10);
-    ctx.lineTo(sx * 17, -16);
-    ctx.lineTo(sx * 18, -6);
+    ctx.moveTo(sx * 10, -11);
+    ctx.lineTo(sx * 18, -20);
+    ctx.lineTo(sx * 19, -6);
     ctx.closePath();
     ctx.fill();
     ctx.restore();
@@ -405,47 +419,45 @@ function drawCuteCat(
   ear(-1);
   ear(1);
 
-  // eyes (big + highlights)
+  // eyes (bean eyes)
   const eye = (x: number, wink = false) => {
     ctx.save();
     ctx.fillStyle = 'rgba(20,16,14,0.92)';
-    ctx.strokeStyle = outline;
-    ctx.lineWidth = 2.5;
     if (wink) {
       ctx.beginPath();
-      ctx.moveTo(x - 6, -2);
-      ctx.lineTo(x + 6, -2);
+      ctx.strokeStyle = 'rgba(20,16,14,0.85)';
+      ctx.lineWidth = 4;
+      ctx.lineCap = 'round';
+      ctx.moveTo(x - 6, 0);
+      ctx.lineTo(x + 6, 0);
       ctx.stroke();
     } else {
       ctx.beginPath();
-      ctx.arc(x, -1, 6.2, 0, Math.PI * 2);
+      ctx.ellipse(x, 0, 3.6, 4.2, 0, 0, Math.PI * 2);
       ctx.fill();
-      ctx.beginPath();
+      // tiny highlight
       ctx.fillStyle = 'rgba(255,255,255,0.9)';
-      ctx.arc(x - 2, -3, 2, 0, Math.PI * 2);
-      ctx.fill();
       ctx.beginPath();
-      ctx.globalAlpha = 0.65;
-      ctx.arc(x + 2, 1, 1.2, 0, Math.PI * 2);
+      ctx.arc(x - 1.2, -1.6, 1.1, 0, Math.PI * 2);
       ctx.fill();
     }
     ctx.restore();
   };
   if (mood === 'wink') {
-    eye(-6, false);
+    eye(-7, false);
     eye(8, true);
   } else {
-    eye(-7, false);
-    eye(7, false);
+    eye(-7.5, false);
+    eye(7.5, false);
   }
 
   // blush
   ctx.save();
-  ctx.globalAlpha = 0.45;
+  ctx.globalAlpha = 0.5;
   ctx.fillStyle = '#FCA5A5';
   ctx.beginPath();
-  ctx.arc(-12, 6, 5, 0, Math.PI * 2);
-  ctx.arc(12, 6, 5, 0, Math.PI * 2);
+  ctx.arc(-13, 9, 4.8, 0, Math.PI * 2);
+  ctx.arc(13, 9, 4.8, 0, Math.PI * 2);
   ctx.fill();
   ctx.restore();
 
@@ -453,27 +465,27 @@ function drawCuteCat(
   ctx.save();
   ctx.fillStyle = '#F472B6';
   ctx.strokeStyle = outline;
-  ctx.lineWidth = 2;
+  ctx.lineWidth = 2.5;
   ctx.beginPath();
-  ctx.moveTo(0, 4);
-  ctx.lineTo(-3.5, 7.5);
-  ctx.lineTo(3.5, 7.5);
+  ctx.moveTo(0, 6);
+  ctx.lineTo(-3.2, 9.2);
+  ctx.lineTo(3.2, 9.2);
   ctx.closePath();
   ctx.fill();
   ctx.stroke();
 
   ctx.strokeStyle = 'rgba(20,16,14,0.85)';
-  ctx.lineWidth = 2.5;
+  ctx.lineWidth = 3.2;
   ctx.lineCap = 'round';
   ctx.beginPath();
   if (mood === 'grit') {
-    ctx.moveTo(-6, 10);
-    ctx.lineTo(6, 10);
+    ctx.moveTo(-7, 12);
+    ctx.lineTo(7, 12);
   } else {
-    ctx.moveTo(-2, 10);
-    ctx.quadraticCurveTo(-6, 12, -8, 9);
-    ctx.moveTo(2, 10);
-    ctx.quadraticCurveTo(6, 12, 8, 9);
+    ctx.moveTo(-2, 12);
+    ctx.quadraticCurveTo(-7, 14, -10, 11);
+    ctx.moveTo(2, 12);
+    ctx.quadraticCurveTo(7, 14, 10, 11);
   }
   ctx.stroke();
   ctx.restore();
@@ -481,17 +493,17 @@ function drawCuteCat(
   // whiskers
   ctx.save();
   ctx.strokeStyle = 'rgba(20,16,14,0.65)';
-  ctx.lineWidth = 2;
+  ctx.lineWidth = 2.2;
   ctx.lineCap = 'round';
   for (const side of [-1, 1] as const) {
     const sx = side;
     ctx.beginPath();
-    ctx.moveTo(sx * 8, 8);
-    ctx.lineTo(sx * 18, 6);
-    ctx.moveTo(sx * 8, 10);
-    ctx.lineTo(sx * 18, 10);
-    ctx.moveTo(sx * 8, 12);
-    ctx.lineTo(sx * 18, 14);
+    ctx.moveTo(sx * 9, 10);
+    ctx.lineTo(sx * 20, 8);
+    ctx.moveTo(sx * 9, 12);
+    ctx.lineTo(sx * 20, 12);
+    ctx.moveTo(sx * 9, 14);
+    ctx.lineTo(sx * 20, 16);
     ctx.stroke();
   }
   ctx.restore();
@@ -504,14 +516,20 @@ function drawCuteCat(
     ctx.translate(0, headY);
     ctx.fillStyle = opts.hat;
     ctx.strokeStyle = outline;
-    ctx.lineWidth = 4;
+    ctx.lineWidth = 5;
     ctx.beginPath();
-    ctx.moveTo(0, -30);
-    ctx.lineTo(16, -10);
-    ctx.lineTo(-16, -10);
+    ctx.moveTo(0, -34);
+    ctx.lineTo(18, -10);
+    ctx.lineTo(-18, -10);
     ctx.closePath();
     ctx.fill();
     ctx.stroke();
+
+    // brim
+    ctx.globalAlpha = 0.25;
+    ctx.fillStyle = '#000000';
+    drawRoundRect(ctx, -20, -12, 40, 10, 8);
+    ctx.fill();
     ctx.restore();
   }
 
@@ -520,7 +538,7 @@ function drawCuteCat(
     const dir = opts.staff.side === 'left' ? -1 : 1;
     ctx.save();
     ctx.strokeStyle = '#2B1E12';
-    ctx.lineWidth = 4;
+    ctx.lineWidth = 5;
     ctx.lineCap = 'round';
     ctx.beginPath();
     ctx.moveTo(dir * 22, 20);
@@ -528,9 +546,9 @@ function drawCuteCat(
     ctx.stroke();
     ctx.fillStyle = opts.staff.gem;
     ctx.strokeStyle = outline;
-    ctx.lineWidth = 3;
+    ctx.lineWidth = 4;
     ctx.beginPath();
-    ctx.arc(dir * 10, -8, 7, 0, Math.PI * 2);
+    ctx.arc(dir * 10, -8, 7.5, 0, Math.PI * 2);
     ctx.fill();
     ctx.stroke();
     ctx.restore();
