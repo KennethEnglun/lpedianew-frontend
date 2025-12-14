@@ -71,6 +71,8 @@ interface Projectile {
   id: number;
   x: number;
   y: number;
+  lastX?: number;
+  lastY?: number;
   vx: number;
   vy: number;
   damage: number;
@@ -89,6 +91,17 @@ interface Particle {
   life: number;
   color: string;
   shape: 'circle' | 'spark';
+}
+
+interface Shockwave {
+  id: number;
+  x: number;
+  y: number;
+  r: number;
+  vr: number;
+  life: number;
+  color: string;
+  thickness: number;
 }
 
 const GRID_WIDTH = 9;
@@ -216,6 +229,7 @@ export const TowerDefenseGame: React.FC<Props> = ({ questions, subject, difficul
   const [enemies, setEnemies] = useState<Enemy[]>([]);
   const [projectiles, setProjectiles] = useState<Projectile[]>([]);
   const [particles, setParticles] = useState<Particle[]>([]);
+  const [shockwaves, setShockwaves] = useState<Shockwave[]>([]);
 
   const [questionOpen, setQuestionOpen] = useState(false);
   const [questionIndex, setQuestionIndex] = useState(0);
@@ -262,6 +276,7 @@ export const TowerDefenseGame: React.FC<Props> = ({ questions, subject, difficul
   const towersRef = useRef<Tower[]>([]);
   const projectilesRef = useRef<Projectile[]>([]);
   const particlesRef = useRef<Particle[]>([]);
+  const shockwavesRef = useRef<Shockwave[]>([]);
   const gameOverRef = useRef<boolean>(false);
   const isRunningRef = useRef<boolean>(false);
   const speedRef = useRef<number>(1);
@@ -270,6 +285,7 @@ export const TowerDefenseGame: React.FC<Props> = ({ questions, subject, difficul
   useEffect(() => { towersRef.current = towers; }, [towers]);
   useEffect(() => { projectilesRef.current = projectiles; }, [projectiles]);
   useEffect(() => { particlesRef.current = particles; }, [particles]);
+  useEffect(() => { shockwavesRef.current = shockwaves; }, [shockwaves]);
   useEffect(() => { gameOverRef.current = gameOver; }, [gameOver]);
   useEffect(() => { isRunningRef.current = isRunning; }, [isRunning]);
   useEffect(() => { speedRef.current = speedMultiplier; }, [speedMultiplier]);
@@ -462,6 +478,7 @@ export const TowerDefenseGame: React.FC<Props> = ({ questions, subject, difficul
 	    setCombo(0);
 	    setBattleHint('');
 	    setAnswerResult(null);
+	    setEffectUi({ slow: 0, freeze: 0, frenzy: 0 });
 	    setQuestionIndex(0);
 	    setCurrentQuestion(null);
 	    setCurrentOptions([]);
@@ -470,6 +487,7 @@ export const TowerDefenseGame: React.FC<Props> = ({ questions, subject, difficul
 	    setTowers([]);
 	    setProjectiles([]);
 	    setParticles([]);
+	    setShockwaves([]);
 	    spawnWave(1, true);
 
 	    // start asking immediately; battle continues in background
@@ -488,13 +506,43 @@ export const TowerDefenseGame: React.FC<Props> = ({ questions, subject, difficul
 	  const slowUntilRef = useRef<number>(0);
 	  const freezeUntilRef = useRef<number>(0);
 	  const frenzyUntilRef = useRef<number>(0);
+	  const slowUiWindowRef = useRef<{ start: number; end: number }>({ start: 0, end: 0 });
+	  const freezeUiWindowRef = useRef<{ start: number; end: number }>({ start: 0, end: 0 });
+	  const frenzyUiWindowRef = useRef<{ start: number; end: number }>({ start: 0, end: 0 });
 
-	  const questionTimeoutRef = useRef<number | null>(null);
-	  useEffect(() => {
-	    return () => {
-	      if (questionTimeoutRef.current) window.clearTimeout(questionTimeoutRef.current);
-	    };
-	  }, []);
+  const [effectUi, setEffectUi] = useState<{ slow: number; freeze: number; frenzy: number }>({ slow: 0, freeze: 0, frenzy: 0 });
+  const lastEffectUiUpdateRef = useRef<number>(0);
+
+  const shakeRef = useRef<{ until: number; amp: number }>({ until: 0, amp: 0 });
+
+  const questionTimeoutRef = useRef<number | null>(null);
+  useEffect(() => {
+    return () => {
+      if (questionTimeoutRef.current) window.clearTimeout(questionTimeoutRef.current);
+    };
+  }, []);
+
+  const startShake = (amp: number, durationSeconds: number) => {
+    const until = simTimeRef.current + Math.max(0, durationSeconds);
+    shakeRef.current = { until, amp: Math.max(shakeRef.current.amp, amp) };
+  };
+
+  const spawnShockwave = (x: number, y: number, color: string, initialR = 6, vr = 180, life = 0.35, thickness = 5) => {
+    const wave: Shockwave = {
+      id: Date.now() + Math.random(),
+      x,
+      y,
+      r: initialR,
+      vr,
+      life,
+      color,
+      thickness
+    };
+    setShockwaves((prev) => {
+      const next = [...prev, wave];
+      return next.length > 18 ? next.slice(next.length - 18) : next;
+    });
+  };
 
 	  const placeTowerAt = (gridX: number, gridY: number, type: TowerType) => {
 	    if (gameOverRef.current) return false;
@@ -598,21 +646,34 @@ export const TowerDefenseGame: React.FC<Props> = ({ questions, subject, difficul
 	  };
 
 	  const applySlow = (seconds: number) => {
-	    slowUntilRef.current = Math.max(slowUntilRef.current, simTimeRef.current + seconds);
+	    const now = simTimeRef.current;
+	    slowUntilRef.current = Math.max(slowUntilRef.current, now + seconds);
+	    slowUiWindowRef.current = { start: now, end: slowUntilRef.current };
 	    setBattleHint(`連對 ${comboRef.current}：全場減速 ${seconds}s`);
-	    spawnParticles(180, 120, 20, '#B5D8F8');
+	    const c = isoToScreen(4, 3);
+	    spawnParticles(c.x, c.y - 40, 20, '#B5D8F8');
+	    spawnShockwave(c.x, c.y - 40, '#B5D8F8', 12, 180, 0.28, 5);
 	  };
 
 	  const applyFreeze = (seconds: number) => {
-	    freezeUntilRef.current = Math.max(freezeUntilRef.current, simTimeRef.current + seconds);
+	    const now = simTimeRef.current;
+	    freezeUntilRef.current = Math.max(freezeUntilRef.current, now + seconds);
+	    freezeUiWindowRef.current = { start: now, end: freezeUntilRef.current };
 	    setBattleHint(`連對 ${comboRef.current}：全場冰凍 ${seconds}s`);
-	    spawnParticles(180, 120, 26, '#C7D2FE');
+	    const c = isoToScreen(4, 3);
+	    spawnParticles(c.x, c.y - 40, 26, '#C7D2FE');
+	    spawnShockwave(c.x, c.y - 40, '#C7D2FE', 14, 220, 0.3, 6);
+	    startShake(3, 0.18);
 	  };
 
 	  const applyFrenzy = (seconds: number) => {
-	    frenzyUntilRef.current = Math.max(frenzyUntilRef.current, simTimeRef.current + seconds);
+	    const now = simTimeRef.current;
+	    frenzyUntilRef.current = Math.max(frenzyUntilRef.current, now + seconds);
+	    frenzyUiWindowRef.current = { start: now, end: frenzyUntilRef.current };
 	    setBattleHint(`連對 ${comboRef.current}：狂熱 ${seconds}s（射速提升）`);
-	    spawnParticles(180, 120, 26, '#FDE68A');
+	    const c = isoToScreen(4, 3);
+	    spawnParticles(c.x, c.y - 40, 26, '#FDE68A');
+	    spawnShockwave(c.x, c.y - 40, '#FDE68A', 10, 240, 0.26, 5);
 	  };
 
 	  const openQuestionAt = (index: number) => {
@@ -648,6 +709,7 @@ export const TowerDefenseGame: React.FC<Props> = ({ questions, subject, difficul
 	      setCorrectAnswers(v => v + 1);
 	      setScore(v => v + 10 + (currentQuestion.kind === 'match' ? 2 : 0));
 	      spawnParticles(160, 120, 18, '#F8E2B5');
+	      startShake(1.4, 0.08);
 	    } else {
 	      spawnParticles(160, 120, 12, '#F8C5C5');
 	    }
@@ -779,6 +841,7 @@ export const TowerDefenseGame: React.FC<Props> = ({ questions, subject, difficul
     const towersSnapshot = towersRef.current;
     const projectilesSnapshot = projectilesRef.current;
     const particlesSnapshot = particlesRef.current;
+    const shockwavesSnapshot = shockwavesRef.current;
 
     if (particlesSnapshot.length > 0) {
       setParticles(() => {
@@ -798,14 +861,34 @@ export const TowerDefenseGame: React.FC<Props> = ({ questions, subject, difficul
       });
     }
 
-	    if (simDeltaSeconds <= 0) return;
-	
-	    const frozen = simNow < freezeUntilRef.current;
-	    const slowFactor = simNow < slowUntilRef.current ? 0.72 : 1;
-	    const moveFactor = frozen ? 0 : slowFactor;
-	    const frenzy = simNow < frenzyUntilRef.current;
-	    const frenzyFireRateFactor = frenzy ? 0.78 : 1;
-	    const frenzyDamageFactor = frenzy ? 1.18 : 1;
+    if (shockwavesSnapshot.length > 0) {
+      setShockwaves(() => {
+        const updated: Shockwave[] = [];
+        for (const wave of shockwavesSnapshot) {
+          const newLife = wave.life - frameDeltaSeconds * 1.4;
+          if (newLife <= 0) continue;
+          updated.push({ ...wave, r: wave.r + wave.vr * frameDeltaSeconds, life: newLife });
+        }
+        return updated;
+      });
+    }
+
+		    if (simDeltaSeconds <= 0) return;
+		
+		    const frozen = simNow < freezeUntilRef.current;
+		    const slowFactor = simNow < slowUntilRef.current ? 0.72 : 1;
+		    const moveFactor = frozen ? 0 : slowFactor;
+		    const frenzy = simNow < frenzyUntilRef.current;
+		    const frenzyFireRateFactor = frenzy ? 0.78 : 1;
+		    const frenzyDamageFactor = frenzy ? 1.18 : 1;
+
+		    if (simNow - lastEffectUiUpdateRef.current >= 0.2) {
+		      lastEffectUiUpdateRef.current = simNow;
+		      const slowRem = Math.max(0, slowUntilRef.current - simNow);
+		      const freezeRem = Math.max(0, freezeUntilRef.current - simNow);
+		      const frenzyRem = Math.max(0, frenzyUntilRef.current - simNow);
+		      setEffectUi({ slow: slowRem, freeze: freezeRem, frenzy: frenzyRem });
+		    }
 
 	    const movedEnemies: Enemy[] = [];
 	    const pathLen = pathCellsRef.current.length || DEFAULT_PATH.length;
@@ -830,7 +913,7 @@ export const TowerDefenseGame: React.FC<Props> = ({ questions, subject, difficul
       const newY = projectile.y + projectile.vy * simDeltaSeconds;
       const newLife = projectile.life - simDeltaSeconds;
       if (newLife <= 0) continue;
-      updatedProjectiles.push({ ...projectile, x: newX, y: newY, life: newLife });
+      updatedProjectiles.push({ ...projectile, lastX: projectile.x, lastY: projectile.y, x: newX, y: newY, life: newLife });
     }
 
     let finalEnemies: Enemy[] = movedEnemies;
@@ -854,6 +937,7 @@ export const TowerDefenseGame: React.FC<Props> = ({ questions, subject, difficul
           target.hp -= projectile.damage;
           anyHit = true;
           spawnParticles(targetPos.x, targetPos.y - 6, 8, projectile.color);
+          spawnShockwave(targetPos.x, targetPos.y - 6, projectile.color, 6, 220, 0.22, 4);
           continue;
         }
         afterCollision.push(projectile);
@@ -864,6 +948,7 @@ export const TowerDefenseGame: React.FC<Props> = ({ questions, subject, difficul
         const survivors = updatedEnemies.filter(e => e.hp > 0);
         if (survivors.length !== updatedEnemies.length) {
           setScore(v => v + (updatedEnemies.length - survivors.length) * 4);
+          startShake(2.5, 0.12);
         }
         finalEnemies = survivors;
       } else {
@@ -903,6 +988,8 @@ export const TowerDefenseGame: React.FC<Props> = ({ questions, subject, difficul
         if (bestTower.hp <= 0) {
           const boom = isoToScreen(bestTower.gridX, bestTower.gridY);
           spawnParticles(boom.x, boom.y - 10, 20, '#F8C5C5');
+          spawnShockwave(boom.x, boom.y - 10, '#F8C5C5', 10, 260, 0.28, 6);
+          startShake(4, 0.2);
         }
       }
       towersToUpdate = towersToUpdate.filter(t => t.hp > 0);
@@ -952,6 +1039,21 @@ export const TowerDefenseGame: React.FC<Props> = ({ questions, subject, difficul
     const height = canvas.height / (window.devicePixelRatio || 1);
     ctx.clearRect(0, 0, width, height);
 
+    const simNow = simTimeRef.current;
+    const frozen = simNow < freezeUntilRef.current;
+    const slow = simNow < slowUntilRef.current;
+    const frenzy = simNow < frenzyUntilRef.current;
+
+    // screen shake (battlefield only)
+    const shake = shakeRef.current;
+    if (simNow < shake.until && shake.amp > 0) {
+      const a = shake.amp;
+      ctx.save();
+      ctx.translate((Math.random() - 0.5) * a * 2, (Math.random() - 0.5) * a * 2);
+    } else {
+      shakeRef.current = { until: 0, amp: 0 };
+    }
+
     const sortedCells = [...grid].sort((a, b) => (a.x + a.y) - (b.x + b.y));
     for (const cell of sortedCells) {
       const center = isoToScreen(cell.x, cell.y);
@@ -983,6 +1085,16 @@ export const TowerDefenseGame: React.FC<Props> = ({ questions, subject, difficul
       ctx.ellipse(0, size * 0.8, size * 0.9, size * 0.4, 0, 0, Math.PI * 2);
       ctx.fill();
 
+      if (slow) {
+        ctx.save();
+        ctx.strokeStyle = 'rgba(181,216,248,0.75)';
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.arc(0, size * 0.9, size * 1.05, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.restore();
+      }
+
       ctx.fillStyle = enemy.color;
       ctx.strokeStyle = COLORS.border;
       ctx.lineWidth = 3;
@@ -990,6 +1102,25 @@ export const TowerDefenseGame: React.FC<Props> = ({ questions, subject, difficul
       ctx.arc(0, 0, size, 0, Math.PI * 2);
       ctx.fill();
       ctx.stroke();
+
+      if (frozen) {
+        ctx.save();
+        ctx.strokeStyle = 'rgba(199,210,254,0.9)';
+        ctx.lineWidth = 4;
+        ctx.beginPath();
+        ctx.arc(0, 0, size * 1.02, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.strokeStyle = 'rgba(239,246,255,0.85)';
+        ctx.lineWidth = 2;
+        for (let k = 0; k < 6; k++) {
+          const ang = (k / 6) * Math.PI * 2;
+          ctx.beginPath();
+          ctx.moveTo(Math.cos(ang) * (size * 0.35), Math.sin(ang) * (size * 0.35));
+          ctx.lineTo(Math.cos(ang) * (size * 0.9), Math.sin(ang) * (size * 0.9));
+          ctx.stroke();
+        }
+        ctx.restore();
+      }
 
       ctx.fillStyle = '#5E4C40';
       ctx.beginPath();
@@ -1021,6 +1152,35 @@ export const TowerDefenseGame: React.FC<Props> = ({ questions, subject, difficul
       ctx.fillStyle = '#34d399';
       ctx.fillRect(-size, -size * 1.4, size * 2 * hpRatio, 7);
 
+      if (frozen || slow) {
+        ctx.save();
+        ctx.translate(0, -size * 1.65);
+        ctx.fillStyle = frozen ? 'rgba(199,210,254,0.95)' : 'rgba(181,216,248,0.95)';
+        ctx.strokeStyle = COLORS.border;
+        ctx.lineWidth = 2;
+        // rounded rect (no roundRect dependency)
+        const x = -10, y = -10, w = 20, h = 18, r = 6;
+        ctx.beginPath();
+        ctx.moveTo(x + r, y);
+        ctx.lineTo(x + w - r, y);
+        ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+        ctx.lineTo(x + w, y + h - r);
+        ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+        ctx.lineTo(x + r, y + h);
+        ctx.quadraticCurveTo(x, y + h, x, y + h - r);
+        ctx.lineTo(x, y + r);
+        ctx.quadraticCurveTo(x, y, x + r, y);
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+        ctx.fillStyle = COLORS.border;
+        ctx.font = 'bold 12px system-ui';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(frozen ? 'ICE' : 'SLOW', 0, -1);
+        ctx.restore();
+      }
+
       ctx.restore();
     }
 
@@ -1031,6 +1191,18 @@ export const TowerDefenseGame: React.FC<Props> = ({ questions, subject, difficul
 
       ctx.save();
       ctx.translate(pos.x, baseY);
+
+      if (frenzy) {
+        ctx.save();
+        ctx.shadowColor = 'rgba(253,230,138,0.95)';
+        ctx.shadowBlur = 18;
+        ctx.strokeStyle = 'rgba(253,230,138,0.8)';
+        ctx.lineWidth = 4;
+        ctx.beginPath();
+        ctx.arc(0, 8, 26, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.restore();
+      }
 
       ctx.fillStyle = COLORS.shadow;
       ctx.beginPath();
@@ -1084,14 +1256,67 @@ export const TowerDefenseGame: React.FC<Props> = ({ questions, subject, difficul
       ctx.restore();
     }
 
+    // Skill overlays
+    if (slow) {
+      const grad = ctx.createLinearGradient(0, 0, 0, height);
+      grad.addColorStop(0, 'rgba(181,216,248,0.00)');
+      grad.addColorStop(0.45, 'rgba(181,216,248,0.08)');
+      grad.addColorStop(1, 'rgba(181,216,248,0.00)');
+      ctx.save();
+      ctx.globalCompositeOperation = 'screen';
+      ctx.fillStyle = grad;
+      ctx.fillRect(0, 0, width, height);
+      ctx.restore();
+    }
+    if (frozen) {
+      ctx.save();
+      ctx.globalCompositeOperation = 'screen';
+      ctx.fillStyle = 'rgba(199,210,254,0.12)';
+      ctx.fillRect(0, 0, width, height);
+      ctx.restore();
+    }
+    if (frenzy) {
+      ctx.save();
+      ctx.globalCompositeOperation = 'screen';
+      ctx.fillStyle = 'rgba(253,230,138,0.07)';
+      ctx.fillRect(0, 0, width, height);
+      ctx.restore();
+    }
+
     for (const projectile of projectilesRef.current) {
       ctx.save();
+      if (typeof projectile.lastX === 'number' && typeof projectile.lastY === 'number') {
+        ctx.globalAlpha = Math.max(0.15, Math.min(0.7, projectile.life));
+        ctx.strokeStyle = projectile.color;
+        ctx.lineWidth = 3;
+        ctx.shadowColor = projectile.color;
+        ctx.shadowBlur = 12;
+        ctx.beginPath();
+        ctx.moveTo(projectile.lastX, projectile.lastY);
+        ctx.lineTo(projectile.x, projectile.y);
+        ctx.stroke();
+      }
       ctx.fillStyle = projectile.color;
       ctx.shadowColor = projectile.color;
       ctx.shadowBlur = 10;
+      ctx.globalAlpha = 1;
       ctx.beginPath();
       ctx.arc(projectile.x, projectile.y, 4, 0, Math.PI * 2);
       ctx.fill();
+      ctx.restore();
+    }
+
+    // Shockwaves (hit impact)
+    for (const wave of shockwavesRef.current) {
+      ctx.save();
+      ctx.globalAlpha = Math.max(0, Math.min(1, wave.life));
+      ctx.strokeStyle = wave.color;
+      ctx.lineWidth = wave.thickness;
+      ctx.shadowColor = wave.color;
+      ctx.shadowBlur = 12;
+      ctx.beginPath();
+      ctx.arc(wave.x, wave.y, wave.r, 0, Math.PI * 2);
+      ctx.stroke();
       ctx.restore();
     }
 
@@ -1106,6 +1331,10 @@ export const TowerDefenseGame: React.FC<Props> = ({ questions, subject, difficul
       } else {
         ctx.fillRect(particle.x - particle.size, particle.y - particle.size, particle.size * 2, particle.size * 0.8);
       }
+      ctx.restore();
+    }
+
+    if (simNow < shake.until && shake.amp > 0) {
       ctx.restore();
     }
   }
@@ -1227,6 +1456,36 @@ export const TowerDefenseGame: React.FC<Props> = ({ questions, subject, difficul
 	      {battleHint && (
 	        <div className="mb-3 text-sm text-emerald-200 font-bold">
 	          {battleHint}
+	        </div>
+	      )}
+
+	      {(effectUi.freeze > 0 || effectUi.slow > 0 || effectUi.frenzy > 0) && (
+	        <div className="mb-3 flex flex-wrap gap-2">
+	          {(() => {
+	            const items: Array<{ key: 'freeze' | 'slow' | 'frenzy'; label: string; color: string; border: string; window: { start: number; end: number } }> = [
+	              { key: 'freeze', label: '冰凍', color: 'bg-indigo-100 text-indigo-900', border: 'border-indigo-300', window: freezeUiWindowRef.current },
+	              { key: 'slow', label: '減速', color: 'bg-sky-100 text-sky-900', border: 'border-sky-300', window: slowUiWindowRef.current },
+	              { key: 'frenzy', label: '狂熱', color: 'bg-amber-100 text-amber-900', border: 'border-amber-300', window: frenzyUiWindowRef.current }
+	            ];
+	            const getRem = (k: 'freeze' | 'slow' | 'frenzy') => (k === 'freeze' ? effectUi.freeze : k === 'slow' ? effectUi.slow : effectUi.frenzy);
+	            return items
+	              .map((it) => {
+	                const rem = getRem(it.key);
+	                if (rem <= 0) return null;
+	                const denom = Math.max(0.001, it.window.end - it.window.start);
+	                const pct = Math.max(0, Math.min(1, rem / denom));
+	                return (
+	                  <div key={it.key} className={`flex items-center gap-2 px-3 py-2 rounded-2xl border-2 ${it.color} ${it.border} font-black`}>
+	                    <span>{it.label}</span>
+	                    <div className="w-24 h-2 rounded-full bg-white/70 border border-black/10 overflow-hidden">
+	                      <div className="h-full bg-black/50" style={{ width: `${pct * 100}%` }} />
+	                    </div>
+	                    <span className="text-xs opacity-80">{Math.ceil(rem)}s</span>
+	                  </div>
+	                );
+	              })
+	              .filter(Boolean);
+	          })()}
 	        </div>
 	      )}
 
