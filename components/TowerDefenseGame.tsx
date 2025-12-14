@@ -1774,8 +1774,26 @@ export const TowerDefenseGame: React.FC<Props> = ({ questions, subject, difficul
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
-    const width = canvas.width / (window.devicePixelRatio || 1);
-    const height = canvas.height / (window.devicePixelRatio || 1);
+    // Defensive resize: avoid canvas accidentally stuck at 1x1 which looks like a black screen.
+    const dpr = window.devicePixelRatio || 1;
+    const container = containerRef.current;
+    if (container) {
+      const rect = container.getBoundingClientRect();
+      const cssW = Math.max(1, Math.floor(container.clientWidth || rect.width || 1));
+      const cssH = Math.max(1, Math.floor(container.clientHeight || rect.height || 1));
+      const wantW = Math.max(1, Math.floor(cssW * dpr));
+      const wantH = Math.max(1, Math.floor(cssH * dpr));
+      if (canvas.width !== wantW || canvas.height !== wantH) {
+        canvas.width = wantW;
+        canvas.height = wantH;
+      }
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      ctx.globalAlpha = 1;
+      ctx.globalCompositeOperation = 'source-over';
+    }
+
+    const width = canvas.width / dpr;
+    const height = canvas.height / dpr;
     ctx.clearRect(0, 0, width, height);
 
     // Chalkboard background + vignette
@@ -2117,12 +2135,15 @@ export const TowerDefenseGame: React.FC<Props> = ({ questions, subject, difficul
     if (!ctx) return;
 
     const resizeCanvas = () => {
-      const rect = container.getBoundingClientRect();
       const dpr = window.devicePixelRatio || 1;
-      canvas.style.width = `${rect.width}px`;
-      canvas.style.height = `${rect.height}px`;
-      canvas.width = Math.max(1, Math.floor(rect.width * dpr));
-      canvas.height = Math.max(1, Math.floor(rect.height * dpr));
+      const rect = container.getBoundingClientRect();
+      const cssW = Math.max(1, Math.floor(container.clientWidth || rect.width || 1));
+      const cssH = Math.max(1, Math.floor(container.clientHeight || rect.height || 1));
+      const nextW = Math.max(1, Math.floor(cssW * dpr));
+      const nextH = Math.max(1, Math.floor(cssH * dpr));
+      if (canvas.width === nextW && canvas.height === nextH) return;
+      canvas.width = nextW;
+      canvas.height = nextH;
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     };
     resizeCanvas();
