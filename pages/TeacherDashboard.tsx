@@ -13,6 +13,10 @@ import { sanitizeHtml } from '../services/sanitizeHtml';
 import { loadHiddenTaskKeys, makeTaskKey, parseTaskKey, saveHiddenTaskKeys } from '../services/taskVisibility';
 import { Subject, Discussion } from '../types';
 
+type TowerDefenseQuestionDraft =
+  | { type: 'mcq'; prompt: string; options: string[]; correctIndex: number }
+  | { type: 'match'; left: string; options: string[]; correctIndex: number };
+
 const TeacherDashboard: React.FC = () => {
   const navigate = useNavigate();
   const { logout, user, refreshUser } = useAuth();
@@ -143,12 +147,10 @@ const TeacherDashboard: React.FC = () => {
     difficulty: 'medium' as 'easy' | 'medium' | 'hard'
   });
 
-  const [towerDefenseQuestions, setTowerDefenseQuestions] = useState<Array<{
-    question: string;
-    options: string[];
-    correctAnswer: number;
-  }>>([]);
+  const [towerDefenseQuestions, setTowerDefenseQuestions] = useState<TowerDefenseQuestionDraft[]>([]);
   const [towerDefenseTimeSeconds, setTowerDefenseTimeSeconds] = useState(60);
+  const [towerDefenseLivesEnabled, setTowerDefenseLivesEnabled] = useState(true);
+  const [towerDefenseLivesLimit, setTowerDefenseLivesLimit] = useState(10);
 
   // 處理內容顯示的輔助函數
   const getDisplayContent = (content: any) => {
@@ -1053,28 +1055,53 @@ const TeacherDashboard: React.FC = () => {
     }));
   };
 
-  // === 答題塔防題庫（四選一） ===
-  const addTowerDefenseQuestion = () => {
-    setTowerDefenseQuestions(prev => ([
+  // === 答題塔防題庫（四選一 + 配對（單組）） ===
+  const addTowerDefenseMcqQuestion = () => {
+    setTowerDefenseQuestions((prev) => [
       ...prev,
-      { question: '', options: ['', '', '', ''], correctAnswer: 0 }
-    ]));
+      { type: 'mcq', prompt: '', options: ['', '', '', ''], correctIndex: 0 }
+    ]);
+  };
+
+  const addTowerDefenseMatchQuestion = () => {
+    setTowerDefenseQuestions((prev) => [
+      ...prev,
+      { type: 'match', left: '', options: ['', '', '', ''], correctIndex: 0 }
+    ]);
   };
 
   const removeTowerDefenseQuestion = (index: number) => {
-    setTowerDefenseQuestions(prev => prev.filter((_, i) => i !== index));
+    setTowerDefenseQuestions((prev) => prev.filter((_, i) => i !== index));
   };
 
-  const updateTowerDefenseQuestion = (index: number, field: 'question' | 'correctAnswer', value: any) => {
-    setTowerDefenseQuestions(prev => prev.map((q, i) => i === index ? { ...q, [field]: value } : q));
+  const updateTowerDefenseCorrectIndex = (index: number, value: number) => {
+    setTowerDefenseQuestions((prev) => prev.map((q, i) => (i === index ? { ...q, correctIndex: value } : q)));
+  };
+
+  const updateTowerDefensePrompt = (index: number, value: string) => {
+    setTowerDefenseQuestions((prev) =>
+      prev.map((q, i) => {
+        if (i !== index) return q;
+        if (q.type !== 'mcq') return q;
+        return { ...q, prompt: value };
+      })
+    );
+  };
+
+  const updateTowerDefenseLeft = (index: number, value: string) => {
+    setTowerDefenseQuestions((prev) =>
+      prev.map((q, i) => {
+        if (i !== index) return q;
+        if (q.type !== 'match') return q;
+        return { ...q, left: value };
+      })
+    );
   };
 
   const updateTowerDefenseOption = (questionIndex: number, optionIndex: number, value: string) => {
-    setTowerDefenseQuestions(prev => prev.map((q, i) =>
-      i === questionIndex
-        ? { ...q, options: q.options.map((opt, j) => j === optionIndex ? value : opt) }
-        : q
-    ));
+    setTowerDefenseQuestions((prev) =>
+      prev.map((q, i) => (i === questionIndex ? { ...q, options: q.options.map((opt, j) => (j === optionIndex ? value : opt)) } : q))
+    );
   };
 
   // 提交小測驗
@@ -2377,11 +2404,40 @@ const TeacherDashboard: React.FC = () => {
 		                </div>
 		              </div>
 
+		              <div className="bg-emerald-50 border-2 border-emerald-200 rounded-2xl p-4">
+		                <div className="flex items-center gap-3">
+		                  <label className="flex items-center gap-2 font-bold text-emerald-900">
+		                    <input
+		                      type="checkbox"
+		                      checked={towerDefenseLivesEnabled}
+		                      onChange={(e) => setTowerDefenseLivesEnabled(e.target.checked)}
+		                      className="w-4 h-4"
+		                    />
+		                    啟用生命限制
+		                  </label>
+		                  <div className="ml-auto flex items-center gap-2">
+		                    <span className="text-sm font-bold text-emerald-900">生命值</span>
+		                    <input
+		                      type="number"
+		                      min={1}
+		                      max={99}
+		                      value={towerDefenseLivesLimit}
+		                      disabled={!towerDefenseLivesEnabled}
+		                      onChange={(e) => setTowerDefenseLivesLimit(Math.max(1, Math.min(99, parseInt(e.target.value) || 10)))}
+		                      className={`w-24 px-3 py-2 border-2 rounded-xl font-bold ${towerDefenseLivesEnabled ? 'border-emerald-300 bg-white' : 'border-gray-200 bg-gray-100 text-gray-400'}`}
+		                    />
+		                  </div>
+		                </div>
+		                <p className="text-xs text-gray-500 mt-2">
+		                  建議 5–15；關閉代表只按時間結束遊戲。
+		                </p>
+		              </div>
+
 		              <div>
-		                <label className="block text-sm font-bold text-emerald-800 mb-2">題庫（答題賺金幣）</label>
+		                <label className="block text-sm font-bold text-emerald-800 mb-2">題庫（答題驅動自動作戰）</label>
 		                <div className="border-2 border-emerald-200 rounded-2xl p-4 bg-white">
 			                  <div className="flex justify-between items-center mb-4">
-			                    <span className="font-bold text-emerald-800">問題列表（四選一）</span>
+			                    <span className="font-bold text-emerald-800">題目列表（四選一 / 配對）</span>
 			                    <div className="flex gap-2">
 			                      <button
 			                        type="button"
@@ -2391,11 +2447,14 @@ const TeacherDashboard: React.FC = () => {
 			                          subject: String(gameForm.subject),
 			                          importModes: ['replace', 'append'],
 			                          onImport: (payload, importMode) => {
-			                            const incoming = (payload.mcq || []).map((q: any) => ({
-			                              question: q.question,
-			                              options: q.options,
-			                              correctAnswer: q.correctIndex
-			                            })).filter((q: any) => q.question && Array.isArray(q.options) && q.options.length === 4);
+			                            const incoming: TowerDefenseQuestionDraft[] = (payload.mcq || [])
+			                              .map((q: any) => ({
+			                                type: 'mcq',
+			                                prompt: String(q.question || ''),
+			                                options: Array.isArray(q.options) ? q.options.map((x: any) => String(x ?? '')) : ['', '', '', ''],
+			                                correctIndex: Number(q.correctIndex ?? 0)
+			                              }))
+			                              .filter((q: any) => q.prompt && Array.isArray(q.options) && q.options.length === 4);
 			                            setTowerDefenseQuestions(prev => importMode === 'replace' ? incoming : [...prev, ...incoming]);
 			                            setShowAiGenerator(false);
 			                          }
@@ -2406,11 +2465,19 @@ const TeacherDashboard: React.FC = () => {
 			                      </button>
 			                      <button
 			                        type="button"
-			                        onClick={addTowerDefenseQuestion}
+			                        onClick={addTowerDefenseMcqQuestion}
 			                        className="px-4 py-2 bg-emerald-100 text-emerald-800 border-2 border-emerald-300 rounded-2xl font-bold hover:bg-emerald-200 flex items-center gap-2"
 			                      >
 			                        <Plus className="w-4 h-4" />
-			                        新增問題
+			                        新增四選一
+			                      </button>
+			                      <button
+			                        type="button"
+			                        onClick={addTowerDefenseMatchQuestion}
+			                        className="px-4 py-2 bg-lime-100 text-lime-900 border-2 border-lime-300 rounded-2xl font-bold hover:bg-lime-200 flex items-center gap-2"
+			                      >
+			                        <Plus className="w-4 h-4" />
+			                        新增配對
 			                      </button>
 			                    </div>
 			                  </div>
@@ -2424,7 +2491,12 @@ const TeacherDashboard: React.FC = () => {
 		                      {towerDefenseQuestions.map((q, questionIndex) => (
 		                        <div key={questionIndex} className="bg-emerald-50 border-4 border-emerald-200 rounded-3xl p-6">
 		                          <div className="flex justify-between items-start mb-4">
-		                            <h4 className="text-lg font-bold text-emerald-900">問題 {questionIndex + 1}</h4>
+		                            <div className="flex items-center gap-2">
+		                              <h4 className="text-lg font-bold text-emerald-900">題目 {questionIndex + 1}</h4>
+		                              <span className={`px-2 py-0.5 rounded-full text-xs font-black border-2 ${q.type === 'match' ? 'bg-lime-100 border-lime-300 text-lime-900' : 'bg-blue-100 border-blue-300 text-blue-900'}`}>
+		                                {q.type === 'match' ? '配對' : '四選一'}
+		                              </span>
+		                            </div>
 		                            <button
 		                              type="button"
 		                              onClick={() => removeTowerDefenseQuestion(questionIndex)}
@@ -2435,25 +2507,34 @@ const TeacherDashboard: React.FC = () => {
 		                          </div>
 
 		                          <div className="space-y-4">
-		                            <Input
-		                              label="問題內容"
-		                              placeholder="輸入問題..."
-		                              value={q.question}
-		                              onChange={(e) => updateTowerDefenseQuestion(questionIndex, 'question', e.target.value)}
-		                            />
+		                            {q.type === 'mcq' ? (
+		                              <Input
+		                                label="問題內容"
+		                                placeholder="輸入問題..."
+		                                value={q.prompt}
+		                                onChange={(e) => updateTowerDefensePrompt(questionIndex, e.target.value)}
+		                              />
+		                            ) : (
+		                              <Input
+		                                label="左邊（題幹）"
+		                                placeholder="例如：光合作用 / 2+3 / apple..."
+		                                value={q.left}
+		                                onChange={(e) => updateTowerDefenseLeft(questionIndex, e.target.value)}
+		                              />
+		                            )}
 
 		                            <div>
-		                              <label className="block text-sm font-bold text-emerald-800 mb-2">選項</label>
+		                              <label className="block text-sm font-bold text-emerald-800 mb-2">{q.type === 'match' ? '右邊選項（四選一）' : '選項'}</label>
 		                              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
 		                                {q.options.map((option, optionIndex) => (
 		                                  <div key={optionIndex} className="relative">
-		                                    <div className={`flex items-center gap-3 p-3 rounded-2xl border-2 ${q.correctAnswer === optionIndex ? 'bg-emerald-100 border-emerald-400' : 'bg-white border-emerald-200'
+		                                    <div className={`flex items-center gap-3 p-3 rounded-2xl border-2 ${q.correctIndex === optionIndex ? 'bg-emerald-100 border-emerald-400' : 'bg-white border-emerald-200'
 		                                      }`}>
 		                                      <input
 		                                        type="radio"
 		                                        name={`td-correct-${questionIndex}`}
-		                                        checked={q.correctAnswer === optionIndex}
-		                                        onChange={() => updateTowerDefenseQuestion(questionIndex, 'correctAnswer', optionIndex)}
+		                                        checked={q.correctIndex === optionIndex}
+		                                        onChange={() => updateTowerDefenseCorrectIndex(questionIndex, optionIndex)}
 		                                        className="w-4 h-4 text-emerald-600"
 		                                      />
 		                                      <span className="font-bold text-emerald-900 min-w-[20px]">
@@ -2467,7 +2548,7 @@ const TeacherDashboard: React.FC = () => {
 		                                        className="flex-1 px-3 py-2 border-2 border-emerald-200 rounded-xl focus:border-emerald-400 font-medium"
 		                                      />
 		                                    </div>
-		                                    {q.correctAnswer === optionIndex && (
+		                                    {q.correctIndex === optionIndex && (
 		                                      <div className="absolute -top-1 -right-1 w-6 h-6 bg-emerald-500 text-white rounded-full flex items-center justify-center text-xs font-bold">
 		                                        ✓
 		                                      </div>
@@ -2501,20 +2582,25 @@ const TeacherDashboard: React.FC = () => {
 	                        alert('請填寫遊戲標題');
 	                        return;
 	                      }
-	                      if (gameForm.targetClasses.length === 0 && gameForm.targetGroups.length === 0) {
-	                        alert('請選擇至少一個班級或分組');
-	                        return;
-	                      }
-		                      const cleanedQuestions = towerDefenseQuestions
-		                        .map(q => {
-		                          const question = q.question.trim();
-		                          const options = (q.options || []).map(o => o.trim());
-		                          const correctIndex = q.correctAnswer ?? 0;
-		                          const answer = options[correctIndex] || '';
-		                          const wrongOptions = options.filter((_, i) => i !== correctIndex).filter(Boolean);
-		                          return { question, answer, wrongOptions };
+		                      if (gameForm.targetClasses.length === 0 && gameForm.targetGroups.length === 0) {
+		                        alert('請選擇至少一個班級或分組');
+		                        return;
+		                      }
+		                      const cleanedQuestions: TowerDefenseQuestionDraft[] = towerDefenseQuestions
+		                        .map((q) => {
+		                          const options = (q.options || []).map((o) => String(o || '').trim());
+		                          const correctIndex = Number.isInteger(q.correctIndex) ? q.correctIndex : 0;
+		                          const safeCorrectIndex = Math.max(0, Math.min(3, correctIndex));
+		                          if (q.type === 'match') {
+		                            return { type: 'match', left: String(q.left || '').trim(), options, correctIndex: safeCorrectIndex };
+		                          }
+		                          return { type: 'mcq', prompt: String(q.prompt || '').trim(), options, correctIndex: safeCorrectIndex };
 		                        })
-		                        .filter(q => q.question && q.answer && q.wrongOptions.length >= 3);
+		                        .filter((q) => {
+		                          const filledOptions = Array.isArray(q.options) && q.options.length === 4 && q.options.every((o) => String(o || '').trim());
+		                          if (!filledOptions) return false;
+		                          return q.type === 'match' ? Boolean(q.left.trim()) : Boolean(q.prompt.trim());
+		                        });
 		                      if (cleanedQuestions.length === 0) {
 		                        alert('請至少新增一個完整題目（四個選項都要填，且需選擇正確答案）');
 		                        return;
@@ -2529,7 +2615,8 @@ const TeacherDashboard: React.FC = () => {
 		                        targetGroups: gameForm.targetGroups,
 		                        questions: cleanedQuestions,
 		                        difficulty: gameForm.difficulty,
-		                        timeLimitSeconds: towerDefenseTimeSeconds
+		                        timeLimitSeconds: towerDefenseTimeSeconds,
+		                        livesLimit: towerDefenseLivesEnabled ? towerDefenseLivesLimit : null
 		                      });
 
 		                      alert('答題塔防遊戲創建成功！');
@@ -2537,6 +2624,8 @@ const TeacherDashboard: React.FC = () => {
 		                      setGameType(null);
 			                      setTowerDefenseQuestions([]);
 			                      setTowerDefenseTimeSeconds(60);
+			                      setTowerDefenseLivesEnabled(true);
+			                      setTowerDefenseLivesLimit(10);
 			                      setGameForm({
 			                        title: '',
 			                        description: '',

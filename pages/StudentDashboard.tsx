@@ -1797,6 +1797,7 @@ const StudentDashboard: React.FC = () => {
 			                  subject={selectedGame.subject as Subject}
 			                  difficulty={(selectedGame.difficulty || 'medium') as any}
 			                  durationSeconds={Number(selectedGame.timeLimitSeconds) || 60}
+			                  livesLimit={selectedGame.livesLimit ?? null}
 			                  onExit={() => setShowGameModal(false)}
 			                  onStart={() => { setGameStartTime(new Date()); setGameTimerTick(0); }}
 			                  onComplete={(result) => {

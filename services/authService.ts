@@ -845,13 +845,10 @@ class AuthService {
     subject: string;
     targetClasses: string[];
     targetGroups?: string[];
-    questions: Array<{
-      question: string;
-      answer: string;
-      wrongOptions?: string[];
-    }>;
+    questions: any[];
     difficulty?: 'easy' | 'medium' | 'hard';
     timeLimitSeconds?: number;
+    livesLimit?: number | null;
   }): Promise<{ message: string; game: any }> {
     const response = await fetch(`${this.API_BASE}/games`, {
       method: 'POST',

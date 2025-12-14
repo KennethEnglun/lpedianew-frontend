@@ -5,17 +5,19 @@ type Difficulty = 'easy' | 'medium' | 'hard';
 type TowerType = 'soldier' | 'archer' | 'cannon';
 type EnemyKind = 'slime' | 'runner' | 'tank' | 'shooter';
 
-interface QuestionItem {
-  question: string;
-  answer: string;
-  wrongOptions?: string[];
-}
+type TowerDefenseQuestionRaw =
+  | { type: 'mcq'; prompt: string; options: string[]; correctIndex: number }
+  | { type: 'match'; left: string; options: string[]; correctIndex: number; prompt?: string }
+  | { question: string; answer: string; wrongOptions?: string[] }; // legacy
+
+type NormalizedQuestion = { kind: 'mcq' | 'match'; stem: string; options: string[]; correctIndex: number };
 
 interface Props {
-  questions: QuestionItem[];
+  questions: TowerDefenseQuestionRaw[];
   subject: Subject;
   difficulty: Difficulty;
   durationSeconds?: number;
+  livesLimit?: number | null;
   onExit: () => void;
   onStart?: () => void;
   onComplete: (result: {
@@ -55,6 +57,7 @@ interface Tower {
   gridX: number;
   gridY: number;
   type: TowerType;
+  level: number;
   range: number;
   damage: number;
   fireRate: number;
@@ -174,7 +177,7 @@ function shuffleArray<T>(items: T[]): T[] {
   return arr;
 }
 
-export const TowerDefenseGame: React.FC<Props> = ({ questions, subject, difficulty, durationSeconds, onExit, onStart, onComplete }) => {
+export const TowerDefenseGame: React.FC<Props> = ({ questions, subject, difficulty, durationSeconds, livesLimit, onExit, onStart, onComplete }) => {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
   const lastTimeRef = useRef<number>(0);
@@ -198,11 +201,17 @@ export const TowerDefenseGame: React.FC<Props> = ({ questions, subject, difficul
 
   const pathSet = useMemo(() => new Set(pathCells.map(p => `${p.x},${p.y}`)), [pathCells]);
 
-  const [gold, setGold] = useState(difficulty === 'easy' ? 80 : difficulty === 'medium' ? 60 : 45);
-  const [lives, setLives] = useState(10);
+  const livesEnabled = useMemo(() => livesLimit !== null && livesLimit !== undefined, [livesLimit]);
+  const initialLives = useMemo(() => {
+    if (!livesEnabled) return 10;
+    const n = Number(livesLimit);
+    if (!Number.isFinite(n)) return 10;
+    return Math.max(1, Math.min(99, Math.floor(n)));
+  }, [livesEnabled, livesLimit]);
+
+  const [lives, setLives] = useState(initialLives);
   const [wave, setWave] = useState(1);
   const [score, setScore] = useState(0);
-  const [selectedTowerType, setSelectedTowerType] = useState<TowerType | null>(null);
   const [towers, setTowers] = useState<Tower[]>([]);
   const [enemies, setEnemies] = useState<Enemy[]>([]);
   const [projectiles, setProjectiles] = useState<Projectile[]>([]);
@@ -210,12 +219,19 @@ export const TowerDefenseGame: React.FC<Props> = ({ questions, subject, difficul
 
   const [questionOpen, setQuestionOpen] = useState(false);
   const [questionIndex, setQuestionIndex] = useState(0);
+  const [currentQuestion, setCurrentQuestion] = useState<NormalizedQuestion | null>(null);
   const [currentOptions, setCurrentOptions] = useState<string[]>([]);
-  const [correctOption, setCorrectOption] = useState<string>('');
+  const [currentCorrectIndex, setCurrentCorrectIndex] = useState<number>(0);
+  const [answerResult, setAnswerResult] = useState<null | { selectedIndex: number; isCorrect: boolean; correctIndex: number; correctText: string; effectText: string }>(null);
   const [correctAnswers, setCorrectAnswers] = useState(0);
   const [totalAnswered, setTotalAnswered] = useState(0);
   const [gameOver, setGameOver] = useState(false);
   const [isRunning, setIsRunning] = useState(false);
+  const [buildPoints, setBuildPoints] = useState(0);
+  const [energy, setEnergy] = useState(0);
+  const [combo, setCombo] = useState(0);
+  const [battleHint, setBattleHint] = useState('');
+
   const [speedMultiplier, setSpeedMultiplier] = useState(1);
   const durationSecondsValue = useMemo(() => {
     const n = Number(durationSeconds);
@@ -258,8 +274,49 @@ export const TowerDefenseGame: React.FC<Props> = ({ questions, subject, difficul
   useEffect(() => { isRunningRef.current = isRunning; }, [isRunning]);
   useEffect(() => { speedRef.current = speedMultiplier; }, [speedMultiplier]);
 
-  const requiredQuestions = questions.filter(q => q.question && q.answer);
-  const hasQuestions = requiredQuestions.length > 0;
+  const normalizedQuestions = useMemo<NormalizedQuestion[]>(() => {
+    const list: NormalizedQuestion[] = [];
+    for (const raw of questions || []) {
+      if (!raw || typeof raw !== 'object') continue;
+
+      if ('type' in raw && (raw as any).type === 'mcq') {
+        const prompt = String((raw as any).prompt || '').trim();
+        const options = Array.isArray((raw as any).options) ? (raw as any).options.map((x: any) => String(x ?? '').trim()) : [];
+        const correctIndex = Number((raw as any).correctIndex ?? 0);
+        if (!prompt) continue;
+        if (options.length !== 4 || options.some((o: string) => !o)) continue;
+        if (!Number.isInteger(correctIndex) || correctIndex < 0 || correctIndex > 3) continue;
+        list.push({ kind: 'mcq', stem: prompt, options, correctIndex });
+        continue;
+      }
+
+      if ('type' in raw && (raw as any).type === 'match') {
+        const left = String((raw as any).left || '').trim();
+        const options = Array.isArray((raw as any).options) ? (raw as any).options.map((x: any) => String(x ?? '').trim()) : [];
+        const correctIndex = Number((raw as any).correctIndex ?? 0);
+        if (!left) continue;
+        if (options.length !== 4 || options.some((o: string) => !o)) continue;
+        if (!Number.isInteger(correctIndex) || correctIndex < 0 || correctIndex > 3) continue;
+        list.push({ kind: 'match', stem: left, options, correctIndex });
+        continue;
+      }
+
+      // legacy: {question, answer, wrongOptions}
+      if ('question' in raw && 'answer' in raw) {
+        const question = String((raw as any).question || '').trim();
+        const answer = String((raw as any).answer || '').trim();
+        const wrongOptions = Array.isArray((raw as any).wrongOptions) ? (raw as any).wrongOptions.map((x: any) => String(x ?? '').trim()) : [];
+        if (!question || !answer) continue;
+        const options = [answer, ...wrongOptions].filter(Boolean).slice(0, 4);
+        while (options.length < 4) options.push('（選項缺失）');
+        const shuffled = shuffleArray(options);
+        const correctIndex = Math.max(0, shuffled.indexOf(answer));
+        list.push({ kind: 'mcq', stem: question, options: shuffled, correctIndex });
+      }
+    }
+    return list;
+  }, [questions]);
+  const hasQuestions = normalizedQuestions.length > 0;
 
   const towerCatalog = useMemo(() => {
     return [
@@ -379,110 +436,256 @@ export const TowerDefenseGame: React.FC<Props> = ({ questions, subject, difficul
     setIsRunning(false);
   }
 
-  function startGame() {
-    if (gameOverRef.current || isRunningRef.current) return;
-    gameOverRef.current = false;
-    isRunningRef.current = true;
-    completedOnceRef.current = false;
-    reportedResultRef.current = false;
-    setEndReason(null);
-    setGameOver(false);
-    setIsRunning(true);
-    onStart?.();
+	  function startGame() {
+	    if (gameOverRef.current || isRunningRef.current) return;
+	    gameOverRef.current = false;
+	    isRunningRef.current = true;
+	    completedOnceRef.current = false;
+	    reportedResultRef.current = false;
+	    setEndReason(null);
+	    setGameOver(false);
+	    setIsRunning(true);
+	    onStart?.();
 
-    runStartAtMsRef.current = Date.now();
-    const dur = durationSecondsRef.current;
-    lastTimeLeftRef.current = dur;
-    setTimeLeft(dur);
-    simTimeRef.current = 0;
-    startTimeRef.current = new Date();
+	    runStartAtMsRef.current = Date.now();
+	    const dur = durationSecondsRef.current;
+	    lastTimeLeftRef.current = dur;
+	    setTimeLeft(dur);
+	    simTimeRef.current = 0;
+	    startTimeRef.current = new Date();
 
-    setWave(1);
-    setProjectiles([]);
-    spawnWave(1, true);
-  }
+	    setLives(initialLives);
+	    setWave(1);
+	    setScore(0);
+	    setBuildPoints(0);
+	    setEnergy(0);
+	    setCombo(0);
+	    setBattleHint('');
+	    setAnswerResult(null);
+	    setQuestionIndex(0);
+	    setCurrentQuestion(null);
+	    setCurrentOptions([]);
+	    setCurrentCorrectIndex(0);
+	    setQuestionOpen(false);
+	    setTowers([]);
+	    setProjectiles([]);
+	    setParticles([]);
+	    spawnWave(1, true);
 
-  function openNextQuestion() {
-    if (!hasQuestions || questionOpen || gameOver || !isRunningRef.current) return;
-    const next = requiredQuestions[questionIndex % requiredQuestions.length];
-    const wrongOptions = (next.wrongOptions || []).map(o => o.trim()).filter(Boolean);
-    const options = shuffleArray([next.answer, ...wrongOptions]).slice(0, 4);
-    setCorrectOption(next.answer);
-    setCurrentOptions(options);
-    setQuestionOpen(true);
-  }
+	    // start asking immediately; battle continues in background
+	    window.setTimeout(() => {
+	      if (!gameOverRef.current && isRunningRef.current) openNextQuestion();
+	    }, 500);
+	  }
 
-  function answerQuestion(option: string) {
-    setTotalAnswered(v => v + 1);
-    const isCorrect = option === correctOption;
-    if (isCorrect) {
-      const reward = difficulty === 'easy' ? 16 : difficulty === 'medium' ? 14 : 12;
-      setGold(v => v + reward);
-      setCorrectAnswers(v => v + 1);
-      setScore(v => v + reward);
-      spawnParticles(140, 120, 18, '#F8E2B5');
-    } else {
-      setGold(v => Math.max(0, v - 3));
-      spawnParticles(140, 120, 10, '#F8C5C5');
-    }
-    setQuestionOpen(false);
-    setQuestionIndex(v => (v + 1) % requiredQuestions.length);
-  }
+	  const buildRef = useRef<number>(0);
+	  const energyRef = useRef<number>(0);
+	  const comboRef = useRef<number>(0);
+	  useEffect(() => { buildRef.current = buildPoints; }, [buildPoints]);
+	  useEffect(() => { energyRef.current = energy; }, [energy]);
+	  useEffect(() => { comboRef.current = combo; }, [combo]);
 
-  function tryPlaceTower(gridX: number, gridY: number) {
-    if (!selectedTowerType || gameOver) return;
-    if (pathSet.has(`${gridX},${gridY}`)) return;
-    if (towers.some(t => t.gridX === gridX && t.gridY === gridY)) return;
+	  const slowUntilRef = useRef<number>(0);
+	  const freezeUntilRef = useRef<number>(0);
+	  const frenzyUntilRef = useRef<number>(0);
 
-    const spec = towerCatalog.find(t => t.type === selectedTowerType);
-    if (!spec) return;
-    if (gold < spec.cost) return;
+	  const questionTimeoutRef = useRef<number | null>(null);
+	  useEffect(() => {
+	    return () => {
+	      if (questionTimeoutRef.current) window.clearTimeout(questionTimeoutRef.current);
+	    };
+	  }, []);
 
-    setGold(v => v - spec.cost);
-    const newTower: Tower = {
-      id: Date.now() + Math.random(),
-      gridX,
-      gridY,
-      type: spec.type,
-      range: spec.range,
-      damage: spec.damage,
-      fireRate: spec.fireRate,
-      lastShotAt: 0,
-      projectileSpeed: spec.projectileSpeed,
-      maxHp: spec.maxHp,
-      hp: spec.maxHp
-    };
-    setTowers(prev => [...prev, newTower]);
-    const pos = isoToScreen(gridX, gridY);
-    spawnParticles(pos.x, pos.y, 20, spec.color);
-    setSelectedTowerType(null);
-  }
+	  const placeTowerAt = (gridX: number, gridY: number, type: TowerType) => {
+	    if (gameOverRef.current) return false;
+	    if (pathSet.has(`${gridX},${gridY}`)) return false;
+	    if (towersRef.current.some(t => t.gridX === gridX && t.gridY === gridY)) return false;
 
-  function handlePointerDown(event: React.PointerEvent<HTMLCanvasElement>) {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const rect = canvas.getBoundingClientRect();
-    const clickX = event.clientX - rect.left;
-    const clickY = event.clientY - rect.top;
+	    const spec = towerCatalog.find(t => t.type === type);
+	    if (!spec) return false;
 
-    let bestCell: GridCell | null = null;
-    let bestDistance = Infinity;
+	    const newTower: Tower = {
+	      id: Date.now() + Math.random(),
+	      gridX,
+	      gridY,
+	      type: spec.type,
+	      range: spec.range,
+	      damage: spec.damage,
+	      fireRate: spec.fireRate,
+	      lastShotAt: 0,
+	      projectileSpeed: spec.projectileSpeed,
+	      maxHp: spec.maxHp,
+	      hp: spec.maxHp,
+	      level: 1
+	    };
+	    setTowers(prev => [...prev, newTower]);
+	    const pos = isoToScreen(gridX, gridY);
+	    spawnParticles(pos.x, pos.y, 22, spec.color);
+	    return true;
+	  };
 
-    for (const cell of grid) {
-      const center = isoToScreen(cell.x, cell.y);
-      const dx = clickX - center.x;
-      const dy = clickY - center.y;
-      const dist = Math.hypot(dx, dy);
-      if (dist < 46 && dist < bestDistance) {
-        bestDistance = dist;
-        bestCell = cell;
-      }
-    }
+	  const upgradeRandomTower = () => {
+	    const list = towersRef.current;
+	    if (list.length === 0) return false;
+	    const pick = list[Math.floor(Math.random() * list.length)];
+	    setTowers(prev => prev.map(t => {
+	      if (t.id !== pick.id) return t;
+	      const nextLevel = (t.level || 1) + 1;
+	      return {
+	        ...t,
+	        level: nextLevel,
+	        damage: t.damage * 1.12,
+	        range: t.range + 8,
+	        fireRate: Math.max(0.28, t.fireRate * 0.94),
+	        maxHp: t.maxHp + 6,
+	        hp: t.hp + 6
+	      };
+	    }));
+	    const pos = isoToScreen(pick.gridX, pick.gridY);
+	    spawnParticles(pos.x, pos.y - 12, 26, '#F8E2B5');
+	    return true;
+	  };
 
-    if (bestCell && bestCell.isBuildable) {
-      tryPlaceTower(bestCell.x, bestCell.y);
-    }
-  }
+	  const pickTowerTypeForBattle = (): TowerType => {
+	    const list = enemiesRef.current;
+	    if (list.length === 0) return 'soldier';
+	    const counts = { runner: 0, tank: 0, shooter: 0, slime: 0 };
+	    list.forEach(e => { (counts as any)[e.kind] = ((counts as any)[e.kind] || 0) + 1; });
+	    const total = Math.max(1, list.length);
+	    if (counts.tank / total >= 0.28) return 'cannon';
+	    if (counts.runner / total >= 0.35) return 'archer';
+	    return 'soldier';
+	  };
+
+	  const findBestBuildCell = (type: TowerType) => {
+	    const spec = towerCatalog.find(t => t.type === type);
+	    if (!spec) return null;
+	    const occupied = new Set(towersRef.current.map(t => `${t.gridX},${t.gridY}`));
+	    let best: { x: number; y: number; score: number } | null = null;
+	    const path = pathCellsRef.current;
+	    const pathLen = Math.max(1, path.length);
+	    for (const cell of grid) {
+	      if (!cell.isBuildable) continue;
+	      const key = `${cell.x},${cell.y}`;
+	      if (occupied.has(key)) continue;
+	      const cPos = isoToScreen(cell.x, cell.y);
+	      let score = 0;
+	      for (let i = 0; i < path.length; i++) {
+	        const p = path[i];
+	        const pPos = isoToScreen(p.x, p.y);
+	        const d = Math.hypot(pPos.x - cPos.x, pPos.y - cPos.y);
+	        if (d <= spec.range) score += 1 + i / pathLen;
+	      }
+	      score += Math.random() * 0.05;
+	      if (!best || score > best.score) best = { x: cell.x, y: cell.y, score };
+	    }
+	    return best ? { x: best.x, y: best.y } : null;
+	  };
+
+	  const autoDeployOnce = () => {
+	    const type = pickTowerTypeForBattle();
+	    const cell = findBestBuildCell(type);
+	    if (cell) {
+	      placeTowerAt(cell.x, cell.y, type);
+	      setBattleHint(`自動部署：${towerCatalog.find(t => t.type === type)?.label || '塔'}`);
+	      return true;
+	    }
+	    if (upgradeRandomTower()) {
+	      setBattleHint('自動升級：防禦塔強化');
+	      return true;
+	    }
+	    return false;
+	  };
+
+	  const applySlow = (seconds: number) => {
+	    slowUntilRef.current = Math.max(slowUntilRef.current, simTimeRef.current + seconds);
+	    setBattleHint(`連對 ${comboRef.current}：全場減速 ${seconds}s`);
+	    spawnParticles(180, 120, 20, '#B5D8F8');
+	  };
+
+	  const applyFreeze = (seconds: number) => {
+	    freezeUntilRef.current = Math.max(freezeUntilRef.current, simTimeRef.current + seconds);
+	    setBattleHint(`連對 ${comboRef.current}：全場冰凍 ${seconds}s`);
+	    spawnParticles(180, 120, 26, '#C7D2FE');
+	  };
+
+	  const applyFrenzy = (seconds: number) => {
+	    frenzyUntilRef.current = Math.max(frenzyUntilRef.current, simTimeRef.current + seconds);
+	    setBattleHint(`連對 ${comboRef.current}：狂熱 ${seconds}s（射速提升）`);
+	    spawnParticles(180, 120, 26, '#FDE68A');
+	  };
+
+	  const openQuestionAt = (index: number) => {
+	    if (!hasQuestions || gameOverRef.current || !isRunningRef.current) return;
+	    if (normalizedQuestions.length === 0) return;
+	    const safeIndex = ((index % normalizedQuestions.length) + normalizedQuestions.length) % normalizedQuestions.length;
+	    const q = normalizedQuestions[safeIndex];
+	    const correctText = q.options[q.correctIndex];
+	    const options = shuffleArray(q.options);
+	    const correctIndex = options.indexOf(correctText);
+	    setQuestionIndex(safeIndex);
+	    setCurrentQuestion(q);
+	    setCurrentOptions(options);
+	    setCurrentCorrectIndex(Math.max(0, correctIndex));
+	    setAnswerResult(null);
+	    setQuestionOpen(true);
+	  };
+
+	  function openNextQuestion() {
+	    openQuestionAt(questionIndex);
+	  }
+
+	  function answerQuestion(selectedIndex: number) {
+	    if (!isRunningRef.current || gameOverRef.current) return;
+	    if (!currentQuestion) return;
+	    if (answerResult) return;
+
+	    setTotalAnswered(v => v + 1);
+	    const isCorrect = selectedIndex === currentCorrectIndex;
+	    const correctText = currentOptions[currentCorrectIndex] || '';
+
+	    if (isCorrect) {
+	      setCorrectAnswers(v => v + 1);
+	      setScore(v => v + 10 + (currentQuestion.kind === 'match' ? 2 : 0));
+	      spawnParticles(160, 120, 18, '#F8E2B5');
+	    } else {
+	      spawnParticles(160, 120, 12, '#F8C5C5');
+	    }
+
+	    const energyDelta = isCorrect ? (currentQuestion.kind === 'match' ? 12 : 10) : -5;
+	    const prevCombo = comboRef.current;
+	    const nextCombo = isCorrect ? prevCombo + 1 : 0;
+
+	    const prevBuild = buildRef.current;
+	    const nextBuildRaw = prevBuild + (isCorrect ? 1 : 0);
+	    const deployments = Math.floor(nextBuildRaw / 2);
+	    const nextBuild = nextBuildRaw % 2;
+
+	    setCombo(nextCombo);
+	    setEnergy(v => Math.max(0, v + energyDelta));
+	    setBuildPoints(nextBuild);
+
+	    if (deployments > 0) {
+	      for (let i = 0; i < deployments; i++) autoDeployOnce();
+	    }
+
+	    if (isCorrect && nextCombo === 3) applySlow(2);
+	    if (isCorrect && nextCombo === 5) applyFreeze(2);
+	    if (isCorrect && nextCombo === 8) applyFrenzy(6);
+
+	    setAnswerResult({
+	      selectedIndex,
+	      isCorrect,
+	      correctIndex: currentCorrectIndex,
+	      correctText,
+	      effectText: isCorrect ? '✅ 正確！' : `❌ 錯誤（正確：${correctText}）`
+	    });
+
+	    questionTimeoutRef.current = window.setTimeout(() => {
+	      const next = (questionIndex + 1) % Math.max(1, normalizedQuestions.length);
+	      openQuestionAt(next);
+	    }, 900);
+	  }
 
   function pickEnemyKind(currentWave: number): EnemyKind {
     const r = Math.random();
@@ -544,7 +747,7 @@ export const TowerDefenseGame: React.FC<Props> = ({ questions, subject, difficul
     setEnemies(prev => (replace ? list : [...prev, ...list]));
   }
 
-  function createProjectile(tower: Tower, target: Enemy, now: number): Projectile | null {
+  function createProjectile(tower: Tower, target: Enemy, now: number, damageFactor = 1): Projectile | null {
     const towerPos = isoToScreen(tower.gridX, tower.gridY);
     const targetPos = getEnemyPosition(target);
     const dx = targetPos.x - towerPos.x;
@@ -562,7 +765,7 @@ export const TowerDefenseGame: React.FC<Props> = ({ questions, subject, difficul
       y: towerPos.y - 8,
       vx,
       vy,
-      damage: tower.damage,
+      damage: tower.damage * damageFactor,
       color,
       life: 2.0,
       targetId: target.id
@@ -595,18 +798,27 @@ export const TowerDefenseGame: React.FC<Props> = ({ questions, subject, difficul
       });
     }
 
-    if (simDeltaSeconds <= 0) return;
+	    if (simDeltaSeconds <= 0) return;
+	
+	    const frozen = simNow < freezeUntilRef.current;
+	    const slowFactor = simNow < slowUntilRef.current ? 0.72 : 1;
+	    const moveFactor = frozen ? 0 : slowFactor;
+	    const frenzy = simNow < frenzyUntilRef.current;
+	    const frenzyFireRateFactor = frenzy ? 0.78 : 1;
+	    const frenzyDamageFactor = frenzy ? 1.18 : 1;
 
-    const movedEnemies: Enemy[] = [];
-    const pathLen = pathCellsRef.current.length || DEFAULT_PATH.length;
-    for (const enemy of enemiesSnapshot) {
-      const nextIndex = enemy.pathIndex + enemy.speed * simDeltaSeconds;
+	    const movedEnemies: Enemy[] = [];
+	    const pathLen = pathCellsRef.current.length || DEFAULT_PATH.length;
+	    for (const enemy of enemiesSnapshot) {
+	      const nextIndex = enemy.pathIndex + enemy.speed * moveFactor * simDeltaSeconds;
       if (nextIndex >= pathLen - 0.2) {
-        setLives(v => {
-          const newLives = v - 1;
-          if (newLives <= 0) finishGame('lives');
-          return newLives;
-        });
+        if (livesEnabled) {
+          setLives(v => {
+            const newLives = v - 1;
+            if (newLives <= 0) finishGame('lives');
+            return newLives;
+          });
+        }
         continue;
       }
       movedEnemies.push({ ...enemy, pathIndex: nextIndex });
@@ -662,8 +874,8 @@ export const TowerDefenseGame: React.FC<Props> = ({ questions, subject, difficul
     const enemiesToUpdate = finalEnemies.map(e => ({ ...e }));
     let towersToUpdate = towersSnapshot.map(t => ({ ...t }));
 
-    // Shooter enemies can attack towers
-    if (enemiesToUpdate.length > 0 && towersToUpdate.length > 0) {
+    // Shooter enemies can attack towers (disabled when frozen)
+    if (!frozen && enemiesToUpdate.length > 0 && towersToUpdate.length > 0) {
       for (const enemy of enemiesToUpdate) {
         if (enemy.kind !== 'shooter') continue;
         const cooldown = enemy.attackCooldown ?? 1.1;
@@ -705,8 +917,8 @@ export const TowerDefenseGame: React.FC<Props> = ({ questions, subject, difficul
           .filter(item => Math.hypot(item.pos.x - towerPos.x, item.pos.y - towerPos.y) <= tower.range)
           .sort((a, b) => a.enemy.pathIndex - b.enemy.pathIndex);
 
-        if (inRange.length > 0 && simNow - tower.lastShotAt >= tower.fireRate) {
-          const projectile = createProjectile(tower, inRange[inRange.length - 1].enemy, simNow);
+        if (inRange.length > 0 && simNow - tower.lastShotAt >= tower.fireRate * frenzyFireRateFactor) {
+          const projectile = createProjectile(tower, inRange[inRange.length - 1].enemy, simNow, frenzyDamageFactor);
           if (projectile) newProjectiles.push(projectile);
         }
       }
@@ -980,130 +1192,116 @@ export const TowerDefenseGame: React.FC<Props> = ({ questions, subject, difficul
     );
   }
 
-  return (
-    <div className="relative w-full h-full flex flex-col">
-      <div className="flex flex-wrap items-center gap-3 mb-4">
-        <div className="bg-[#111] border-2 border-[#444] rounded-xl px-4 py-2 text-white font-bold">
-          金幣: <span className="text-yellow-300">{gold}</span>
-        </div>
-        <div className="bg-[#111] border-2 border-[#444] rounded-xl px-4 py-2 text-white font-bold">
-          生命: <span className="text-red-300">{lives}</span>
-        </div>
-        <div className="bg-[#111] border-2 border-[#444] rounded-xl px-4 py-2 text-white font-bold">
-          波次: {wave}
-        </div>
-        <div className="bg-[#111] border-2 border-[#444] rounded-xl px-4 py-2 text-white font-bold">
-          分數: {score}
-        </div>
-        <div className="bg-[#111] border-2 border-[#444] rounded-xl px-4 py-2 text-white font-bold">
-          剩餘時間: <span className={`${timeLeft <= 10 ? 'text-red-300' : 'text-emerald-300'}`}>{timeLeft}s</span>
-        </div>
+	  return (
+	    <div className="relative w-full h-full flex flex-col">
+	      <div className="flex flex-wrap items-center gap-3 mb-4">
+	        <div className="bg-[#111] border-2 border-[#444] rounded-xl px-4 py-2 text-white font-bold">
+	          建造點: <span className="text-yellow-300">{buildPoints}/2</span>
+	        </div>
+	        <div className="bg-[#111] border-2 border-[#444] rounded-xl px-4 py-2 text-white font-bold">
+	          能量: <span className="text-emerald-300">{energy}</span>
+	        </div>
+	        <div className="bg-[#111] border-2 border-[#444] rounded-xl px-4 py-2 text-white font-bold">
+	          連對: <span className="text-yellow-200">{combo}</span>
+	        </div>
+	        {livesEnabled && (
+	          <div className="bg-[#111] border-2 border-[#444] rounded-xl px-4 py-2 text-white font-bold">
+	            生命: <span className="text-red-300">{lives}</span>
+	          </div>
+	        )}
+	        <div className="bg-[#111] border-2 border-[#444] rounded-xl px-4 py-2 text-white font-bold">
+	          波次: {wave}
+	        </div>
+	        <div className="bg-[#111] border-2 border-[#444] rounded-xl px-4 py-2 text-white font-bold">
+	          分數: {score}
+	        </div>
+	        <div className="bg-[#111] border-2 border-[#444] rounded-xl px-4 py-2 text-white font-bold">
+	          剩餘時間: <span className={`${timeLeft <= 10 ? 'text-red-300' : 'text-emerald-300'}`}>{timeLeft}s</span>
+	        </div>
+	        <div className="ml-auto flex items-center gap-2 bg-[#111] border-2 border-[#444] rounded-xl px-3 py-2 text-white font-bold">
+	          <span className="text-2xl">{SUBJECT_CONFIG[subject]?.icon}</span>
+	          <span>{subject}</span>
+	        </div>
+	      </div>
 
-        <button
-          onClick={openNextQuestion}
-          disabled={!isRunning || questionOpen || gameOver}
-          className="ml-auto px-4 py-2 bg-yellow-400 hover:bg-yellow-300 text-brand-brown font-black rounded-xl border-2 border-brand-brown shadow-comic disabled:opacity-50"
-        >
-          {isRunning ? '答下一題賺金幣' : '按開始後才能答題'}
-        </button>
-      </div>
+	      {battleHint && (
+	        <div className="mb-3 text-sm text-emerald-200 font-bold">
+	          {battleHint}
+	        </div>
+	      )}
 
-      <div className="flex gap-4 mb-4">
-        {towerCatalog.map(spec => (
-          <button
-            key={spec.type}
-            onClick={() => setSelectedTowerType(spec.type)}
-            disabled={gold < spec.cost || gameOver}
-            className={`px-4 py-3 rounded-2xl border-4 font-black transition-all shadow-comic ${
-              selectedTowerType === spec.type
-                ? 'bg-white border-yellow-400 scale-105'
-                : 'bg-[#FDEFCB] border-brand-brown hover:scale-105'
-            } disabled:opacity-50`}
-          >
-            <div className="text-lg">{spec.label}</div>
-            <div className="text-sm">💰 {spec.cost}</div>
-          </button>
-        ))}
-        <div className="ml-auto flex items-center gap-3">
-          <div className="flex items-center gap-2 bg-[#111] border-2 border-[#444] rounded-xl px-3 py-2 text-white font-bold">
-            <span className="text-xs opacity-80">速度</span>
-            <select
-              value={speedMultiplier}
-              onChange={(e) => setSpeedMultiplier(Number(e.target.value))}
-              className="bg-transparent border border-white/20 rounded-lg px-2 py-1 text-white font-bold"
-            >
-              <option value={0.5}>0.5x</option>
-              <option value={1}>1x</option>
-              <option value={1.5}>1.5x</option>
-              <option value={2}>2x</option>
-            </select>
-          </div>
-          <div className="flex items-center gap-2 bg-[#111] border-2 border-[#444] rounded-xl px-3 py-2 text-white font-bold">
-            <span className="text-2xl">{SUBJECT_CONFIG[subject]?.icon}</span>
-            <span>{subject}</span>
-          </div>
-        </div>
-      </div>
-
-      <div ref={containerRef} className="relative flex-1 rounded-2xl border-4 border-brand-brown bg-[#101418] overflow-hidden shadow-comic-xl">
-        <canvas
-          ref={canvasRef}
-          className="w-full h-full"
-          onPointerDown={handlePointerDown}
-        />
-        {!isRunning && !gameOver && (
-          <div className="absolute inset-0 flex items-center justify-center bg-black/35">
-            <div className="bg-white/95 border-4 border-brand-brown rounded-3xl px-6 py-5 shadow-comic-xl text-center max-w-md">
-              <div className="text-2xl font-black text-brand-brown mb-2">準備階段</div>
-              <div className="text-sm text-gray-700 mb-4">
-                先用初始金幣放置士兵，準備好後按「開始」進入戰鬥。
-              </div>
-              <button
-                onClick={startGame}
-                className="px-6 py-3 bg-emerald-500 hover:bg-emerald-600 text-white font-black rounded-2xl border-2 border-brand-brown shadow-comic"
+	      <div ref={containerRef} className="relative flex-1 rounded-2xl border-4 border-brand-brown bg-[#101418] overflow-hidden shadow-comic-xl">
+	        <canvas
+	          ref={canvasRef}
+	          className="w-full h-full"
+	        />
+	        {!isRunning && !gameOver && (
+	          <div className="absolute inset-0 flex items-center justify-center bg-black/35">
+	            <div className="bg-white/95 border-4 border-brand-brown rounded-3xl px-6 py-5 shadow-comic-xl text-center max-w-md">
+	              <div className="text-2xl font-black text-brand-brown mb-2">準備階段</div>
+	              <div className="text-sm text-gray-700 mb-4">
+	                系統會自動部署防禦與技能；按「開始」後請專心答題。
+	              </div>
+	              <button
+	                onClick={startGame}
+	                className="px-6 py-3 bg-emerald-500 hover:bg-emerald-600 text-white font-black rounded-2xl border-2 border-brand-brown shadow-comic"
               >
                 開始
               </button>
-            </div>
-          </div>
-        )}
-        {selectedTowerType && (
-          <div className="absolute inset-x-0 bottom-3 flex justify-center pointer-events-none">
-            <div className="bg-white/90 border-2 border-brand-brown rounded-full px-4 py-2 text-brand-brown font-black shadow-comic">
-              點擊地面放置「{towerCatalog.find(t => t.type === selectedTowerType)?.label}」
-            </div>
-          </div>
-        )}
-      </div>
+	            </div>
+	          </div>
+	        )}
+	      </div>
 
-      {questionOpen && (
-        <div className="absolute inset-0 bg-black/70 flex items-center justify-center z-40 p-4">
-          <div className="bg-white border-4 border-brand-brown rounded-3xl w-full max-w-2xl p-6 shadow-comic-xl">
-            <h3 className="text-2xl font-black text-brand-brown mb-4">
-              {requiredQuestions[questionIndex % requiredQuestions.length].question}
-            </h3>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-              {currentOptions.map(option => (
-                <button
-                  key={option}
-                  onClick={() => answerQuestion(option)}
-                  className="px-4 py-3 bg-[#FEF7EC] hover:bg-[#FDEFCB] border-4 border-brand-brown rounded-2xl font-black text-brand-brown shadow-comic transition-transform hover:scale-105"
-                >
-                  {option}
-                </button>
-              ))}
-            </div>
-            <div className="mt-4 text-center">
-              <button
-                onClick={() => { setQuestionOpen(false); setQuestionIndex(v => (v + 1) % requiredQuestions.length); }}
-                className="text-sm text-gray-500 underline"
-              >
-                先跳過
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+	      {questionOpen && currentQuestion && (
+	        <div className="absolute inset-0 bg-black/55 flex items-center justify-center z-40 p-4">
+	          <div className="bg-white border-4 border-brand-brown rounded-3xl w-full max-w-2xl p-6 shadow-comic-xl">
+	            <div className="flex items-center gap-2 mb-3">
+	              <span className={`px-2 py-0.5 rounded-full text-xs font-black border-2 ${currentQuestion.kind === 'match' ? 'bg-lime-100 border-lime-300 text-lime-900' : 'bg-blue-100 border-blue-300 text-blue-900'}`}>
+	                {currentQuestion.kind === 'match' ? '配對' : '四選一'}
+	              </span>
+	              <span className="text-xs text-gray-500 font-bold">
+	                已答：{totalAnswered}／正確：{correctAnswers}
+	              </span>
+	            </div>
+
+	            <h3 className="text-2xl font-black text-brand-brown mb-4">
+	              {currentQuestion.kind === 'match' ? `選出與「${currentQuestion.stem}」相符的答案` : currentQuestion.stem}
+	            </h3>
+
+	            {answerResult && (
+	              <div className={`mb-4 px-4 py-3 rounded-2xl border-2 font-black ${answerResult.isCorrect ? 'bg-emerald-50 border-emerald-200 text-emerald-800' : 'bg-red-50 border-red-200 text-red-700'}`}>
+	                {answerResult.effectText}
+	              </div>
+	            )}
+
+	            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+	              {currentOptions.map((option, idx) => {
+	                const locked = Boolean(answerResult);
+	                const isCorrect = idx === currentCorrectIndex;
+	                const isChosen = answerResult?.selectedIndex === idx;
+	                const base = 'px-4 py-3 border-4 rounded-2xl font-black shadow-comic transition-transform';
+	                const state = (() => {
+	                  if (!locked) return 'bg-[#FEF7EC] hover:bg-[#FDEFCB] border-brand-brown text-brand-brown hover:scale-105';
+	                  if (isCorrect) return 'bg-emerald-100 border-emerald-500 text-emerald-900';
+	                  if (isChosen && !isCorrect) return 'bg-red-100 border-red-500 text-red-900';
+	                  return 'bg-gray-100 border-gray-200 text-gray-400';
+	                })();
+	                return (
+	                  <button
+	                    key={`${idx}-${option}`}
+	                    onClick={() => answerQuestion(idx)}
+	                    disabled={locked}
+	                    className={`${base} ${state}`}
+	                  >
+	                    {option}
+	                  </button>
+	                );
+	              })}
+	            </div>
+	          </div>
+	        </div>
+	      )}
 
       <div className="mt-3 text-xs text-gray-400 text-center">
         題庫會循環出題；每次選項隨機排列。
