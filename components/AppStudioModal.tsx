@@ -613,7 +613,14 @@ const AppStudioModal: React.FC<{
       setGenerating(true);
       setGenerateStage(0);
       setGenerateError('');
-      const resp = await authService.generateAppStudio({ prompt: p });
+      const baseIndexHtml = String(generatedHtml || '').trim();
+      const isEdit = Boolean(baseIndexHtml);
+      const resp = await authService.generateAppStudio({
+        prompt: p,
+        mode: isEdit ? 'edit' : 'new',
+        baseTitle: isEdit ? String(generatedTitle || selectedApp?.title || '').trim() : undefined,
+        baseIndexHtml: isEdit ? baseIndexHtml : undefined
+      });
       setGeneratedTitle(String(resp.title || '小程式'));
       setGeneratedHtml(String(resp.indexHtml || ''));
       setPreviewStopped(false);
