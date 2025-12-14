@@ -149,8 +149,19 @@ const TeacherDashboard: React.FC = () => {
 
   const [towerDefenseQuestions, setTowerDefenseQuestions] = useState<TowerDefenseQuestionDraft[]>([]);
   const [towerDefenseTimeSeconds, setTowerDefenseTimeSeconds] = useState(60);
+  const [towerDefenseTimeSecondsText, setTowerDefenseTimeSecondsText] = useState('60');
   const [towerDefenseLivesEnabled, setTowerDefenseLivesEnabled] = useState(true);
   const [towerDefenseLivesLimit, setTowerDefenseLivesLimit] = useState(10);
+
+  useEffect(() => {
+    setTowerDefenseTimeSecondsText(String(towerDefenseTimeSeconds));
+  }, [towerDefenseTimeSeconds]);
+
+  const clampTowerDefenseTimeSeconds = (raw: string, fallback: number) => {
+    const n = Number.parseInt(String(raw || '').trim(), 10);
+    if (!Number.isFinite(n)) return Math.max(10, Math.min(600, fallback));
+    return Math.max(10, Math.min(600, n));
+  };
 
   // 處理內容顯示的輔助函數
   const getDisplayContent = (content: any) => {
@@ -2277,7 +2288,7 @@ const TeacherDashboard: React.FC = () => {
 	                  <h2 className="text-3xl font-black text-emerald-800">創建答題塔防遊戲</h2>
 	                </div>
 			                <button
-			                  onClick={() => { setShowGameModal(false); setGameType(null); setTowerDefenseQuestions([]); setTowerDefenseTimeSeconds(60); }}
+			                  onClick={() => { setShowGameModal(false); setGameType(null); setTowerDefenseQuestions([]); setTowerDefenseTimeSeconds(60); setTowerDefenseTimeSecondsText('60'); }}
 			                  className="w-10 h-10 rounded-full bg-white border-2 border-emerald-400 hover:bg-emerald-50 flex items-center justify-center"
 			                >
 		                  <X className="w-6 h-6 text-emerald-700" />
@@ -2393,11 +2404,20 @@ const TeacherDashboard: React.FC = () => {
 		                <div>
 		                  <label className="block text-sm font-bold text-emerald-800 mb-2">遊戲時間（秒）</label>
 		                  <input
-		                    type="number"
-		                    min={10}
-		                    max={600}
-		                    value={towerDefenseTimeSeconds}
-		                    onChange={(e) => setTowerDefenseTimeSeconds(Math.max(10, Math.min(600, parseInt(e.target.value) || 60)))}
+		                    type="text"
+		                    inputMode="numeric"
+		                    pattern="[0-9]*"
+		                    value={towerDefenseTimeSecondsText}
+		                    onChange={(e) => {
+		                      const v = e.target.value;
+		                      if (/^[0-9]*$/.test(v)) setTowerDefenseTimeSecondsText(v);
+		                    }}
+		                    onBlur={() => setTowerDefenseTimeSeconds((prev) => clampTowerDefenseTimeSeconds(towerDefenseTimeSecondsText, prev))}
+		                    onKeyDown={(e) => {
+		                      if (e.key === 'Enter') {
+		                        (e.currentTarget as HTMLInputElement).blur();
+		                      }
+		                    }}
 		                    className="w-full px-4 py-2 border-4 border-emerald-300 rounded-2xl bg-white font-bold"
 		                  />
 		                  <p className="text-xs text-gray-500 mt-1">建議 30–180 秒；預設 60 秒</p>
@@ -2615,7 +2635,7 @@ const TeacherDashboard: React.FC = () => {
 		                        targetGroups: gameForm.targetGroups,
 		                        questions: cleanedQuestions,
 		                        difficulty: gameForm.difficulty,
-		                        timeLimitSeconds: towerDefenseTimeSeconds,
+		                        timeLimitSeconds: clampTowerDefenseTimeSeconds(towerDefenseTimeSecondsText, towerDefenseTimeSeconds),
 		                        livesLimit: towerDefenseLivesEnabled ? towerDefenseLivesLimit : null
 		                      });
 
@@ -2624,6 +2644,7 @@ const TeacherDashboard: React.FC = () => {
 		                      setGameType(null);
 			                      setTowerDefenseQuestions([]);
 			                      setTowerDefenseTimeSeconds(60);
+			                      setTowerDefenseTimeSecondsText('60');
 			                      setTowerDefenseLivesEnabled(true);
 			                      setTowerDefenseLivesLimit(10);
 			                      setGameForm({
