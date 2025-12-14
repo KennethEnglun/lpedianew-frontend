@@ -2055,41 +2055,40 @@ export const TowerDefenseGame: React.FC<Props> = ({ questions, subject, difficul
 	        </div>
 	      )}
 
-	      {(effectUi.freeze > 0 || effectUi.slow > 0 || effectUi.frenzy > 0) && (
-	        <div className="mb-3 flex flex-wrap gap-2">
-	          {(() => {
-	            const items: Array<{ key: 'freeze' | 'slow' | 'frenzy'; label: string; color: string; border: string; window: { start: number; end: number } }> = [
-	              { key: 'freeze', label: '冰凍', color: 'bg-indigo-100 text-indigo-900', border: 'border-indigo-300', window: freezeUiWindowRef.current },
-	              { key: 'slow', label: '減速', color: 'bg-sky-100 text-sky-900', border: 'border-sky-300', window: slowUiWindowRef.current },
-	              { key: 'frenzy', label: '狂熱', color: 'bg-amber-100 text-amber-900', border: 'border-amber-300', window: frenzyUiWindowRef.current }
-	            ];
-	            const getRem = (k: 'freeze' | 'slow' | 'frenzy') => (k === 'freeze' ? effectUi.freeze : k === 'slow' ? effectUi.slow : effectUi.frenzy);
-	            return items
-	              .map((it) => {
-	                const rem = getRem(it.key);
-	                if (rem <= 0) return null;
-	                const denom = Math.max(0.001, it.window.end - it.window.start);
-	                const pct = Math.max(0, Math.min(1, rem / denom));
-	                return (
-	                  <div key={it.key} className={`flex items-center gap-2 px-3 py-2 rounded-2xl border-2 ${it.color} ${it.border} font-black`}>
-	                    <span>{it.label}</span>
-	                    <div className="w-24 h-2 rounded-full bg-white/70 border border-black/10 overflow-hidden">
-	                      <div className="h-full bg-black/50" style={{ width: `${pct * 100}%` }} />
-	                    </div>
-	                    <span className="text-xs opacity-80">{Math.ceil(rem)}s</span>
-	                  </div>
-	                );
-	              })
-	              .filter(Boolean);
-	          })()}
-	        </div>
-	      )}
-
-	      <div ref={containerRef} className="flex-1 min-h-0 rounded-2xl border-4 border-brand-brown bg-[#101418] overflow-hidden shadow-comic-xl">
+	      <div ref={containerRef} className="relative flex-1 min-h-0 rounded-2xl border-4 border-brand-brown bg-[#101418] overflow-hidden shadow-comic-xl">
 	        <canvas
 	          ref={canvasRef}
 	          className="w-full h-full"
 	        />
+	        {(effectUi.freeze > 0 || effectUi.slow > 0 || effectUi.frenzy > 0) && (
+	          <div className="pointer-events-none absolute left-3 top-3 z-10 flex flex-col gap-2">
+	            {(() => {
+	              const items: Array<{ key: 'freeze' | 'slow' | 'frenzy'; label: string; color: string; border: string; window: { start: number; end: number } }> = [
+	                { key: 'freeze', label: '冰凍', color: 'bg-indigo-100 text-indigo-900', border: 'border-indigo-300', window: freezeUiWindowRef.current },
+	                { key: 'slow', label: '減速', color: 'bg-sky-100 text-sky-900', border: 'border-sky-300', window: slowUiWindowRef.current },
+	                { key: 'frenzy', label: '狂熱', color: 'bg-amber-100 text-amber-900', border: 'border-amber-300', window: frenzyUiWindowRef.current }
+	              ];
+	              const getRem = (k: 'freeze' | 'slow' | 'frenzy') => (k === 'freeze' ? effectUi.freeze : k === 'slow' ? effectUi.slow : effectUi.frenzy);
+	              return items
+	                .map((it) => {
+	                  const rem = getRem(it.key);
+	                  if (rem <= 0) return null;
+	                  const denom = Math.max(0.001, it.window.end - it.window.start);
+	                  const pct = Math.max(0, Math.min(1, rem / denom));
+	                  return (
+	                    <div key={it.key} className={`flex items-center gap-2 px-3 py-2 rounded-2xl border-2 ${it.color} ${it.border} font-black shadow-comic`}>
+	                      <span>{it.label}</span>
+	                      <div className="w-20 h-2 rounded-full bg-white/70 border border-black/10 overflow-hidden">
+	                        <div className="h-full bg-black/55" style={{ width: `${pct * 100}%` }} />
+	                      </div>
+	                      <span className="text-xs opacity-80">{Math.ceil(rem)}s</span>
+	                    </div>
+	                  );
+	                })
+	                .filter(Boolean);
+	            })()}
+	          </div>
+	        )}
 	      </div>
 
 	      <div className="mt-3 bg-white border-4 border-brand-brown rounded-3xl p-4 shadow-comic-xl">
