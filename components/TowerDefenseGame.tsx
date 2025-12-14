@@ -255,6 +255,258 @@ function drawCuteFace(ctx: CanvasRenderingContext2D, size: number, mood: 'smile'
   ctx.restore();
 }
 
+function drawInkMinionFace(
+  ctx: CanvasRenderingContext2D,
+  size: number,
+  mood: 'smile' | 'grit' | 'wink',
+  seed: number
+) {
+  ctx.save();
+
+  // eye whites (helps on dark ink body)
+  ctx.fillStyle = 'rgba(255,255,255,0.92)';
+  ctx.beginPath();
+  ctx.arc(-size * 0.34, -size * 0.16, size * 0.18, 0, Math.PI * 2);
+  ctx.arc(size * 0.34, -size * 0.16, size * 0.18, 0, Math.PI * 2);
+  ctx.fill();
+
+  // pupils
+  ctx.fillStyle = 'rgba(20,12,10,0.95)';
+  const pupilJitter = (hash01(seed, 1, 99) - 0.5) * size * 0.05;
+  ctx.beginPath();
+  ctx.arc(-size * 0.34 + pupilJitter, -size * 0.14, size * 0.08, 0, Math.PI * 2);
+  ctx.arc(size * 0.34 + pupilJitter, -size * 0.14, size * 0.08, 0, Math.PI * 2);
+  ctx.fill();
+
+  // wink line
+  if (mood === 'wink') {
+    ctx.strokeStyle = 'rgba(20,12,10,0.95)';
+    ctx.lineWidth = Math.max(2, size * 0.085);
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    ctx.moveTo(size * 0.18, -size * 0.16);
+    ctx.lineTo(size * 0.48, -size * 0.16);
+    ctx.stroke();
+  }
+
+  // eyebrows (mischievous)
+  ctx.strokeStyle = 'rgba(20,12,10,0.8)';
+  ctx.lineWidth = Math.max(2, size * 0.07);
+  ctx.lineCap = 'round';
+  ctx.beginPath();
+  ctx.moveTo(-size * 0.5, -size * 0.38);
+  ctx.lineTo(-size * 0.2, -size * 0.44);
+  ctx.moveTo(size * 0.2, -size * 0.44);
+  ctx.lineTo(size * 0.5, -size * 0.38);
+  ctx.stroke();
+
+  // mouth
+  ctx.strokeStyle = 'rgba(20,12,10,0.85)';
+  ctx.lineWidth = Math.max(2, size * 0.09);
+  ctx.lineCap = 'round';
+  ctx.beginPath();
+  if (mood === 'grit') {
+    ctx.moveTo(-size * 0.28, size * 0.2);
+    ctx.lineTo(size * 0.28, size * 0.2);
+  } else {
+    ctx.arc(0, size * 0.17, size * 0.32, 0, Math.PI);
+  }
+  ctx.stroke();
+
+  // tiny tooth
+  if (mood !== 'grit') {
+    ctx.fillStyle = 'rgba(255,255,255,0.92)';
+    ctx.beginPath();
+    ctx.moveTo(size * 0.06, size * 0.2);
+    ctx.lineTo(size * 0.16, size * 0.2);
+    ctx.lineTo(size * 0.11, size * 0.28);
+    ctx.closePath();
+    ctx.fill();
+  }
+
+  ctx.restore();
+}
+
+function drawInkMinion(
+  ctx: CanvasRenderingContext2D,
+  opts: {
+    kind: EnemyKind;
+    size: number;
+    seed: number;
+    simNow: number;
+  }
+) {
+  const outline = COLORS.border;
+  const baseInk = '#374151'; // slate 700
+  const deepInk = '#1F2937'; // slate 800
+  const accent = (() => {
+    if (opts.kind === 'runner') return '#FDE68A';
+    if (opts.kind === 'tank') return '#93C5FD';
+    if (opts.kind === 'shooter') return '#FBCFE8';
+    return '#9CA3AF';
+  })();
+  const mood: 'smile' | 'grit' | 'wink' = (() => {
+    if (opts.kind === 'tank') return 'grit';
+    if (opts.kind === 'runner') return 'wink';
+    return 'smile';
+  })();
+
+  const wobble = Math.sin(opts.simNow * 0.003 + opts.seed * 0.01) * 0.04;
+
+  // Body
+  ctx.save();
+  ctx.fillStyle = baseInk;
+  ctx.strokeStyle = outline;
+  ctx.lineWidth = 3;
+
+  if (opts.kind === 'tank') {
+    drawRoundRect(ctx, -opts.size * 1.05, -opts.size * 0.95, opts.size * 2.1, opts.size * 1.95, 14);
+  } else if (opts.kind === 'runner') {
+    ctx.save();
+    ctx.scale(1.08, 0.9 + wobble);
+    drawBlob(ctx, opts.size * 0.96, opts.seed + 11);
+    ctx.restore();
+  } else if (opts.kind === 'shooter') {
+    drawBlob(ctx, opts.size * 0.98, opts.seed + 5);
+  } else {
+    // slime
+    drawBlob(ctx, opts.size, opts.seed);
+  }
+
+  ctx.fill();
+  ctx.stroke();
+
+  // ink shine
+  const shine = ctx.createRadialGradient(-opts.size * 0.35, -opts.size * 0.45, opts.size * 0.15, -opts.size * 0.1, -opts.size * 0.2, opts.size * 1.3);
+  shine.addColorStop(0, 'rgba(255,255,255,0.30)');
+  shine.addColorStop(0.35, 'rgba(255,255,255,0.10)');
+  shine.addColorStop(1, 'rgba(255,255,255,0)');
+  ctx.fillStyle = shine;
+  ctx.fill();
+
+  // ink speckles
+  ctx.save();
+  ctx.globalAlpha = 0.22;
+  ctx.fillStyle = deepInk;
+  for (let i = 0; i < 6; i++) {
+    const a = hash01(opts.seed, i, 77) * Math.PI * 2;
+    const rr = (0.2 + hash01(opts.seed, i, 78) * 0.75) * opts.size * 0.65;
+    const x = Math.cos(a) * rr * 0.9;
+    const y = Math.sin(a) * rr * 0.75;
+    const r = (0.06 + hash01(opts.seed, i, 79) * 0.08) * opts.size;
+    ctx.beginPath();
+    ctx.arc(x, y, r, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.restore();
+
+  // slime drips
+  if (opts.kind === 'slime') {
+    ctx.save();
+    ctx.fillStyle = deepInk;
+    ctx.globalAlpha = 0.35;
+    for (let i = 0; i < 3; i++) {
+      const x = (-0.55 + i * 0.55) * opts.size;
+      const y = opts.size * (0.55 + hash01(opts.seed, i, 91) * 0.15);
+      const r = opts.size * (0.12 + hash01(opts.seed, i, 92) * 0.08);
+      ctx.beginPath();
+      ctx.arc(x, y, r, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.restore();
+  }
+
+  // Face (white eyes so it reads on ink)
+  drawInkMinionFace(ctx, opts.size, mood, opts.seed);
+
+  // Type accessories
+  if (opts.kind === 'runner') {
+    // scarf + shoes + speed lines
+    ctx.save();
+    ctx.strokeStyle = accent;
+    ctx.lineWidth = 5;
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    ctx.moveTo(-opts.size * 0.35, opts.size * 0.06);
+    ctx.lineTo(opts.size * 0.45, opts.size * 0.12);
+    ctx.stroke();
+    ctx.restore();
+
+    ctx.save();
+    ctx.fillStyle = accent;
+    ctx.globalAlpha = 0.25;
+    ctx.strokeStyle = 'rgba(255,255,255,0.55)';
+    ctx.lineWidth = 3;
+    for (let k = 0; k < 3; k++) {
+      ctx.beginPath();
+      ctx.moveTo(-opts.size * 1.15, -opts.size * 0.25 + k * 10);
+      ctx.lineTo(-opts.size * 0.62, -opts.size * 0.35 + k * 10);
+      ctx.stroke();
+    }
+    ctx.restore();
+
+    ctx.save();
+    ctx.fillStyle = '#5E4C40';
+    drawRoundRect(ctx, -opts.size * 0.55, opts.size * 0.55, opts.size * 0.45, opts.size * 0.22, 6);
+    ctx.fill();
+    drawRoundRect(ctx, opts.size * 0.1, opts.size * 0.55, opts.size * 0.45, opts.size * 0.22, 6);
+    ctx.fill();
+    ctx.fillStyle = accent;
+    ctx.globalAlpha = 0.55;
+    drawRoundRect(ctx, -opts.size * 0.5, opts.size * 0.58, opts.size * 0.35, opts.size * 0.1, 6);
+    ctx.fill();
+    drawRoundRect(ctx, opts.size * 0.15, opts.size * 0.58, opts.size * 0.35, opts.size * 0.1, 6);
+    ctx.fill();
+    ctx.restore();
+  } else if (opts.kind === 'tank') {
+    // shield plate + helmet cap
+    ctx.save();
+    ctx.fillStyle = accent;
+    ctx.strokeStyle = outline;
+    ctx.lineWidth = 3;
+    drawRoundRect(ctx, -opts.size * 0.6, -opts.size * 0.15, opts.size * 1.2, opts.size * 0.92, 14);
+    ctx.fill();
+    ctx.stroke();
+
+    ctx.fillStyle = deepInk;
+    ctx.globalAlpha = 0.25;
+    for (let i = 0; i < 3; i++) {
+      ctx.beginPath();
+      ctx.arc(-opts.size * 0.3 + i * opts.size * 0.3, opts.size * 0.2, opts.size * 0.08, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.restore();
+
+    ctx.save();
+    ctx.fillStyle = deepInk;
+    ctx.globalAlpha = 0.9;
+    drawRoundRect(ctx, -opts.size * 0.55, -opts.size * 1.02, opts.size * 1.1, opts.size * 0.35, 12);
+    ctx.fill();
+    ctx.restore();
+  } else if (opts.kind === 'shooter') {
+    // pencil tip hat + tiny satchel
+    ctx.save();
+    ctx.fillStyle = '#FBBF24';
+    ctx.strokeStyle = outline;
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.moveTo(0, -opts.size * 1.18);
+    ctx.lineTo(opts.size * 0.58, -opts.size * 0.58);
+    ctx.lineTo(-opts.size * 0.58, -opts.size * 0.58);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+
+    ctx.fillStyle = '#E5E7EB';
+    ctx.globalAlpha = 0.9;
+    drawRoundRect(ctx, opts.size * 0.35, opts.size * 0.28, opts.size * 0.48, opts.size * 0.26, 8);
+    ctx.fill();
+    ctx.restore();
+  }
+
+  ctx.restore();
+}
+
 function drawBlob(ctx: CanvasRenderingContext2D, size: number, seed: number) {
   const bumps = 7;
   ctx.beginPath();
@@ -1596,103 +1848,7 @@ export const TowerDefenseGame: React.FC<Props> = ({ questions, subject, difficul
         ctx.restore();
       }
 
-      // Enemy bodies (school/ink theme)
-      const bodyFill = (() => {
-        if (enemy.kind === 'runner') return '#FDE68A';
-        if (enemy.kind === 'tank') return '#C7D2FE';
-        if (enemy.kind === 'shooter') return '#FBCFE8';
-        return '#9CA3AF'; // slime = ink blob
-      })();
-      const bodyStroke = COLORS.border;
-      ctx.strokeStyle = bodyStroke;
-      ctx.lineWidth = 3;
-      ctx.fillStyle = bodyFill;
-
-      if (enemy.kind === 'slime') {
-        drawBlob(ctx, size, seed);
-        ctx.fill();
-        ctx.stroke();
-
-        // highlight
-        ctx.save();
-        ctx.globalAlpha = 0.22;
-        ctx.fillStyle = '#FFFFFF';
-        ctx.beginPath();
-        ctx.ellipse(-size * 0.25, -size * 0.25, size * 0.35, size * 0.22, -0.6, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.restore();
-
-        drawCuteFace(ctx, size, 'smile');
-      } else if (enemy.kind === 'runner') {
-        // runner blob + shoes + speed stripes
-        drawBlob(ctx, size * 0.96, seed + 11);
-        ctx.fill();
-        ctx.stroke();
-        ctx.save();
-        ctx.globalAlpha = 0.25;
-        ctx.strokeStyle = '#FFFFFF';
-        ctx.lineWidth = 3;
-        for (let k = 0; k < 3; k++) {
-          ctx.beginPath();
-          ctx.moveTo(-size * 1.05, -size * 0.25 + k * 10);
-          ctx.lineTo(-size * 0.55, -size * 0.35 + k * 10);
-          ctx.stroke();
-        }
-        ctx.restore();
-
-        // shoes
-        ctx.fillStyle = '#5E4C40';
-        drawRoundRect(ctx, -size * 0.55, size * 0.55, size * 0.45, size * 0.22, 6);
-        ctx.fill();
-        drawRoundRect(ctx, size * 0.1, size * 0.55, size * 0.45, size * 0.22, 6);
-        ctx.fill();
-
-        drawCuteFace(ctx, size, 'wink');
-      } else if (enemy.kind === 'tank') {
-        // tank = chunky body + shield
-        drawRoundRect(ctx, -size * 1.05, -size * 0.9, size * 2.1, size * 1.9, 12);
-        ctx.fill();
-        ctx.stroke();
-
-        // shield
-        ctx.save();
-        ctx.fillStyle = '#FDE68A';
-        ctx.strokeStyle = bodyStroke;
-        ctx.lineWidth = 3;
-        drawRoundRect(ctx, -size * 0.55, -size * 0.15, size * 1.1, size * 0.85, 12);
-        ctx.fill();
-        ctx.stroke();
-        ctx.restore();
-
-        // helmet dot
-        ctx.fillStyle = bodyStroke;
-        ctx.beginPath();
-        ctx.arc(0, -size * 0.85, size * 0.18, 0, Math.PI * 2);
-        ctx.fill();
-
-        drawCuteFace(ctx, size, 'grit');
-      } else {
-        // shooter = blob + pencil cap
-        drawBlob(ctx, size * 0.98, seed + 5);
-        ctx.fill();
-        ctx.stroke();
-
-        // pencil tip / hat
-        ctx.save();
-        ctx.fillStyle = '#FBBF24';
-        ctx.strokeStyle = bodyStroke;
-        ctx.lineWidth = 3;
-        ctx.beginPath();
-        ctx.moveTo(0, -size * 1.15);
-        ctx.lineTo(size * 0.55, -size * 0.55);
-        ctx.lineTo(-size * 0.55, -size * 0.55);
-        ctx.closePath();
-        ctx.fill();
-        ctx.stroke();
-        ctx.restore();
-
-        drawCuteFace(ctx, size, 'smile');
-      }
+      drawInkMinion(ctx, { kind: enemy.kind, size, seed, simNow });
 
       if (frozen) {
         ctx.save();
