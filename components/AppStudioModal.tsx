@@ -1642,7 +1642,7 @@ const AppStudioModal: React.FC<{
                     </Button>
                   </div>
                 </div>
-                <div className="p-3 flex-1 min-h-0 flex flex-col gap-2 overflow-y-auto">
+	                <div className="p-3 flex-1 min-h-0 flex flex-col gap-2">
 	                  <textarea
 	                    rows={1}
 	                    value={prompt}
@@ -1650,38 +1650,40 @@ const AppStudioModal: React.FC<{
 	                    placeholder="例如：做一個可以輸入英文單字、按下開始後每 5 秒顯示一個提示的練習小工具..."
 	                    className="w-full h-10 max-h-10 resize-none px-3 py-2 border-2 border-gray-300 rounded-xl font-bold leading-6 overflow-y-auto"
 	                  />
-                  {generating && (
-                    <div className="text-sm text-gray-700 font-bold bg-[#F7FAFF] border-2 border-[#BBD7FF] rounded-2xl p-3">
-                      <div className="flex items-center gap-2">
-                        <Loader2 className="w-4 h-4 animate-spin text-blue-600" />
-                        <div className="font-black text-blue-700">AI 生成中</div>
-                      </div>
-                      <div className="mt-2 space-y-1 text-xs text-gray-700">
-                        {generateStages.map((s, idx) => (
-                          <div key={s} className={idx === generateStage ? 'text-blue-700 font-black' : 'text-gray-600'}>
-                            {idx + 1}. {s}{idx === generateStage ? '…' : ''}
-                          </div>
-                        ))}
-                      </div>
-	                      <div className="mt-2 text-[11px] text-gray-500 font-bold">
-	                        提示：生成完成後會顯示「AI 設計說明」（功能/操作/假設/外部庫），不包含模型內部推理鏈。
+	                  <div className="flex-1 min-h-0 overflow-y-auto flex flex-col gap-2">
+	                    {generating && (
+	                      <div className="text-sm text-gray-700 font-bold bg-[#F7FAFF] border-2 border-[#BBD7FF] rounded-2xl p-3">
+	                        <div className="flex items-center gap-2">
+	                          <Loader2 className="w-4 h-4 animate-spin text-blue-600" />
+	                          <div className="font-black text-blue-700">AI 生成中</div>
+	                        </div>
+	                        <div className="mt-2 space-y-1 text-xs text-gray-700">
+	                          {generateStages.map((s, idx) => (
+	                            <div key={s} className={idx === generateStage ? 'text-blue-700 font-black' : 'text-gray-600'}>
+	                              {idx + 1}. {s}{idx === generateStage ? '…' : ''}
+	                            </div>
+	                          ))}
+	                        </div>
+	                        <div className="mt-2 text-[11px] text-gray-500 font-bold">
+	                          提示：生成完成後會顯示「AI 設計說明」（功能/操作/假設/外部庫），不包含模型內部推理鏈。
+	                        </div>
 	                      </div>
-	                    </div>
-	                  )}
-	                  {generateError && <div className="text-sm text-red-600 font-bold">{generateError}</div>}
-	                  {aiNotes.trim() && (
-	                    <div className="text-sm text-gray-700 font-bold bg-[#FEF7EC] border-2 border-[#FAD8A5] rounded-2xl p-3">
-	                      <div className="font-black text-brand-brown">AI 設計說明</div>
-	                      <pre className="mt-2 whitespace-pre-wrap break-words font-mono text-xs leading-5">{aiNotes}</pre>
-	                    </div>
-	                  )}
-	                  {submittedAt && (
-	                    <div className="text-sm text-emerald-700 font-black">
-	                      {submitTeacherName ? `已提交給 ${submitTeacherName}：` : '已提交：'}
-	                      {new Date(submittedAt).toLocaleString()}
-	                    </div>
-                  )}
-                </div>
+	                    )}
+	                    {generateError && <div className="text-sm text-red-600 font-bold">{generateError}</div>}
+	                    {aiNotes.trim() && (
+	                      <div className="text-sm text-gray-700 font-bold bg-[#FEF7EC] border-2 border-[#FAD8A5] rounded-2xl p-3">
+	                        <div className="font-black text-brand-brown">AI 設計說明</div>
+	                        <pre className="mt-2 whitespace-pre-wrap break-words font-mono text-xs leading-5">{aiNotes}</pre>
+	                      </div>
+	                    )}
+	                    {submittedAt && (
+	                      <div className="text-sm text-emerald-700 font-black">
+	                        {submitTeacherName ? `已提交給 ${submitTeacherName}：` : '已提交：'}
+	                        {new Date(submittedAt).toLocaleString()}
+	                      </div>
+	                    )}
+	                  </div>
+	                </div>
               </div>
             </div>
 
