@@ -24,7 +24,7 @@ const AppStudioModal: React.FC<{
   const { user } = useAuth();
   const isTeacher = user?.role === 'teacher' || user?.role === 'admin';
 
-  const [tab, setTab] = useState<'my' | 'public'>('my');
+  const [tab, setTab] = useState<'my' | 'public' | 'inbox'>('my');
   const [search, setSearch] = useState('');
   const [folderId, setFolderId] = useState<string>('all');
   const [folders, setFolders] = useState<any[]>([]);
@@ -90,6 +90,12 @@ const AppStudioModal: React.FC<{
   const [reviewComment, setReviewComment] = useState<string>('');
   const [savingReview, setSavingReview] = useState(false);
   const [showTemplates, setShowTemplates] = useState(false);
+  const editHistoryKey = useMemo(() => {
+    const uid = user?.id || 'anon';
+    const appId = selectedAppId || 'new';
+    return `lpedia_appstudio_history_${uid}_${appId}`;
+  }, [selectedAppId, user?.id]);
+  const [editHistory, setEditHistory] = useState<Array<{ at: number; prompt: string; title: string; indexHtml: string }>>([]);
 
   const templates = useMemo(() => ([
     {
@@ -490,6 +496,7 @@ const AppStudioModal: React.FC<{
     setReviewHtml('');
     setSavingReview(false);
     setShowTemplates(false);
+    setEditHistory([]);
     loadLists();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
@@ -501,6 +508,7 @@ const AppStudioModal: React.FC<{
   }, [publicSort]);
 
   const visibleApps = useMemo(() => {
+    if (tab === 'inbox') return [];
     const pool = tab === 'public' ? publicApps : apps;
     const q = search.trim().toLowerCase();
     return pool.filter((a: any) => {
@@ -582,6 +590,39 @@ const AppStudioModal: React.FC<{
     }
   };
 
+  const loadEditHistory = () => {
+    try {
+      const raw = localStorage.getItem(editHistoryKey);
+      if (!raw) {
+        setEditHistory([]);
+        return;
+      }
+      const parsed = JSON.parse(raw);
+      const list = Array.isArray(parsed) ? parsed : [];
+      const cleaned = list
+        .map((x) => ({
+          at: Number(x?.at || 0),
+          prompt: String(x?.prompt || ''),
+          title: String(x?.title || ''),
+          indexHtml: String(x?.indexHtml || '')
+        }))
+        .filter((x) => x.at && x.indexHtml.trim());
+      setEditHistory(cleaned.slice(0, 10));
+    } catch {
+      setEditHistory([]);
+    }
+  };
+
+  const pushEditHistory = (entry: { at: number; prompt: string; title: string; indexHtml: string }) => {
+    const next = [entry, ...editHistory].slice(0, 10);
+    setEditHistory(next);
+    try {
+      localStorage.setItem(editHistoryKey, JSON.stringify(next));
+    } catch {
+      // ignore
+    }
+  };
+
   const openApp = async (appId: string) => {
     setSelectedAppId(appId);
     setVersions([]);
@@ -591,6 +632,12 @@ const AppStudioModal: React.FC<{
     await loadAppVersions(appId);
     tryRestoreDraft();
   };
+
+  useEffect(() => {
+    if (!open) return;
+    loadEditHistory();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [editHistoryKey, open]);
 
   const createNewApp = async () => {
     const title = '新作品';
@@ -625,6 +672,12 @@ const AppStudioModal: React.FC<{
       setGeneratedHtml(String(resp.indexHtml || ''));
       setPreviewStopped(false);
       setPreviewKey((k) => k + 1);
+      pushEditHistory({
+        at: Date.now(),
+        prompt: p,
+        title: String(resp.title || generatedTitle || selectedApp?.title || '小程式'),
+        indexHtml: String(resp.indexHtml || '')
+      });
     } catch (e) {
       setGenerateError(e instanceof Error ? e.message : '生成失敗');
     } finally {
@@ -990,33 +1043,53 @@ const AppStudioModal: React.FC<{
         </div>
 
         <div className="flex-1 min-h-0 flex bg-gray-50">
-          <aside className="w-80 border-r-2 border-gray-200 bg-white p-4 overflow-y-auto">
-            <div className="flex items-center gap-2 mb-3">
-              <button
-                type="button"
-                onClick={() => setTab('my')}
-                className={`flex-1 px-3 py-2 rounded-xl border-2 font-black ${tab === 'my' ? 'bg-[#FDEEAD] border-brand-brown text-brand-brown' : 'bg-white border-gray-200 text-gray-700'}`}
-              >
-                我的
-              </button>
-              <button
-                type="button"
-                onClick={() => setTab('public')}
-                className={`flex-1 px-3 py-2 rounded-xl border-2 font-black ${tab === 'public' ? 'bg-[#D2EFFF] border-brand-brown text-brand-brown' : 'bg-white border-gray-200 text-gray-700'}`}
-              >
-                全站
-              </button>
-            </div>
+	          <aside className="w-80 border-r-2 border-gray-200 bg-white p-4 overflow-y-auto">
+	            <div className="flex items-center gap-2 mb-3">
+	              <button
+	                type="button"
+	                onClick={() => setTab('my')}
+	                className={`flex-1 px-3 py-2 rounded-xl border-2 font-black ${tab === 'my' ? 'bg-[#FDEEAD] border-brand-brown text-brand-brown' : 'bg-white border-gray-200 text-gray-700'}`}
+	              >
+	                我的
+	              </button>
+	              <button
+	                type="button"
+	                onClick={() => setTab('public')}
+	                className={`flex-1 px-3 py-2 rounded-xl border-2 font-black ${tab === 'public' ? 'bg-[#D2EFFF] border-brand-brown text-brand-brown' : 'bg-white border-gray-200 text-gray-700'}`}
+	              >
+	                全站
+	              </button>
+	              {isTeacher && (
+	                <button
+	                  type="button"
+	                  onClick={async () => {
+	                    setTab('inbox');
+	                    try {
+	                      setLoadingInbox(true);
+	                      const resp = await authService.listAppStudioInbox();
+	                      setInboxSubmissions(Array.isArray(resp.submissions) ? resp.submissions : []);
+	                    } catch (e) {
+	                      alert(e instanceof Error ? e.message : '載入失敗');
+	                    } finally {
+	                      setLoadingInbox(false);
+	                    }
+	                  }}
+	                  className={`flex-1 px-3 py-2 rounded-xl border-2 font-black ${tab === 'inbox' ? 'bg-[#FEF7EC] border-brand-brown text-brand-brown' : 'bg-white border-gray-200 text-gray-700'}`}
+	                >
+	                  作品箱
+	                </button>
+	              )}
+	            </div>
 
-            <div className="mb-3">
-              <label className="block text-xs font-black text-gray-600 mb-1">搜尋</label>
-              <input
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                placeholder="搜尋作品..."
-                className="w-full px-3 py-2 border-2 border-gray-300 rounded-xl"
-              />
-            </div>
+	            <div className="mb-3">
+	              <label className="block text-xs font-black text-gray-600 mb-1">搜尋</label>
+	              <input
+	                value={search}
+	                onChange={(e) => setSearch(e.target.value)}
+	                placeholder={tab === 'inbox' ? '搜尋學生/作品...' : '搜尋作品...'}
+	                className="w-full px-3 py-2 border-2 border-gray-300 rounded-xl"
+	              />
+	            </div>
 
             {tab === 'my' && (
               <div className="mb-3">
@@ -1059,25 +1132,27 @@ const AppStudioModal: React.FC<{
               </div>
             )}
 
-            <div className="flex items-center gap-2 mb-3">
-              <Button
-                fullWidth
-                className="bg-white hover:bg-gray-50 border-2 border-brand-brown text-brand-brown"
-                onClick={createNewApp}
-              >
-                <Plus className="w-4 h-4 mr-2" />
-                新作品
-              </Button>
-            </div>
+            {tab !== 'inbox' && (
+              <div className="flex items-center gap-2 mb-3">
+                <Button
+                  fullWidth
+                  className="bg-white hover:bg-gray-50 border-2 border-brand-brown text-brand-brown"
+                  onClick={createNewApp}
+                >
+                  <Plus className="w-4 h-4 mr-2" />
+                  新作品
+                </Button>
+              </div>
+            )}
 
             {appsError && (
               <div className="mb-3 text-sm text-red-600 font-bold">{appsError}</div>
             )}
-            {loadingApps ? (
+            {tab !== 'inbox' && loadingApps ? (
               <div className="text-sm text-gray-500 font-bold flex items-center gap-2">
                 <Loader2 className="w-4 h-4 animate-spin" /> 載入中...
               </div>
-            ) : (
+            ) : tab !== 'inbox' ? (
               <div className="space-y-2">
                 {visibleApps.map((a) => (
                   <button
@@ -1125,16 +1200,90 @@ const AppStudioModal: React.FC<{
                   <div className="text-sm text-gray-500 font-bold">沒有作品</div>
                 )}
               </div>
+            ) : (
+              <div className="space-y-2">
+                {loadingInbox ? (
+                  <div className="text-sm text-gray-500 font-bold flex items-center gap-2">
+                    <Loader2 className="w-4 h-4 animate-spin" /> 載入中...
+                  </div>
+                ) : (
+                  (() => {
+                    const q = search.trim().toLowerCase();
+                    const filtered = inboxSubmissions.filter((s) => {
+                      if (!q) return true;
+                      const student = String(s.user?.profile?.name || s.user?.username || '').toLowerCase();
+                      const appTitle = String(s.app?.title || '').toLowerCase();
+                      return student.includes(q) || appTitle.includes(q);
+                    });
+                    return filtered.length === 0 ? (
+                      <div className="text-sm text-gray-500 font-bold">沒有提交</div>
+                    ) : (
+                      filtered.map((s) => (
+                        <button
+                          key={String(s.id)}
+                          type="button"
+                          onClick={() => openReview(s)}
+                          className="w-full text-left px-3 py-3 rounded-2xl border-2 font-black bg-white border-gray-200 hover:border-brand-brown"
+                        >
+                          <div className="flex items-center gap-2">
+                            <span className={`text-xs px-2 py-1 rounded-full border ${s.status === 'reviewed' ? 'border-emerald-300 text-emerald-700 bg-emerald-50' : 'border-amber-300 text-amber-800 bg-amber-50'}`}>
+                              {s.status === 'reviewed' ? '已看過' : '待批改'}
+                            </span>
+                            <span className="flex-1 text-brand-brown">{String(s.user?.profile?.name || s.user?.username || '')}</span>
+                          </div>
+                          <div className="text-xs text-gray-600 font-bold mt-1">
+                            {String(s.app?.title || '')}{s.user?.profile?.class ? ` • ${String(s.user.profile.class)}` : ''}
+                          </div>
+                          <div className="text-xs text-gray-500 font-bold mt-1">
+                            {s.createdAt ? new Date(s.createdAt).toLocaleString() : ''}
+                          </div>
+                        </button>
+                      ))
+                    );
+                  })()
+                )}
+              </div>
             )}
 
-            {selectedAppId && (
-              <div className="mt-4 pt-4 border-t-2 border-gray-100">
-                <div className="flex items-center gap-2 mb-2">
-                  <div className="font-black text-gray-700">版本控制</div>
-                  <div className="ml-auto text-[11px] text-gray-500 font-bold">
-                    {versions.length ? `${versions.length} 個版本` : ''}
-                  </div>
-                </div>
+	            {selectedAppId && (
+	              <div className="mt-4 pt-4 border-t-2 border-gray-100">
+	                <div className="flex items-center gap-2 mb-2">
+	                  <div className="font-black text-gray-700">修改記錄</div>
+	                  <button
+	                    type="button"
+	                    onClick={() => {
+	                      setEditHistory([]);
+	                      try { localStorage.removeItem(editHistoryKey); } catch { /* ignore */ }
+	                    }}
+	                    className="ml-auto text-[11px] text-brand-brown underline font-black"
+	                  >
+	                    清空
+	                  </button>
+	                </div>
+
+	                {editHistory.length === 0 ? (
+	                  <div className="text-sm text-gray-500 font-bold mb-2">未有修改記錄（每次按「生成」會保存一次，最多 10 次）</div>
+	                ) : (
+	                  <div className="space-y-2 mb-3">
+	                    {editHistory.map((h) => (
+	                      <button
+	                        key={String(h.at)}
+	                        type="button"
+	                        onClick={() => {
+	                          setPrompt(String(h.prompt || ''));
+	                          setGeneratedTitle(String(h.title || '小程式'));
+	                          setGeneratedHtml(String(h.indexHtml || ''));
+	                          setPreviewStopped(false);
+	                          setPreviewKey((k) => k + 1);
+	                        }}
+	                        className="w-full text-left px-3 py-3 rounded-2xl border-2 font-black bg-white border-gray-200 hover:border-brand-brown"
+	                      >
+	                        <div className="text-brand-brown line-clamp-2">{String(h.prompt || '（無內容）')}</div>
+	                        <div className="text-xs text-gray-500 font-bold mt-1">{new Date(h.at).toLocaleString()}</div>
+	                      </button>
+	                    ))}
+	                  </div>
+	                )}
 
                 {draftNotice && (
                   <div className="text-sm text-brand-brown font-black bg-[#FEF7EC] border-2 border-brand-brown rounded-2xl p-3 mb-2">
@@ -1174,7 +1323,7 @@ const AppStudioModal: React.FC<{
 
                 {versionError && <div className="text-sm text-red-600 font-bold mb-2">{versionError}</div>}
 
-                <label className="block text-xs font-black text-gray-600 mb-1">版本</label>
+	                <label className="block text-xs font-black text-gray-600 mb-1">儲存版本（可選）</label>
                 <select
                   value={selectedVersionId || ''}
                   onChange={async (e) => {
@@ -1338,15 +1487,6 @@ const AppStudioModal: React.FC<{
                       onClick={togglePublic}
                     >
                       {selectedApp.visibility === 'public' ? '設為私人' : '設為公開'}
-                    </Button>
-                  )}
-                  {isTeacher && (
-                    <Button
-                      className="bg-white hover:bg-gray-50 border-2 border-brand-brown text-brand-brown"
-                      onClick={openInbox}
-                      disabled={loadingInbox}
-                    >
-                      作品箱
                     </Button>
                   )}
                   {user?.role === 'student' && (
