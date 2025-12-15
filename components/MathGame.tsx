@@ -79,8 +79,10 @@ const KeypadButton: React.FC<{
     disabled={disabled}
     onClick={onClick}
     className={[
-      'h-14 rounded-2xl border-2 font-black text-xl',
-      disabled ? 'bg-[#222] border-[#333] text-gray-600 cursor-not-allowed' : 'bg-[#1A1A1A] border-[#444] text-white hover:bg-[#222] hover:border-[#A1D9AE]',
+      'h-11 rounded-xl border-2 font-black text-lg shadow-sm',
+      disabled
+        ? 'bg-black/10 border-white/20 text-black/30 cursor-not-allowed'
+        : 'bg-white/70 border-white/70 text-[#2F2A4A] hover:bg-white hover:-translate-y-[1px] active:translate-y-0 transition',
       className || ''
     ].join(' ')}
   >
@@ -243,14 +245,18 @@ export const MathGame: React.FC<{
   const applyKey = (key: string) => {
     if (locked || feedback) return;
     const setTarget = (setter: (v: string) => void, currentValue: string) => {
-      if (key === '⌫') return setter(currentValue.slice(0, -1));
+      if (key === '⌫' || key === '<') return setter(currentValue.slice(0, -1));
       if (key === '清除') return setter('');
       if (isNaN(Number(key))) return;
       setter(clampDigits(currentValue + key));
     };
 
-    if (key === '±') {
-      setInputSign((s) => (s === 1 ? -1 : 1));
+    if (key === '+') {
+      setInputSign(1);
+      return;
+    }
+    if (key === '−' || key === '-') {
+      setInputSign(-1);
       return;
     }
 
@@ -283,20 +289,20 @@ export const MathGame: React.FC<{
 
   return (
     <div className="flex flex-col items-center">
-      <div className="w-full max-w-3xl bg-[#111] border-4 border-[#4A4A4A] rounded-3xl p-5 shadow-2xl">
+      <div className="w-full max-w-3xl rounded-[2rem] border-4 border-white/60 bg-gradient-to-br from-[#FFE6F1] via-[#FFF6D6] to-[#DFF6FF] shadow-[0_20px_60px_rgba(0,0,0,0.35)] p-4">
         <div className="flex items-center justify-between gap-3 flex-wrap">
-          <div className="text-white font-black">
+          <div className="text-[#2F2A4A] font-black">
             第 {index + 1} / {totalQuestions} 題
           </div>
           <div className="flex items-center gap-3">
             {remaining !== null && (
-              <div className="bg-[#222] px-3 py-1 rounded-xl text-yellow-200 font-mono border border-[#444]">
-                剩餘 {remaining}s
+              <div className="px-3 py-1 rounded-full bg-white/70 border-2 border-white/80 text-[#2F2A4A] font-black">
+                ⏳ {remaining}s
               </div>
             )}
             {lives !== null && (
-              <div className="bg-[#222] px-3 py-1 rounded-xl text-red-200 font-mono border border-[#444]">
-                生命 {lives}
+              <div className="px-3 py-1 rounded-full bg-white/70 border-2 border-white/80 text-[#2F2A4A] font-black">
+                ❤️ {lives}
               </div>
             )}
             <button
@@ -304,32 +310,43 @@ export const MathGame: React.FC<{
               onClick={() => {
                 if (confirm('確定要退出遊戲嗎？')) onExit();
               }}
-              className="px-3 py-1 rounded-xl bg-[#333] hover:bg-[#444] text-white font-bold border border-[#555]"
+              className="px-3 py-1 rounded-full bg-white/70 hover:bg-white text-[#2F2A4A] font-black border-2 border-white/80"
             >
               離開
             </button>
           </div>
         </div>
 
-        <div className="mt-5 bg-white rounded-2xl border-2 border-gray-200 p-5">
-          <div className="text-sm font-bold text-gray-500 mb-2">請計算：</div>
-          <div className="text-3xl font-black text-gray-900">
+        <div className="mt-3 bg-white rounded-3xl border-4 border-white/80 p-4 shadow-sm">
+          <div className="text-sm font-black text-[#2F2A4A]/70 mb-1">請計算：</div>
+          <div className="text-3xl font-black text-[#2F2A4A]">
             <MathExpressionView tokens={current.tokens} />
           </div>
         </div>
 
         {feedback && (
-          <div className={`mt-4 p-3 rounded-2xl border-2 font-bold ${feedback.ok ? 'bg-[#E8F5E9] border-[#5E8B66] text-[#2F5E3A]' : 'bg-[#FFE8E8] border-[#D46A6A] text-[#7A1F1F]'}`}>
-            {feedback.ok ? '答對了！' : (
-              <span className="inline-flex items-center gap-2">
-                答錯了，正確答案：
-                <FractionView value={feedback.correctAnswer} className="text-lg font-black" />
-              </span>
-            )}
+          <div className={`mt-3 p-3 rounded-3xl border-4 font-black shadow-sm ${feedback.ok ? 'bg-[#E8FFF0] border-[#7AD8A1] text-[#2F5E3A]' : 'bg-[#FFE8F0] border-[#FF9BB8] text-[#7A1F1F]'}`}>
+            <div className="flex items-center justify-between gap-3 flex-wrap">
+              <div>
+                {feedback.ok ? '答對了！' : (
+                  <span className="inline-flex items-center gap-2">
+                    答錯了，正確答案：
+                    <FractionView value={feedback.correctAnswer} className="text-lg font-black" />
+                  </span>
+                )}
+              </div>
+              <button
+                type="button"
+                onClick={goNextOrFinish}
+                className="px-4 py-2 rounded-2xl bg-white border-2 border-black/10 text-[#2F2A4A] font-black hover:bg-[#FFF6D6]"
+              >
+                {pendingResult?.shouldEnd ? '完成' : '下一題'}
+              </button>
+            </div>
           </div>
         )}
 
-        <div className="mt-4">
+        <div className="mt-3">
           {effectiveMode === 'mcq' ? (
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               {(current as MathQuestionMcq).choices?.map((c, i) => (
@@ -338,22 +355,22 @@ export const MathGame: React.FC<{
                   type="button"
                   disabled={locked || feedback !== null}
                   onClick={() => onSelectMcq(c, i)}
-                  className="p-4 rounded-2xl bg-[#222] border-2 border-[#444] hover:border-[#A1D9AE] hover:bg-[#262626] text-white font-black text-xl disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="p-3 rounded-3xl bg-white/80 border-4 border-white/80 hover:bg-white text-[#2F2A4A] font-black text-xl disabled:opacity-50 disabled:cursor-not-allowed shadow-sm"
                 >
                   <FractionView value={normalizeRational(c)} className="text-2xl" />
                 </button>
               ))}
             </div>
           ) : (
-            <div className="bg-[#222] border-2 border-[#444] rounded-2xl p-4">
+            <div className="bg-white/60 border-4 border-white/70 rounded-3xl p-3">
               <div className="flex items-center justify-between gap-3 flex-wrap">
-                <div className="text-sm text-gray-300 font-bold">輸入答案（使用下方數字鍵盤）</div>
+                <div className="text-sm text-[#2F2A4A]/80 font-black">輸入答案（點選格子後用鍵盤輸入）</div>
                 <div className="flex items-center gap-2">
                   <button
                     type="button"
                     onClick={() => { setInputMode('int'); setInputFocus('whole'); }}
                     disabled={locked || feedback !== null}
-                    className={`px-3 py-1 rounded-xl border-2 font-black ${inputMode === 'int' ? 'bg-[#A1D9AE] border-[#5E8B66] text-white' : 'bg-[#111] border-[#444] text-gray-200 hover:bg-[#1A1A1A]'} disabled:opacity-50 disabled:cursor-not-allowed`}
+                    className={`px-3 py-1 rounded-full border-2 font-black ${inputMode === 'int' ? 'bg-[#B5F8CE] border-[#4FBF7A] text-[#2F2A4A]' : 'bg-white/70 border-white/70 text-[#2F2A4A]/70 hover:bg-white'} disabled:opacity-50 disabled:cursor-not-allowed`}
                   >
                     整數
                   </button>
@@ -361,7 +378,7 @@ export const MathGame: React.FC<{
                     type="button"
                     onClick={() => { setInputMode('frac'); setInputFocus('num'); }}
                     disabled={locked || feedback !== null}
-                    className={`px-3 py-1 rounded-xl border-2 font-black ${inputMode === 'frac' ? 'bg-[#A1D9AE] border-[#5E8B66] text-white' : 'bg-[#111] border-[#444] text-gray-200 hover:bg-[#1A1A1A]'} disabled:opacity-50 disabled:cursor-not-allowed`}
+                    className={`px-3 py-1 rounded-full border-2 font-black ${inputMode === 'frac' ? 'bg-[#B5D8F8] border-[#4B9FE6] text-[#2F2A4A]' : 'bg-white/70 border-white/70 text-[#2F2A4A]/70 hover:bg-white'} disabled:opacity-50 disabled:cursor-not-allowed`}
                   >
                     分數
                   </button>
@@ -369,24 +386,18 @@ export const MathGame: React.FC<{
                     type="button"
                     onClick={() => { setInputMode('mixed'); setInputFocus('whole'); }}
                     disabled={locked || feedback !== null}
-                    className={`px-3 py-1 rounded-xl border-2 font-black ${inputMode === 'mixed' ? 'bg-[#A1D9AE] border-[#5E8B66] text-white' : 'bg-[#111] border-[#444] text-gray-200 hover:bg-[#1A1A1A]'} disabled:opacity-50 disabled:cursor-not-allowed`}
+                    className={`px-3 py-1 rounded-full border-2 font-black ${inputMode === 'mixed' ? 'bg-[#F8B5E0] border-[#E35DB3] text-[#2F2A4A]' : 'bg-white/70 border-white/70 text-[#2F2A4A]/70 hover:bg-white'} disabled:opacity-50 disabled:cursor-not-allowed`}
                   >
                     帶分數
                   </button>
                 </div>
               </div>
 
-              <div className="mt-3 flex items-center justify-between gap-3 flex-wrap">
+              <div className="mt-2 flex items-center justify-between gap-3 flex-wrap">
                 <div className="flex items-center gap-3">
-                  <button
-                    type="button"
-                    onClick={() => setInputSign((s) => (s === 1 ? -1 : 1))}
-                    disabled={locked || feedback !== null}
-                    className="h-12 w-12 rounded-2xl bg-[#111] border-2 border-[#444] text-white font-black text-xl hover:bg-[#1A1A1A] disabled:opacity-50 disabled:cursor-not-allowed"
-                    title="正負號"
-                  >
-                    {inputSign === 1 ? '＋' : '−'}
-                  </button>
+                  <div className="h-10 px-3 rounded-2xl bg-white/80 border-2 border-white/80 text-[#2F2A4A] font-black flex items-center">
+                    符號：{inputSign === 1 ? '+' : '−'}
+                  </div>
 
                   {/* Answer display */}
                   <div className="flex items-center gap-3">
@@ -395,7 +406,7 @@ export const MathGame: React.FC<{
                         type="button"
                         onClick={() => setInputFocus('whole')}
                         disabled={locked || feedback !== null}
-                        className={`min-w-[140px] h-12 px-4 rounded-2xl border-2 text-left font-black text-white bg-[#111] ${inputFocus === 'whole' ? 'border-[#A1D9AE]' : 'border-[#444]'} disabled:opacity-50 disabled:cursor-not-allowed`}
+                        className={`min-w-[140px] h-10 px-4 rounded-2xl border-2 text-left font-black text-[#2F2A4A] bg-white/80 ${inputFocus === 'whole' ? 'border-[#4B9FE6]' : 'border-white/80'} disabled:opacity-50 disabled:cursor-not-allowed`}
                       >
                         {inputWhole ? inputWhole : '輸入整數'}
                       </button>
@@ -408,7 +419,7 @@ export const MathGame: React.FC<{
                             type="button"
                             onClick={() => setInputFocus('num')}
                             disabled={locked || feedback !== null}
-                            className={`w-44 h-12 px-4 rounded-t-2xl border-2 font-black text-white bg-[#111] text-left ${inputFocus === 'num' ? 'border-[#A1D9AE]' : 'border-[#444]'} disabled:opacity-50 disabled:cursor-not-allowed`}
+                            className={`w-44 h-10 px-4 rounded-t-2xl border-2 font-black text-[#2F2A4A] bg-white/80 text-left ${inputFocus === 'num' ? 'border-[#E35DB3]' : 'border-white/80'} disabled:opacity-50 disabled:cursor-not-allowed`}
                           >
                             {inputNum ? inputNum : '分子/整數'}
                           </button>
@@ -417,7 +428,7 @@ export const MathGame: React.FC<{
                             type="button"
                             onClick={() => setInputFocus('den')}
                             disabled={locked || feedback !== null}
-                            className={`w-44 h-12 px-4 rounded-b-2xl border-2 border-t-0 font-black text-white bg-[#111] text-left ${inputFocus === 'den' ? 'border-[#A1D9AE]' : 'border-[#444]'} disabled:opacity-50 disabled:cursor-not-allowed`}
+                            className={`w-44 h-10 px-4 rounded-b-2xl border-2 border-t-0 font-black text-[#2F2A4A] bg-white/80 text-left ${inputFocus === 'den' ? 'border-[#E35DB3]' : 'border-white/80'} disabled:opacity-50 disabled:cursor-not-allowed`}
                           >
                             {inputDen ? inputDen : '分母（可留空）'}
                           </button>
@@ -431,7 +442,7 @@ export const MathGame: React.FC<{
                           type="button"
                           onClick={() => setInputFocus('whole')}
                           disabled={locked || feedback !== null}
-                          className={`min-w-[120px] h-12 px-4 rounded-2xl border-2 text-left font-black text-white bg-[#111] ${inputFocus === 'whole' ? 'border-[#A1D9AE]' : 'border-[#444]'} disabled:opacity-50 disabled:cursor-not-allowed`}
+                          className={`min-w-[120px] h-10 px-4 rounded-2xl border-2 text-left font-black text-[#2F2A4A] bg-white/80 ${inputFocus === 'whole' ? 'border-[#4FBF7A]' : 'border-white/80'} disabled:opacity-50 disabled:cursor-not-allowed`}
                         >
                           {inputWhole ? inputWhole : '整數部分'}
                         </button>
@@ -440,7 +451,7 @@ export const MathGame: React.FC<{
                             type="button"
                             onClick={() => setInputFocus('num')}
                             disabled={locked || feedback !== null}
-                            className={`w-40 h-12 px-4 rounded-t-2xl border-2 font-black text-white bg-[#111] text-left ${inputFocus === 'num' ? 'border-[#A1D9AE]' : 'border-[#444]'} disabled:opacity-50 disabled:cursor-not-allowed`}
+                            className={`w-40 h-10 px-4 rounded-t-2xl border-2 font-black text-[#2F2A4A] bg-white/80 text-left ${inputFocus === 'num' ? 'border-[#4FBF7A]' : 'border-white/80'} disabled:opacity-50 disabled:cursor-not-allowed`}
                           >
                             {inputNum ? inputNum : '分子'}
                           </button>
@@ -449,7 +460,7 @@ export const MathGame: React.FC<{
                             type="button"
                             onClick={() => setInputFocus('den')}
                             disabled={locked || feedback !== null}
-                            className={`w-40 h-12 px-4 rounded-b-2xl border-2 border-t-0 font-black text-white bg-[#111] text-left ${inputFocus === 'den' ? 'border-[#A1D9AE]' : 'border-[#444]'} disabled:opacity-50 disabled:cursor-not-allowed`}
+                            className={`w-40 h-10 px-4 rounded-b-2xl border-2 border-t-0 font-black text-[#2F2A4A] bg-white/80 text-left ${inputFocus === 'den' ? 'border-[#4FBF7A]' : 'border-white/80'} disabled:opacity-50 disabled:cursor-not-allowed`}
                           >
                             {inputDen ? inputDen : '分母'}
                           </button>
@@ -469,7 +480,7 @@ export const MathGame: React.FC<{
                       if (inputFocus === 'den') setInputDen('');
                     }}
                     disabled={locked || feedback !== null}
-                    className="px-4 py-3 rounded-2xl bg-[#333] hover:bg-[#444] text-white font-bold border border-[#555] disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="px-4 py-2 rounded-2xl bg-white/80 hover:bg-white text-[#2F2A4A] font-black border-2 border-white/80 disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     清除
                   </button>
@@ -477,7 +488,7 @@ export const MathGame: React.FC<{
                     type="button"
                     onClick={onSubmitInput}
                     disabled={locked || feedback !== null}
-                    className="px-6 py-3 rounded-2xl bg-[#A1D9AE] text-brand-brown font-black text-lg hover:bg-white disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="px-6 py-2 rounded-2xl bg-[#FFD4B5] text-[#2F2A4A] font-black text-lg border-2 border-white/80 hover:bg-[#FFF6D6] disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     提交
                   </button>
@@ -485,29 +496,30 @@ export const MathGame: React.FC<{
               </div>
 
               {/* On-screen keypad */}
-              <div className="mt-4 grid grid-cols-3 gap-2">
-                {['7', '8', '9', '4', '5', '6', '1', '2', '3', '±', '0', '⌫'].map((k) => (
-                  <KeypadButton
-                    key={k}
-                    label={k}
-                    onClick={() => applyKey(k)}
-                    disabled={locked || feedback !== null}
-                    className={k === '±' ? 'text-yellow-200' : k === '⌫' ? 'text-red-200' : ''}
-                  />
-                ))}
+              <div className="mt-3 grid grid-cols-4 gap-2">
+                {[
+                  '1', '2', '3', '',
+                  '4', '5', '6', '',
+                  '7', '8', '9', '',
+                  '+', '−', '0', '<'
+                ].map((k, idx) => {
+                  if (!k) return <div key={`sp-${idx}`} />;
+                  const colorClass = (() => {
+                    if (k === '<') return 'bg-[#FFE8F0] text-[#7A1F1F]';
+                    if (k === '+' || k === '−') return 'bg-[#E8FFF0] text-[#2F5E3A]';
+                    return 'bg-white/80';
+                  })();
+                  return (
+                    <KeypadButton
+                      key={`${k}-${idx}`}
+                      label={k}
+                      onClick={() => applyKey(k)}
+                      disabled={locked || feedback !== null}
+                      className={colorClass}
+                    />
+                  );
+                })}
               </div>
-
-              {(locked || feedback) && (
-                <div className="mt-4 flex justify-end">
-                  <button
-                    type="button"
-                    onClick={goNextOrFinish}
-                    className="px-6 py-3 rounded-2xl bg-[#FDEEAD] border-2 border-brand-brown text-brand-brown font-black text-lg hover:bg-[#F9E08F]"
-                  >
-                    {pendingResult?.shouldEnd ? '完成' : '下一題'}
-                  </button>
-                </div>
-              )}
             </div>
           )}
         </div>
