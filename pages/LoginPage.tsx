@@ -88,66 +88,68 @@ const LoginPage: React.FC = () => {
         <div className="pointer-events-none absolute -top-8 -left-8 w-24 h-24 rounded-full bg-brand-yellow/80" aria-hidden="true" />
         <div className="pointer-events-none absolute -bottom-10 -right-10 w-28 h-28 rounded-full bg-brand-pink/50" aria-hidden="true" />
 
-        <div className="h-full bg-white/80 backdrop-blur-sm border-4 border-brand-brown rounded-[2.5rem] shadow-comic-xl overflow-hidden grid grid-cols-1 lg:grid-cols-2 lg:grid-rows-1 grid-rows-[240px_1fr]">
-          <div className="p-8 sm:p-10 bg-white min-h-0 overflow-y-auto">
-            <div className="mb-10">
-              <h1 className="text-5xl sm:text-6xl font-rounded font-black text-brand-brown leading-none">
-                LPedia
-              </h1>
-              <div className="mt-3 text-sm sm:text-base font-bold text-brand-brown/80">
-                九龍婦女福利會李炳紀念學校校本AI學習平台
-              </div>
-            </div>
-
-            <div className="flex items-center gap-2 mb-6">
-              {(['teacher', 'student', 'admin'] as const).map((r) => (
-                <button
-                  key={r}
-                  type="button"
-                  onClick={() => { setRole(r); setError(''); }}
-                  disabled={isSubmitting}
-                  className={`flex-1 py-2 px-3 rounded-2xl border-2 font-rounded font-black transition-all ${
-                    role === r
-                      ? 'bg-brand-yellow border-brand-brown text-brand-brown shadow-comic'
-                      : 'bg-white border-gray-200 text-gray-600 hover:border-brand-brown'
-                  }`}
-                >
-                  {r === 'teacher' ? '教師' : r === 'student' ? '學生' : '管理員'}
-                </button>
-              ))}
-            </div>
-
-            <form onSubmit={handleLogin} className="space-y-4">
-              <Input
-                placeholder={role === 'admin' ? '管理員帳號' : '帳號'}
-                autoComplete="username"
-                value={forms[role].username}
-                onChange={(e) => setField('username', e.target.value)}
-              />
-              <Input
-                type="password"
-                placeholder={role === 'admin' ? '管理員密碼' : '密碼'}
-                autoComplete="current-password"
-                value={forms[role].password}
-                onChange={(e) => setField('password', e.target.value)}
-              />
-              {error && (
-                <div className="bg-red-50 border-2 border-red-200 rounded-2xl p-3 text-center">
-                  <div className="text-red-700 font-bold text-sm">{error}</div>
+        <div className="h-full bg-white/80 backdrop-blur-sm border-4 border-brand-brown rounded-[2.5rem] shadow-comic-xl overflow-hidden flex flex-col lg:flex-row">
+          <div className="bg-white p-6 sm:p-10 lg:w-1/4 lg:flex-none min-h-0 flex items-center justify-center">
+            <div className="w-full max-w-sm max-h-full overflow-y-auto">
+              <div className="mb-10">
+                <h1 className="text-6xl sm:text-7xl font-rounded font-black text-brand-brown leading-none tracking-tight">
+                  LPedia
+                </h1>
+                <div className="mt-3 text-sm sm:text-base font-bold text-brand-brown/80">
+                  九龍婦女福利會李炳紀念學校校本AI學習平台
                 </div>
-              )}
-              <Button
-                fullWidth
-                type="submit"
-                className="mt-2"
-                disabled={isSubmitting}
-              >
-                {isSubmitting ? '登入中...' : '登入'}
-              </Button>
-            </form>
+              </div>
+
+              <div className="flex items-center gap-2 mb-6">
+                {(['teacher', 'student', 'admin'] as const).map((r) => (
+                  <button
+                    key={r}
+                    type="button"
+                    onClick={() => { setRole(r); setError(''); }}
+                    disabled={isSubmitting}
+                    className={`flex-1 py-2 px-3 rounded-2xl border-2 font-rounded font-black transition-all ${
+                      role === r
+                        ? 'bg-brand-yellow border-brand-brown text-brand-brown shadow-comic'
+                        : 'bg-white border-gray-200 text-gray-600 hover:border-brand-brown'
+                    }`}
+                  >
+                    {r === 'teacher' ? '教師' : r === 'student' ? '學生' : '管理員'}
+                  </button>
+                ))}
+              </div>
+
+              <form onSubmit={handleLogin} className="space-y-4">
+                <Input
+                  placeholder={role === 'admin' ? '管理員帳號' : '帳號'}
+                  autoComplete="username"
+                  value={forms[role].username}
+                  onChange={(e) => setField('username', e.target.value)}
+                />
+                <Input
+                  type="password"
+                  placeholder={role === 'admin' ? '管理員密碼' : '密碼'}
+                  autoComplete="current-password"
+                  value={forms[role].password}
+                  onChange={(e) => setField('password', e.target.value)}
+                />
+                {error && (
+                  <div className="bg-red-50 border-2 border-red-200 rounded-2xl p-3 text-center">
+                    <div className="text-red-700 font-bold text-sm">{error}</div>
+                  </div>
+                )}
+                <Button
+                  fullWidth
+                  type="submit"
+                  className="mt-2"
+                  disabled={isSubmitting}
+                >
+                  {isSubmitting ? '登入中...' : '登入'}
+                </Button>
+              </form>
+            </div>
           </div>
 
-          <div className="relative min-h-0 border-t-4 lg:border-t-0 lg:border-l-4 border-brand-brown">
+          <div className="relative flex-1 min-h-[240px] border-t-4 lg:border-t-0 lg:border-l-4 border-brand-brown">
             <div
               className="absolute inset-0 bg-cover bg-center"
               style={{ backgroundImage: `url('/bg.png')` }}
