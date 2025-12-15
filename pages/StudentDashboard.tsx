@@ -7,6 +7,7 @@ import { authService } from '../services/authService';
 import { sanitizeHtml } from '../services/sanitizeHtml';
 import { MazeGame } from '../components/MazeGame';
 import TowerDefenseGame from '../components/TowerDefenseGame';
+import { MathGame } from '../components/MathGame';
 import UiSettingsModal from '../components/UiSettingsModal';
 import AiChatModal from '../components/AiChatModal';
 import BotTaskChatModal from '../components/BotTaskChatModal';
@@ -1664,6 +1665,8 @@ const StudentDashboard: React.FC = () => {
 	                <p className="text-gray-400 text-sm">
 	                  {selectedGame.gameType === 'matching'
 	                    ? '記憶配對'
+	                    : selectedGame.gameType === 'math'
+	                      ? '數學遊戲'
 	                    : selectedGame.gameType === 'maze'
 	                      ? '知識迷宮'
 	                      : '答題塔防'} • {selectedGame.subject}
@@ -1822,6 +1825,24 @@ const StudentDashboard: React.FC = () => {
 			                    setGameScore(result.score);
 			                    handleGameComplete(result.success, {
 		                      score: result.score,
+	                      correctAnswers: result.correctAnswers,
+	                      totalQuestions: result.totalQuestions,
+	                      timeSpent: result.timeSpent
+	                    });
+	                  }}
+	                />
+	              )}
+
+	              {/* Math Game Layout */}
+	              {selectedGame.gameType === 'math' && (
+	                <MathGame
+	                  game={selectedGame}
+	                  onExit={() => setShowGameModal(false)}
+	                  onStart={() => { setGameStartTime(new Date()); setGameTimerTick(0); }}
+	                  onComplete={(result) => {
+	                    setGameScore(result.score);
+	                    handleGameComplete(result.success, {
+	                      score: result.score,
 	                      correctAnswers: result.correctAnswers,
 	                      totalQuestions: result.totalQuestions,
 	                      timeSpent: result.timeSpent

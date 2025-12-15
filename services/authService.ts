@@ -841,7 +841,7 @@ class AuthService {
   async createGame(gameData: {
     title: string;
     description?: string;
-    gameType: 'maze' | 'matching' | 'tower-defense';
+    gameType: 'maze' | 'matching' | 'tower-defense' | 'math';
     subject: string;
     targetClasses: string[];
     targetGroups?: string[];
@@ -849,6 +849,7 @@ class AuthService {
     difficulty?: 'easy' | 'medium' | 'hard';
     timeLimitSeconds?: number;
     livesLimit?: number | null;
+    math?: any;
   }): Promise<{ message: string; game: any }> {
     const response = await fetch(`${this.API_BASE}/games`, {
       method: 'POST',
@@ -991,6 +992,22 @@ class AuthService {
     advancedOnly?: boolean;
   }): Promise<{ pairs: Array<{ question: string; answer: string }> }> {
     const response = await fetch(`${this.API_BASE}/ai/pairs-generate`, {
+      method: 'POST',
+      headers: this.getAuthHeaders(),
+      body: JSON.stringify(payload)
+    });
+    return this.handleResponse(response);
+  }
+
+  async generateMathQuestions(payload: {
+    grade?: '小一' | '小二' | '小三' | '小四' | '小五' | '小六';
+    count: number;
+    allowedOps: Array<'add' | 'sub' | 'mul' | 'div'>;
+    allowParentheses: boolean;
+    answerMode: 'mcq' | 'input';
+    promptText?: string;
+  }): Promise<{ questions: any[]; answerMode: 'mcq' | 'input' }> {
+    const response = await fetch(`${this.API_BASE}/ai/math-generate`, {
       method: 'POST',
       headers: this.getAuthHeaders(),
       body: JSON.stringify(payload)

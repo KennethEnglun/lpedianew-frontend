@@ -7,11 +7,13 @@ import AiQuestionGeneratorModal from '../components/AiQuestionGeneratorModal';
 import UiSettingsModal from '../components/UiSettingsModal';
 import AiChatModal from '../components/AiChatModal';
 import AppStudioModal from '../components/AppStudioModal';
+import { MathExpressionBuilder, finalizeMathQuestions } from '../components/MathExpressionBuilder';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { authService } from '../services/authService';
 import { sanitizeHtml } from '../services/sanitizeHtml';
 import { loadHiddenTaskKeys, makeTaskKey, parseTaskKey, saveHiddenTaskKeys } from '../services/taskVisibility';
+import type { MathOp, MathToken } from '../services/mathGame';
 import { Subject, Discussion } from '../types';
 
 type TowerDefenseQuestionDraft =
@@ -134,7 +136,7 @@ const TeacherDashboard: React.FC = () => {
 
   // 小遊戲相關狀態
   const [showGameModal, setShowGameModal] = useState(false);
-	  const [gameType, setGameType] = useState<'maze' | 'matching' | 'tower-defense' | null>(null);
+	  const [gameType, setGameType] = useState<'maze' | 'matching' | 'tower-defense' | 'math' | null>(null);
   const [gameForm, setGameForm] = useState({
     title: '',
     description: '',
@@ -154,6 +156,34 @@ const TeacherDashboard: React.FC = () => {
   const [towerDefenseTimeSecondsText, setTowerDefenseTimeSecondsText] = useState('60');
   const [towerDefenseLivesEnabled, setTowerDefenseLivesEnabled] = useState(true);
   const [towerDefenseLivesLimit, setTowerDefenseLivesLimit] = useState(10);
+
+  // 數學遊戲（新）
+  const [mathGameTab, setMathGameTab] = useState<'manual' | 'ai'>('manual');
+  const [mathAnswerMode, setMathAnswerMode] = useState<'mcq' | 'input'>('mcq');
+  const [mathGrade, setMathGrade] = useState<'小一' | '小二' | '小三' | '小四' | '小五' | '小六'>('小一');
+  const [mathOps, setMathOps] = useState<{ add: boolean; sub: boolean; mul: boolean; div: boolean; paren: boolean }>({
+    add: true,
+    sub: true,
+    mul: false,
+    div: false,
+    paren: false
+  });
+  const [mathPromptText, setMathPromptText] = useState('');
+  const [mathAiLoading, setMathAiLoading] = useState(false);
+  const [mathAiError, setMathAiError] = useState('');
+  const [mathQuestionCount, setMathQuestionCount] = useState(10);
+  const [mathTimeEnabled, setMathTimeEnabled] = useState(false);
+  const [mathTimeSeconds, setMathTimeSeconds] = useState(60);
+  const [mathTimeSecondsText, setMathTimeSecondsText] = useState('60');
+  const [mathLivesEnabled, setMathLivesEnabled] = useState(false);
+  const [mathLivesLimit, setMathLivesLimit] = useState(5);
+  const [mathForm, setMathForm] = useState({
+    title: '',
+    description: '',
+    targetClasses: [] as string[],
+    targetGroups: [] as string[]
+  });
+  const [mathDrafts, setMathDrafts] = useState<Array<{ tokens: MathToken[] }>>([]);
 
   useEffect(() => {
     setTowerDefenseTimeSecondsText(String(towerDefenseTimeSeconds));
@@ -1017,9 +1047,36 @@ const TeacherDashboard: React.FC = () => {
   // 監聽遊戲模態框開啟
   useEffect(() => {
     if (showGameModal) {
-      loadClassesAndGroups(gameForm.subject);
+      if (gameType === 'math') loadClassesAndGroups(Subject.MATH);
+      else loadClassesAndGroups(gameForm.subject);
     }
-  }, [showGameModal]);
+  }, [showGameModal, gameType]);
+
+  useEffect(() => {
+    setMathTimeSecondsText(String(mathTimeSeconds));
+  }, [mathTimeSeconds]);
+
+  const mathAllowedOps = useMemo(() => {
+    const ops: MathOp[] = [];
+    if (mathOps.add) ops.push('add');
+    if (mathOps.sub) ops.push('sub');
+    if (mathOps.mul) ops.push('mul');
+    if (mathOps.div) ops.push('div');
+    return ops;
+  }, [mathOps]);
+
+  useEffect(() => {
+    setMathDrafts((prev) => {
+      const next = [...(prev || [])];
+      if (mathQuestionCount > next.length) {
+        const addCount = mathQuestionCount - next.length;
+        for (let i = 0; i < addCount; i++) next.push({ tokens: [] });
+      } else if (mathQuestionCount < next.length) {
+        next.length = Math.max(0, mathQuestionCount);
+      }
+      return next;
+    });
+  }, [mathQuestionCount]);
 
   // === 小測驗功能 ===
 
@@ -1746,6 +1803,29 @@ const TeacherDashboard: React.FC = () => {
 	                    <div className="text-4xl mb-3">🏰</div>
 	                    <h3 className="text-xl font-bold text-emerald-800">答題塔防</h3>
 	                    <p className="text-sm text-emerald-700 mt-2">不停答題賺金幣，購買士兵守護基地</p>
+	                  </button>
+	                  <button
+	                    onClick={() => {
+	                      setGameType('math');
+	                      setMathGameTab('manual');
+	                      setMathAiError('');
+	                      setMathPromptText('');
+	                      setMathAnswerMode('mcq');
+	                      setMathGrade('小一');
+	                      setMathOps({ add: true, sub: true, mul: false, div: false, paren: false });
+	                      setMathQuestionCount(10);
+	                      setMathTimeEnabled(false);
+	                      setMathTimeSeconds(60);
+	                      setMathLivesEnabled(false);
+	                      setMathLivesLimit(5);
+	                      setMathForm({ title: '', description: '', targetClasses: [], targetGroups: [] });
+	                      setMathDrafts(Array.from({ length: 10 }, () => ({ tokens: [] })));
+	                    }}
+	                    className="p-6 bg-gradient-to-br from-sky-100 to-blue-200 border-4 border-sky-400 rounded-2xl hover:shadow-lg transition-all hover:scale-105"
+	                  >
+	                    <div className="text-4xl mb-3">🧮</div>
+	                    <h3 className="text-xl font-bold text-sky-800">數學遊戲</h3>
+	                    <p className="text-sm text-sky-700 mt-2">支援四選一或輸入答案，分數用上下顯示</p>
 	                  </button>
 	                </div>
 	              </div>
@@ -2694,6 +2774,458 @@ const TeacherDashboard: React.FC = () => {
 	        </div>
 	      )}
 
+	      {/* Math Game Creation Modal */}
+	      {showGameModal && gameType === 'math' && (
+	        <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
+	          <div className="bg-white border-4 border-sky-400 rounded-3xl w-full max-w-5xl max-h-[90vh] overflow-y-auto shadow-comic">
+	            <div className="p-6 border-b-4 border-sky-400 bg-gradient-to-r from-sky-100 to-blue-200">
+	              <div className="flex justify-between items-center">
+	                <div className="flex items-center gap-3">
+	                  <span className="text-3xl">🧮</span>
+	                  <h2 className="text-3xl font-black text-sky-900">創建數學遊戲</h2>
+	                </div>
+	                <button
+	                  onClick={() => { setShowGameModal(false); setGameType(null); }}
+	                  className="w-10 h-10 rounded-full bg-white border-2 border-sky-400 hover:bg-sky-50 flex items-center justify-center"
+	                >
+	                  <X className="w-6 h-6 text-sky-800" />
+	                </button>
+	              </div>
+	            </div>
+
+	            <div className="p-6 space-y-6">
+	              <div className="bg-sky-50 p-4 rounded-xl border-2 border-sky-200">
+	                <p className="text-sky-900 text-sm">
+	                  🧮 <strong>重點：</strong>算式必須顯示正確數學符號（＋ − × ÷），分數以「上下」顯示，不使用斜線。
+	                </p>
+	              </div>
+
+	              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+	                <Input
+	                  label="遊戲標題"
+	                  placeholder="輸入遊戲標題..."
+	                  value={mathForm.title}
+	                  onChange={(e) => setMathForm(prev => ({ ...prev, title: e.target.value }))}
+	                />
+
+	                <div>
+	                  <label className="block text-sm font-bold text-sky-900 mb-2">年級（AI 生成難度參考）</label>
+	                  <select
+	                    className="w-full px-4 py-2 border-4 border-sky-300 rounded-2xl bg-white font-bold"
+	                    value={mathGrade}
+	                    onChange={(e) => setMathGrade(e.target.value as any)}
+	                  >
+	                    {['小一', '小二', '小三', '小四', '小五', '小六'].map(g => (
+	                      <option key={g} value={g}>{g}</option>
+	                    ))}
+	                  </select>
+	                </div>
+	              </div>
+
+	              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+	                <div>
+	                  <label className="block text-sm font-bold text-sky-900 mb-2">模式</label>
+	                  <div className="flex flex-wrap gap-2">
+	                    <button
+	                      type="button"
+	                      onClick={() => setMathAnswerMode('mcq')}
+	                      className={`px-4 py-2 rounded-2xl border-2 font-black ${mathAnswerMode === 'mcq'
+	                        ? 'bg-[#A1D9AE] border-[#5E8B66] text-white'
+	                        : 'bg-white border-gray-300 text-gray-700 hover:bg-gray-50'
+	                        }`}
+	                    >
+	                      四選一
+	                    </button>
+	                    <button
+	                      type="button"
+	                      onClick={() => setMathAnswerMode('input')}
+	                      className={`px-4 py-2 rounded-2xl border-2 font-black ${mathAnswerMode === 'input'
+	                        ? 'bg-[#A1D9AE] border-[#5E8B66] text-white'
+	                        : 'bg-white border-gray-300 text-gray-700 hover:bg-gray-50'
+	                        }`}
+	                    >
+	                      輸入答案
+	                    </button>
+	                  </div>
+	                  <p className="text-xs text-gray-600 mt-1">
+	                    四選一會自動產生 4 個選項；輸入答案支援整數/分數（上下輸入）。
+	                  </p>
+	                </div>
+
+	                <div>
+	                  <label className="block text-sm font-bold text-sky-900 mb-2">題目數量</label>
+	                  <input
+	                    value={String(mathQuestionCount)}
+	                    onChange={(e) => {
+	                      const n = Number.parseInt(String(e.target.value || '').trim(), 10);
+	                      if (!Number.isFinite(n)) return;
+	                      const next = Math.max(1, Math.min(50, n));
+	                      if (next < mathQuestionCount) {
+	                        const willDrop = mathDrafts.slice(next).some(d => (d.tokens || []).length > 0);
+	                        if (willDrop && !confirm('減少題目數量會刪除後面的題目內容，確定要繼續嗎？')) return;
+	                      }
+	                      setMathQuestionCount(next);
+	                    }}
+	                    className="w-full px-4 py-2 border-4 border-sky-300 rounded-2xl bg-white font-bold"
+	                    inputMode="numeric"
+	                  />
+	                  <p className="text-xs text-gray-600 mt-1">範圍 1–50</p>
+	                </div>
+	              </div>
+
+	              <div>
+	                <label className="block text-sm font-bold text-sky-900 mb-2">運算範疇（可多選）</label>
+	                <div className="flex flex-wrap gap-2">
+	                  {[
+	                    { key: 'add', label: '加' },
+	                    { key: 'sub', label: '減' },
+	                    { key: 'mul', label: '乘' },
+	                    { key: 'div', label: '除' },
+	                    { key: 'paren', label: '加括號' }
+	                  ].map((item) => {
+	                    const active = (mathOps as any)[item.key] as boolean;
+	                    return (
+	                      <button
+	                        key={item.key}
+	                        type="button"
+	                        onClick={() => setMathOps(prev => ({ ...prev, [item.key]: !active } as any))}
+	                        className={`px-4 py-2 rounded-2xl border-2 font-black transition-colors ${active
+	                          ? 'bg-sky-200 border-sky-500 text-sky-900'
+	                          : 'bg-white border-gray-300 text-gray-700 hover:bg-gray-50'
+	                          }`}
+	                      >
+	                        {item.label}
+	                      </button>
+	                    );
+	                  })}
+	                </div>
+	                {mathAllowedOps.length === 0 && (
+	                  <div className="mt-2 text-sm font-bold text-red-600">請至少選擇一種運算（加/減/乘/除）</div>
+	                )}
+	              </div>
+
+	              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+	                <div className="bg-white border-2 border-gray-200 rounded-2xl p-4">
+	                  <div className="flex items-center justify-between gap-3">
+	                    <div>
+	                      <div className="text-sm font-black text-sky-900">限時（可選）</div>
+	                      <div className="text-xs text-gray-600">10–600 秒</div>
+	                    </div>
+	                    <button
+	                      type="button"
+	                      onClick={() => setMathTimeEnabled(v => !v)}
+	                      className={`px-4 py-2 rounded-2xl border-2 font-black ${mathTimeEnabled
+	                        ? 'bg-[#A1D9AE] border-[#5E8B66] text-white'
+	                        : 'bg-white border-gray-300 text-gray-700 hover:bg-gray-50'
+	                        }`}
+	                    >
+	                      {mathTimeEnabled ? '已啟用' : '未啟用'}
+	                    </button>
+	                  </div>
+	                  {mathTimeEnabled && (
+	                    <div className="mt-3">
+	                      <input
+	                        value={mathTimeSecondsText}
+	                        onChange={(e) => setMathTimeSecondsText(e.target.value)}
+	                        onBlur={() => setMathTimeSeconds(clampTowerDefenseTimeSeconds(mathTimeSecondsText, mathTimeSeconds))}
+	                        className="w-full px-4 py-2 rounded-2xl border-2 border-gray-300 font-bold"
+	                        inputMode="numeric"
+	                      />
+	                    </div>
+	                  )}
+	                </div>
+
+	                <div className="bg-white border-2 border-gray-200 rounded-2xl p-4">
+	                  <div className="flex items-center justify-between gap-3">
+	                    <div>
+	                      <div className="text-sm font-black text-sky-900">生命值闖關（可選）</div>
+	                      <div className="text-xs text-gray-600">答錯扣 1 命</div>
+	                    </div>
+	                    <button
+	                      type="button"
+	                      onClick={() => setMathLivesEnabled(v => !v)}
+	                      className={`px-4 py-2 rounded-2xl border-2 font-black ${mathLivesEnabled
+	                        ? 'bg-[#A1D9AE] border-[#5E8B66] text-white'
+	                        : 'bg-white border-gray-300 text-gray-700 hover:bg-gray-50'
+	                        }`}
+	                    >
+	                      {mathLivesEnabled ? '已啟用' : '未啟用'}
+	                    </button>
+	                  </div>
+	                  {mathLivesEnabled && (
+	                    <div className="mt-3">
+	                      <input
+	                        value={String(mathLivesLimit)}
+	                        onChange={(e) => {
+	                          const n = Number.parseInt(String(e.target.value || '').trim(), 10);
+	                          if (!Number.isFinite(n)) return;
+	                          setMathLivesLimit(Math.max(1, Math.min(99, n)));
+	                        }}
+	                        className="w-full px-4 py-2 rounded-2xl border-2 border-gray-300 font-bold"
+	                        inputMode="numeric"
+	                      />
+	                    </div>
+	                  )}
+	                </div>
+	              </div>
+
+	              {/* Target Classes */}
+	              <div>
+	                <label className="block text-sm font-bold text-sky-900 mb-2">派發至班級</label>
+	                <div className="flex flex-wrap gap-2">
+	                  {availableClasses.map(className => (
+	                    <button
+	                      key={className}
+	                      type="button"
+	                      onClick={() => {
+	                        setMathForm(prev => ({
+	                          ...prev,
+	                          targetClasses: prev.targetClasses.includes(className)
+	                            ? prev.targetClasses.filter(c => c !== className)
+	                            : [...prev.targetClasses, className]
+	                        }));
+	                      }}
+	                      className={`px-4 py-2 rounded-2xl border-2 font-bold transition-colors ${mathForm.targetClasses.includes(className)
+	                        ? 'bg-sky-200 border-sky-500 text-sky-900'
+	                        : 'bg-white border-gray-300 text-gray-700 hover:border-sky-500'
+	                        }`}
+	                    >
+	                      {className}
+	                    </button>
+	                  ))}
+	                </div>
+	              </div>
+
+	              {/* Target Groups */}
+	              {availableGroups.length > 0 && (
+	                <div>
+	                  <label className="block text-sm font-bold text-sky-900 mb-2">
+	                    選擇分組（數學）
+	                  </label>
+	                  <div className="flex flex-wrap gap-2">
+	                    {availableGroups.map(groupName => (
+	                      <button
+	                        key={groupName}
+	                        type="button"
+	                        onClick={() => {
+	                          setMathForm(prev => ({
+	                            ...prev,
+	                            targetGroups: prev.targetGroups.includes(groupName)
+	                              ? prev.targetGroups.filter(g => g !== groupName)
+	                              : [...prev.targetGroups, groupName]
+	                          }));
+	                        }}
+	                        className={`px-4 py-2 rounded-2xl border-2 font-bold transition-colors ${mathForm.targetGroups.includes(groupName)
+	                          ? 'bg-sky-200 border-sky-500 text-sky-900'
+	                          : 'bg-white border-gray-300 text-gray-700 hover:border-sky-500'
+	                          }`}
+	                      >
+	                        {groupName}
+	                      </button>
+	                    ))}
+	                  </div>
+	                  <p className="text-xs text-gray-500 mt-1">
+	                    選擇分組會精確派發給該分組的學生
+	                  </p>
+	                </div>
+	              )}
+
+	              <div className="bg-white border-2 border-gray-200 rounded-2xl p-4">
+	                <div className="flex items-center justify-between gap-3 flex-wrap">
+	                  <div className="flex items-center gap-2">
+	                    <button
+	                      type="button"
+	                      onClick={() => setMathGameTab('manual')}
+	                      className={`px-4 py-2 rounded-2xl border-2 font-black ${mathGameTab === 'manual'
+	                        ? 'bg-[#FDEEAD] border-brand-brown text-brand-brown'
+	                        : 'bg-white border-gray-300 text-gray-700 hover:bg-gray-50'
+	                        }`}
+	                    >
+	                      手動輸入
+	                    </button>
+	                    <button
+	                      type="button"
+	                      onClick={() => setMathGameTab('ai')}
+	                      className={`px-4 py-2 rounded-2xl border-2 font-black ${mathGameTab === 'ai'
+	                        ? 'bg-[#FDEEAD] border-brand-brown text-brand-brown'
+	                        : 'bg-white border-gray-300 text-gray-700 hover:bg-gray-50'
+	                        }`}
+	                    >
+	                      AI 生成
+	                    </button>
+	                  </div>
+
+	                  <div className="text-xs text-gray-600">
+	                    {mathGameTab === 'manual' ? '用按鈕建立算式（支援分數/括號）' : '按設定自動生成，之後仍可手動微調'}
+	                  </div>
+	                </div>
+	              </div>
+
+	              {mathGameTab === 'ai' && (
+	                <div className="bg-sky-50 border-2 border-sky-200 rounded-2xl p-4 space-y-3">
+	                  <div>
+	                    <label className="block text-sm font-bold text-sky-900 mb-2">AI 額外要求（可選）</label>
+	                    <textarea
+	                      value={mathPromptText}
+	                      onChange={(e) => setMathPromptText(e.target.value)}
+	                      className="w-full min-h-[56px] px-4 py-3 border-2 border-sky-200 rounded-2xl bg-white font-bold focus:outline-none focus:border-sky-400"
+	                      placeholder="例如：加入分數題；避免負數；加括號多一些..."
+	                    />
+	                  </div>
+	                  {mathAiError && (
+	                    <div className="text-sm font-bold text-red-600">{mathAiError}</div>
+	                  )}
+	                  <div className="flex items-center gap-3">
+	                    <button
+	                      type="button"
+	                      onClick={async () => {
+	                        try {
+	                          setMathAiError('');
+	                          if (mathAllowedOps.length === 0) return;
+	                          setMathAiLoading(true);
+	                          const resp = await authService.generateMathQuestions({
+	                            grade: mathGrade,
+	                            count: mathQuestionCount,
+	                            allowedOps: mathAllowedOps,
+	                            allowParentheses: mathOps.paren,
+	                            answerMode: mathAnswerMode,
+	                            promptText: mathPromptText
+	                          });
+	                          const qs = Array.isArray(resp?.questions) ? resp.questions : [];
+	                          setMathDrafts(qs.map((q: any) => ({ tokens: Array.isArray(q.tokens) ? q.tokens : [] })));
+	                        } catch (e: any) {
+	                          setMathAiError(e?.message || 'AI 生成失敗');
+	                        } finally {
+	                          setMathAiLoading(false);
+	                        }
+	                      }}
+	                      disabled={mathAiLoading || mathAllowedOps.length === 0}
+	                      className="px-5 py-3 rounded-2xl bg-[#A1D9AE] border-2 border-[#5E8B66] text-white font-black hover:bg-[#8BC7A0] disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+	                    >
+	                      <Bot className="w-5 h-5" />
+	                      {mathAiLoading ? '生成中...' : 'AI 生成題目'}
+	                    </button>
+	                    <div className="text-xs text-gray-600">
+	                      生成後可於下方逐題調整
+	                    </div>
+	                  </div>
+	                </div>
+	              )}
+
+	              <div className="space-y-4">
+	                {mathDrafts.length === 0 ? (
+	                  <div className="text-center py-8 text-gray-400 font-bold border-4 border-dashed border-sky-200 rounded-3xl">
+	                    還沒有題目，請先設定題目數量或使用 AI 生成 🧮
+	                  </div>
+	                ) : (
+	                  <div className="space-y-6">
+	                    {mathDrafts.map((q, idx) => (
+	                      <div key={idx} className="bg-white border-4 border-sky-200 rounded-3xl p-5">
+	                        <div className="flex items-center justify-between gap-3 mb-3">
+	                          <div className="text-lg font-black text-sky-900">第 {idx + 1} 題</div>
+	                          <button
+	                            type="button"
+	                            onClick={() => {
+	                              if (!confirm('確定刪除此題嗎？')) return;
+	                              setMathDrafts(prev => {
+	                                const next = prev.filter((_, i) => i !== idx);
+	                                const ensured = next.length > 0 ? next : [{ tokens: [] }];
+	                                setMathQuestionCount(Math.max(1, ensured.length));
+	                                return ensured;
+	                              });
+	                            }}
+	                            className="p-2 bg-red-100 text-red-700 rounded-xl hover:bg-red-200"
+	                            title="刪除"
+	                          >
+	                            <Trash className="w-4 h-4" />
+	                          </button>
+	                        </div>
+
+	                        <MathExpressionBuilder
+	                          tokens={q.tokens || []}
+	                          onChange={(next) => setMathDrafts(prev => prev.map((row, i) => i === idx ? ({ ...row, tokens: next }) : row))}
+	                          allowedOps={mathAllowedOps}
+	                          allowParentheses={mathOps.paren}
+	                        />
+	                      </div>
+	                    ))}
+	                  </div>
+	                )}
+
+	                <div className="flex items-center justify-between gap-3 flex-wrap">
+	                  <button
+	                    type="button"
+	                    onClick={() => setMathQuestionCount(c => Math.min(50, c + 1))}
+	                    disabled={mathDrafts.length >= 50}
+	                    className="px-4 py-2 bg-sky-100 text-sky-900 border-2 border-sky-300 rounded-2xl font-black hover:bg-sky-200 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+	                  >
+	                    <Plus className="w-4 h-4" />
+	                    新增題目
+	                  </button>
+
+	                  <div className="text-xs text-gray-600">
+	                    已有 {mathDrafts.length} 題
+	                  </div>
+	                </div>
+	              </div>
+
+	              <div className="flex justify-end gap-3 pt-4 border-t-2 border-gray-100">
+	                <button
+	                  onClick={() => { setShowGameModal(false); setGameType(null); }}
+	                  className="px-6 py-3 rounded-2xl border-4 border-gray-300 bg-white text-gray-700 font-bold hover:bg-gray-50"
+	                >
+	                  取消
+	                </button>
+	                <button
+	                  onClick={async () => {
+	                    try {
+	                      if (!mathForm.title.trim()) return alert('請輸入遊戲標題');
+	                      if (mathAllowedOps.length === 0) return alert('請至少選擇一種運算（加/減/乘/除）');
+	                      if (!mathForm.targetClasses?.length && !mathForm.targetGroups?.length) return alert('請選擇至少一個目標班級或分組');
+	                      if (!mathDrafts.length) return alert('請新增至少一題');
+
+	                      const questions = finalizeMathQuestions(mathDrafts, {
+	                        answerMode: mathAnswerMode,
+	                        allowedOps: mathAllowedOps,
+	                        allowParentheses: mathOps.paren
+	                      });
+
+	                      await authService.createGame({
+	                        title: mathForm.title,
+	                        description: mathForm.description,
+	                        gameType: 'math',
+	                        subject: Subject.MATH,
+	                        targetClasses: mathForm.targetClasses,
+	                        targetGroups: mathForm.targetGroups,
+	                        questions,
+	                        difficulty: 'medium',
+	                        timeLimitSeconds: mathTimeEnabled ? clampTowerDefenseTimeSeconds(mathTimeSecondsText, mathTimeSeconds) : undefined,
+	                        livesLimit: mathLivesEnabled ? mathLivesLimit : null,
+	                        math: {
+	                          answerMode: mathAnswerMode,
+	                          allowedOps: mathAllowedOps,
+	                          allowParentheses: mathOps.paren,
+	                          grade: mathGrade
+	                        }
+	                      });
+
+	                      alert('數學遊戲創建成功！');
+	                      setShowGameModal(false);
+	                      setGameType(null);
+	                    } catch (e: any) {
+	                      alert('創建遊戲失敗：' + (e?.message || '未知錯誤'));
+	                    }
+	                  }}
+	                  className="px-6 py-3 rounded-2xl border-4 border-sky-600 bg-sky-600 text-white font-black hover:bg-sky-700"
+	                >
+	                  創建遊戲
+	                </button>
+	              </div>
+	            </div>
+	          </div>
+	        </div>
+	      )}
+
 	      {/* Discussion Creation Modal */}
 	      {
 	        showDiscussionModal && (
@@ -3185,6 +3717,8 @@ const TeacherDashboard: React.FC = () => {
 	                                              ? '迷宮闖關'
 	                                              : assignment.gameType === 'matching'
 	                                                ? '翻牌記憶'
+	                                                : assignment.gameType === 'math'
+	                                                  ? '數學遊戲'
 	                                                : assignment.gameType === 'tower-defense'
 	                                                  ? '答題塔防'
 	                                                  : '小遊戲')
@@ -3315,6 +3849,8 @@ const TeacherDashboard: React.FC = () => {
                                                   ? '迷宮闖關'
                                                   : assignment.gameType === 'matching'
                                                     ? '翻牌記憶'
+                                                    : assignment.gameType === 'math'
+                                                      ? '數學遊戲'
                                                     : assignment.gameType === 'tower-defense'
                                                       ? '答題塔防'
                                                       : '小遊戲')
