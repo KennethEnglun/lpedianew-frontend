@@ -651,13 +651,17 @@ const AppStudioModal: React.FC<{
   }, [editHistoryKey, open]);
 
   const createNewApp = async () => {
-    const title = '新作品';
-    const resp = await authService.createAppStudioApp({ title, visibility: 'private' });
-    const app = resp.app;
-    if (app?.id) {
-      await loadLists();
-      setTab('my');
-      await openApp(String(app.id));
+    try {
+      const title = '新作品';
+      const resp = await authService.createAppStudioApp({ title, visibility: 'private' });
+      const app = resp.app;
+      if (app?.id) {
+        await loadLists();
+        setTab('my');
+        await openApp(String(app.id));
+      }
+    } catch (e) {
+      alert(e instanceof Error ? e.message : '建立作品失敗');
     }
   };
 
@@ -680,8 +684,10 @@ const AppStudioModal: React.FC<{
         baseTitle: isEdit ? String(generatedTitle || selectedApp?.title || '').trim() : undefined,
         baseIndexHtml: isEdit ? baseIndexHtml : undefined
       });
-      setGeneratedTitle(String(resp.title || '小程式'));
-      setGeneratedHtml(String(resp.indexHtml || ''));
+      const nextTitle = String(resp.title || '小程式');
+      const nextHtml = String(resp.indexHtml || '');
+      setGeneratedTitle(nextTitle);
+      setGeneratedHtml(nextHtml);
       setAiNotes(String((resp as any)?.notes || ''));
       setPreviewStopped(false);
       setPreviewKey((k) => k + 1);
@@ -689,8 +695,14 @@ const AppStudioModal: React.FC<{
         at: Date.now(),
         prompt: p,
         title: String(resp.title || generatedTitle || selectedApp?.title || '小程式'),
-        indexHtml: String(resp.indexHtml || '')
+        indexHtml: nextHtml
       });
+
+      // 每次生成都自動儲存版本
+      const saved = await saveAsVersion({ title: nextTitle, prompt: p, indexHtml: nextHtml, silent: true });
+      if (!saved) {
+        setGenerateError('已生成，但自動儲存版本失敗（可能已達作品/公開數量上限）。');
+      }
     } catch (e) {
       setGenerateError(e instanceof Error ? e.message : '生成失敗');
     } finally {
@@ -735,40 +747,55 @@ const AppStudioModal: React.FC<{
     return null;
   };
 
-  const saveAsVersion = async () => {
-    if (!generatedHtml.trim()) return;
-    const appId = await ensureEditableApp();
-    if (!appId) return;
-    if (!generatedHtml.trim()) return;
-    const title = String(generatedTitle || selectedApp?.title || '版本').trim();
-    const resp = await authService.createAppStudioVersion(appId, {
-      title,
-      prompt: String(prompt || '').trim(),
-      indexHtml: generatedHtml
-    });
-    const v = resp.version;
-    await loadLists();
-    await loadAppVersions(appId);
-    if (v?.id) setSelectedVersionId(String(v.id));
+  const saveAsVersion = async (opts?: { title?: string; prompt?: string; indexHtml?: string; silent?: boolean }): Promise<boolean> => {
+    try {
+      const html = String(opts?.indexHtml ?? generatedHtml ?? '');
+      if (!html.trim()) return false;
+      const appId = await ensureEditableApp();
+      if (!appId) return false;
+      const title = String(opts?.title ?? generatedTitle ?? selectedApp?.title ?? '版本').trim();
+      const p = String(opts?.prompt ?? prompt ?? '').trim();
+      const resp = await authService.createAppStudioVersion(appId, {
+        title,
+        prompt: p,
+        indexHtml: html
+      });
+      const v = resp.version;
+      await loadLists();
+      await loadAppVersions(appId);
+      if (v?.id) setSelectedVersionId(String(v.id));
+      return true;
+    } catch (e) {
+      if (!opts?.silent) alert(e instanceof Error ? e.message : '儲存版本失敗');
+      return false;
+    }
   };
 
   const fork = async () => {
     if (!selectedAppId) return;
-    const resp = await authService.forkAppStudioApp(selectedAppId, selectedVersionId ? { versionId: selectedVersionId } : undefined);
-    const app = resp.app;
-    if (app?.id) {
-      await loadLists();
-      setTab('my');
-      await openApp(String(app.id));
+    try {
+      const resp = await authService.forkAppStudioApp(selectedAppId, selectedVersionId ? { versionId: selectedVersionId } : undefined);
+      const app = resp.app;
+      if (app?.id) {
+        await loadLists();
+        setTab('my');
+        await openApp(String(app.id));
+      }
+    } catch (e) {
+      alert(e instanceof Error ? e.message : 'Fork 失敗');
     }
   };
 
   const togglePublic = async () => {
     if (!selectedAppId || !selectedApp) return;
     if (!canEditSelected) return;
-    const next = selectedApp.visibility === 'public' ? 'private' : 'public';
-    await authService.updateAppStudioApp(selectedAppId, { visibility: next });
-    await loadLists();
+    try {
+      const next = selectedApp.visibility === 'public' ? 'private' : 'public';
+      await authService.updateAppStudioApp(selectedAppId, { visibility: next });
+      await loadLists();
+    } catch (e) {
+      alert(e instanceof Error ? e.message : '更新失敗');
+    }
   };
 
   const moveToFolder = async (nextFolderId: string) => {
@@ -1980,23 +2007,46 @@ const AppStudioModal: React.FC<{
 
       {reviewTarget && (
         <div className="fixed inset-0 z-[95] bg-black/50 flex items-center justify-center p-4">
-          <div className="bg-white w-[98vw] h-[92vh] max-w-none max-h-none overflow-hidden rounded-3xl border-4 border-brand-brown shadow-comic-xl flex flex-col">
-            <div className="p-4 border-b-4 border-brand-brown bg-[#E8F5E9] flex items-center gap-2">
-              <div className="text-xl font-black text-brand-brown">提交檢視</div>
-              <div className="ml-2 text-xs text-gray-600 font-bold">
-                {String(reviewTarget?.user?.profile?.name || reviewTarget?.user?.username || '')}
-                {reviewTarget?.user?.profile?.class ? ` • ${String(reviewTarget.user.profile.class)}` : ''}
-                {reviewTarget?.app?.title ? ` • ${String(reviewTarget.app.title)}` : ''}
-              </div>
-              <button
-                type="button"
-                onClick={() => setReviewTarget(null)}
-                className="ml-auto w-9 h-9 rounded-full bg-white border-2 border-brand-brown hover:bg-gray-100 flex items-center justify-center"
-                aria-label="關閉"
-              >
-                <X className="w-5 h-5 text-brand-brown" />
-              </button>
-            </div>
+	            <div className="bg-white w-[98vw] h-[92vh] max-w-none max-h-none overflow-hidden rounded-3xl border-4 border-brand-brown shadow-comic-xl flex flex-col">
+	              <div className="p-4 border-b-4 border-brand-brown bg-[#E8F5E9] flex items-center gap-2">
+	                <div className="text-xl font-black text-brand-brown">提交檢視</div>
+	                <div className="ml-2 text-xs text-gray-600 font-bold">
+	                  {String(reviewTarget?.user?.profile?.name || reviewTarget?.user?.username || '')}
+	                  {reviewTarget?.user?.profile?.class ? ` • ${String(reviewTarget.user.profile.class)}` : ''}
+	                  {reviewTarget?.app?.title ? ` • ${String(reviewTarget.app.title)}` : ''}
+	                </div>
+	                {isTeacher && (
+	                  <button
+	                    type="button"
+	                    onClick={async () => {
+	                      const appId = String(reviewTarget?.appId || reviewTarget?.app?.id || '');
+	                      if (!appId) return;
+	                      if (!confirm('確定要刪除這個作品？（版本與提交記錄會一併刪除）')) return;
+	                      try {
+	                        await authService.deleteAppStudioApp(appId);
+	                        setInboxSubmissions((prev) => prev.filter((x) => String(x?.appId || x?.app?.id || '') !== appId));
+	                        setMySubmissions((prev) => prev.filter((x) => String(x?.appId || x?.app?.id || '') !== appId));
+	                        setReviewTarget(null);
+	                        await loadLists();
+	                      } catch (e) {
+	                        alert(e instanceof Error ? e.message : '刪除失敗');
+	                      }
+	                    }}
+	                    className="ml-auto h-9 px-3 rounded-full bg-white border-2 border-red-300 text-red-700 hover:bg-red-50 flex items-center gap-2 font-black text-sm"
+	                  >
+	                    <Trash2 className="w-4 h-4" />
+	                    刪除作品
+	                  </button>
+	                )}
+	                <button
+	                  type="button"
+	                  onClick={() => setReviewTarget(null)}
+	                  className="w-9 h-9 rounded-full bg-white border-2 border-brand-brown hover:bg-gray-100 flex items-center justify-center"
+	                  aria-label="關閉"
+	                >
+	                  <X className="w-5 h-5 text-brand-brown" />
+	                </button>
+	              </div>
             <div className="flex-1 min-h-0 flex">
               <div className="flex-1 min-h-0 bg-black/5">
                 {reviewHtml.trim() ? (
