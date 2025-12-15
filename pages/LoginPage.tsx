@@ -8,23 +8,16 @@ const LoginPage: React.FC = () => {
   const navigate = useNavigate();
   const { login, isAuthenticated, user, isLoading } = useAuth();
 
-  const [teacherForm, setTeacherForm] = useState({
-    username: '',
-    password: ''
-  });
-
-  const [studentForm, setStudentForm] = useState({
-    username: '',
-    password: ''
+  type LoginRole = 'teacher' | 'student' | 'admin';
+  const [role, setRole] = useState<LoginRole>('student');
+  const [forms, setForms] = useState<Record<LoginRole, { username: string; password: string }>>({
+    teacher: { username: '', password: '' },
+    student: { username: '', password: '' },
+    admin: { username: 'admin', password: '' }
   });
 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState('');
-  const [showAdminModal, setShowAdminModal] = useState(false);
-  const [adminForm, setAdminForm] = useState({
-    username: 'admin',
-    password: ''
-  });
 
   // 如果已經登入，重定向到對應頁面
   useEffect(() => {
@@ -45,10 +38,20 @@ const LoginPage: React.FC = () => {
     }
   }, [isAuthenticated, user, navigate]);
 
-  const handleTeacherLogin = async (e: React.FormEvent) => {
+  const setField = (field: 'username' | 'password', value: string) => {
+    setForms((prev) => ({
+      ...prev,
+      [role]: { ...prev[role], [field]: value }
+    }));
+  };
+
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!teacherForm.username || !teacherForm.password) {
-      setError('請填寫完整的登入資料');
+    const form = forms[role];
+    const username = String(form.username || '').trim();
+    const password = String(form.password || '').trim();
+    if (!username || !password) {
+      setError(role === 'admin' ? '請輸入管理員帳號和密碼' : '請填寫完整的登入資料');
       return;
     }
 
@@ -56,53 +59,13 @@ const LoginPage: React.FC = () => {
     setError('');
 
     try {
-      await login(teacherForm.username, teacherForm.password, 'teacher');
+      await login(username, password, role);
     } catch (error) {
-      setError(error instanceof Error ? error.message : '登入失敗，請檢查用戶名和密碼');
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
-
-  const handleStudentLogin = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!studentForm.username || !studentForm.password) {
-      setError('請填寫完整的登入資料');
-      return;
-    }
-
-    setIsSubmitting(true);
-    setError('');
-
-    try {
-      await login(studentForm.username, studentForm.password, 'student');
-    } catch (error) {
-      setError(error instanceof Error ? error.message : '登入失敗，請檢查用戶名和密碼');
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
-
-  const handleAdminAccess = () => {
-    setShowAdminModal(true);
-    setAdminForm({ username: 'admin', password: '' });
-    setError('');
-  };
-
-  const handleAdminLogin = async () => {
-    if (!adminForm.username || !adminForm.password) {
-      setError('請輸入管理員帳號和密碼');
-      return;
-    }
-
-    setIsSubmitting(true);
-    setError('');
-
-    try {
-      await login(adminForm.username, adminForm.password, 'admin');
-      setShowAdminModal(false);
-    } catch (error) {
-      setError(error instanceof Error ? error.message : '管理員登入失敗，請聯絡系統管理員');
+      if (role === 'admin') {
+        setError(error instanceof Error ? error.message : '管理員登入失敗，請聯絡系統管理員');
+      } else {
+        setError(error instanceof Error ? error.message : '登入失敗，請檢查用戶名和密碼');
+      }
     } finally {
       setIsSubmitting(false);
     }
@@ -120,172 +83,80 @@ const LoginPage: React.FC = () => {
   }
 
   return (
-    <div 
-      className="min-h-full w-full flex flex-col items-center justify-start p-4 md:p-8"
-      style={{
-        backgroundImage: `url('/bg.png')`,
-        backgroundSize: 'cover',
-        backgroundPosition: 'center',
-        backgroundRepeat: 'no-repeat'
-      }}
-    >
-      <div className="w-full max-w-5xl mx-auto flex flex-col items-center">
-        <div className="mb-8 md:mb-12 text-center mt-2 md:mt-6">
-          <h1 className="text-6xl sm:text-7xl md:text-8xl font-rounded font-black text-brand-green-light drop-shadow-[0_4px_0_rgba(94,76,64,1)] text-stroke leading-none">
-            <span className="text-white drop-shadow-md" style={{ textShadow: '4px 4px 0 #5E4C40, -2px -2px 0 #5E4C40, 2px -2px 0 #5E4C40, -2px 2px 0 #5E4C40' }}>Lpedia</span>
-          </h1>
-          <h2 className="text-base sm:text-lg md:text-2xl lg:text-3xl font-rounded font-bold text-yellow-100 mt-3" style={{ textShadow: '2px 2px 4px rgba(0,0,0,0.8), 1px 1px 2px rgba(0,0,0,0.6)' }}>
-            九龍婦女福利會李炳紀念學校校本AI學習平台
-          </h2>
-        </div>
-      </div>
+    <div className="min-h-screen w-full bg-gradient-to-br from-brand-cream via-white to-brand-blue/30 p-4 sm:p-8 flex items-center justify-center">
+      <div className="relative w-full max-w-6xl">
+        <div className="pointer-events-none absolute -top-8 -left-8 w-24 h-24 rounded-full bg-brand-yellow/80" aria-hidden="true" />
+        <div className="pointer-events-none absolute -bottom-10 -right-10 w-28 h-28 rounded-full bg-brand-pink/50" aria-hidden="true" />
 
-      <div className="w-full max-w-5xl mx-auto grid grid-cols-1 md:grid-cols-2 gap-8 md:gap-12 items-start">
-        
-        {/* Teacher Login Card */}
-        <div className="w-full max-w-md bg-brand-yellow-light border-4 border-brand-brown rounded-[2rem] p-6 sm:p-8 shadow-comic-lg">
-          <div className="flex flex-col items-center mb-6">
-            <div className="w-20 h-20 sm:w-24 sm:h-24 rounded-full border-4 border-brand-brown bg-white mb-4 overflow-hidden relative">
-               <img
-                src="/teacher_login.png"
-                alt="Teacher"
-                className="w-full h-full object-cover"
-              />
+        <div className="bg-white/80 backdrop-blur-sm border-4 border-brand-brown rounded-[2.5rem] shadow-comic-xl overflow-hidden grid grid-cols-1 lg:grid-cols-2">
+          <div className="p-8 sm:p-10 bg-white">
+            <div className="mb-10">
+              <h1 className="text-5xl sm:text-6xl font-rounded font-black text-brand-brown leading-none">
+                Lpedia
+              </h1>
+              <div className="mt-3 text-sm sm:text-base font-bold text-brand-brown/80">
+                九龍婦女福利會李炳紀念學校校本AI學習平台
+              </div>
             </div>
-            <h3 className="text-2xl font-bold text-brand-brown">教師登入</h3>
-          </div>
-          
-          <form onSubmit={handleTeacherLogin} className="space-y-4">
-            <Input
-              placeholder="帳號"
-              value={teacherForm.username}
-              onChange={(e) => setTeacherForm({ ...teacherForm, username: e.target.value })}
-            />
-            <Input
-              type="password"
-              placeholder="密碼"
-              value={teacherForm.password}
-              onChange={(e) => setTeacherForm({ ...teacherForm, password: e.target.value })}
-            />
-            <Button
-              fullWidth
-              type="submit"
-              className="mt-4"
-              disabled={isSubmitting}
-            >
-              {isSubmitting ? '登入中...' : '登入'}
-            </Button>
 
-            {/* Admin Link */}
-            <div className="text-center mt-3">
-              <button
-                type="button"
-                onClick={handleAdminAccess}
-                className="text-xs text-gray-500 hover:text-gray-700 font-bold opacity-70 hover:opacity-100 transition-opacity"
-                style={{ fontSize: '11px' }}
-                disabled={isSubmitting}
-              >
-                管理員入口
-              </button>
+            <div className="flex items-center gap-2 mb-6">
+              {(['teacher', 'student', 'admin'] as const).map((r) => (
+                <button
+                  key={r}
+                  type="button"
+                  onClick={() => { setRole(r); setError(''); }}
+                  disabled={isSubmitting}
+                  className={`flex-1 py-2 px-3 rounded-2xl border-2 font-rounded font-black transition-all ${
+                    role === r
+                      ? 'bg-brand-yellow border-brand-brown text-brand-brown shadow-comic'
+                      : 'bg-white border-gray-200 text-gray-600 hover:border-brand-brown'
+                  }`}
+                >
+                  {r === 'teacher' ? '教師' : r === 'student' ? '學生' : '管理員'}
+                </button>
+              ))}
             </div>
-          </form>
-        </div>
 
-
-        {/* Student Login Card */}
-        <div className="w-full max-w-md bg-brand-green-light border-4 border-brand-green-dark rounded-[2rem] p-6 sm:p-8 shadow-comic-lg">
-          <div className="flex flex-col items-center mb-6">
-            <div className="w-20 h-20 sm:w-24 sm:h-24 rounded-full border-4 border-brand-brown bg-white mb-4 overflow-hidden">
-              <img
-                src="/student_login.png"
-                alt="Student"
-                className="w-full h-full object-cover"
-              />
-            </div>
-            <h3 className="text-2xl font-bold text-brand-green-dark">學生登入</h3>
-          </div>
-          
-          <form onSubmit={handleStudentLogin} className="space-y-4">
-            <Input
-              placeholder="帳號"
-              className="border-brand-green-dark focus:ring-brand-green"
-              value={studentForm.username}
-              onChange={(e) => setStudentForm({ ...studentForm, username: e.target.value })}
-            />
-            <Input
-              type="password"
-              placeholder="密碼"
-              className="border-brand-green-dark focus:ring-brand-green"
-              value={studentForm.password}
-              onChange={(e) => setStudentForm({ ...studentForm, password: e.target.value })}
-            />
-            <Button
-              fullWidth
-              type="submit"
-              variant="success"
-              className="mt-4 border-brand-green-dark bg-[#A1D9AE] hover:bg-[#8ECF9D] text-brand-green-dark"
-              disabled={isSubmitting}
-            >
-              {isSubmitting ? '登入中...' : '登入'}
-            </Button>
-          </form>
-        </div>
-
-      </div>
-
-      {/* Error Message */}
-      {error && (
-        <div className="mt-6 w-full max-w-md mx-auto">
-          <div className="bg-red-100 border-4 border-red-500 rounded-2xl p-4 text-center">
-            <p className="text-red-700 font-bold">{error}</p>
-          </div>
-        </div>
-      )}
-
-      {/* Admin Password Modal */}
-      {showAdminModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white border-4 border-brand-brown rounded-2xl p-8 max-w-md w-full shadow-comic-xl">
-            <h3 className="text-2xl font-bold text-brand-brown text-center mb-6">管理員驗證</h3>
-            <div className="space-y-4">
+            <form onSubmit={handleLogin} className="space-y-4">
               <Input
-                placeholder="管理員帳號"
-                value={adminForm.username}
-                onChange={(e) => setAdminForm(prev => ({ ...prev, username: e.target.value }))}
-                autoFocus
+                placeholder={role === 'admin' ? '管理員帳號' : '帳號'}
+                autoComplete="username"
+                value={forms[role].username}
+                onChange={(e) => setField('username', e.target.value)}
               />
               <Input
                 type="password"
-                placeholder="管理員密碼"
-                value={adminForm.password}
-                onChange={(e) => setAdminForm(prev => ({ ...prev, password: e.target.value }))}
-                onKeyPress={(e) => e.key === 'Enter' && handleAdminLogin()}
+                placeholder={role === 'admin' ? '管理員密碼' : '密碼'}
+                autoComplete="current-password"
+                value={forms[role].password}
+                onChange={(e) => setField('password', e.target.value)}
               />
-              <div className="flex gap-3">
-                <Button
-                  fullWidth
-                  variant="secondary"
-                  onClick={() => {
-                    setShowAdminModal(false);
-                    setAdminForm({ username: 'admin', password: '' });
-                    setError('');
-                  }}
-                  disabled={isSubmitting}
-                >
-                  取消
-                </Button>
-                <Button
-                  fullWidth
-                  onClick={handleAdminLogin}
-                  disabled={isSubmitting || !adminForm.password || !adminForm.username}
-                >
-                  {isSubmitting ? '登入中...' : '確認'}
-                </Button>
-              </div>
-            </div>
+              {error && (
+                <div className="bg-red-50 border-2 border-red-200 rounded-2xl p-3 text-center">
+                  <div className="text-red-700 font-bold text-sm">{error}</div>
+                </div>
+              )}
+              <Button
+                fullWidth
+                type="submit"
+                className="mt-2"
+                disabled={isSubmitting}
+              >
+                {isSubmitting ? '登入中...' : '登入'}
+              </Button>
+            </form>
+          </div>
+
+          <div className="relative min-h-[280px] lg:min-h-[640px] border-t-4 lg:border-t-0 lg:border-l-4 border-brand-brown">
+            <div
+              className="absolute inset-0 bg-cover bg-center"
+              style={{ backgroundImage: `url('/bg.png')` }}
+              aria-hidden="true"
+            />
+            <div className="absolute inset-0 bg-gradient-to-br from-white/10 via-transparent to-black/15" aria-hidden="true" />
           </div>
         </div>
-      )}
+      </div>
     </div>
   );
 };
