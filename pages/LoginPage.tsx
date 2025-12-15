@@ -84,15 +84,15 @@ const LoginPage: React.FC = () => {
 
   return (
     <div className="min-h-screen w-full bg-gradient-to-br from-brand-cream via-white to-brand-blue/30 p-4 sm:p-8 flex items-center justify-center">
-      <div className="relative w-full max-w-6xl">
+      <div className="relative w-[90vw] h-[90vh]">
         <div className="pointer-events-none absolute -top-8 -left-8 w-24 h-24 rounded-full bg-brand-yellow/80" aria-hidden="true" />
         <div className="pointer-events-none absolute -bottom-10 -right-10 w-28 h-28 rounded-full bg-brand-pink/50" aria-hidden="true" />
 
-        <div className="bg-white/80 backdrop-blur-sm border-4 border-brand-brown rounded-[2.5rem] shadow-comic-xl overflow-hidden grid grid-cols-1 lg:grid-cols-2">
-          <div className="p-8 sm:p-10 bg-white">
+        <div className="h-full bg-white/80 backdrop-blur-sm border-4 border-brand-brown rounded-[2.5rem] shadow-comic-xl overflow-hidden grid grid-cols-1 lg:grid-cols-2 lg:grid-rows-1 grid-rows-[240px_1fr]">
+          <div className="p-8 sm:p-10 bg-white min-h-0 overflow-y-auto">
             <div className="mb-10">
               <h1 className="text-5xl sm:text-6xl font-rounded font-black text-brand-brown leading-none">
-                Lpedia
+                LPedia
               </h1>
               <div className="mt-3 text-sm sm:text-base font-bold text-brand-brown/80">
                 九龍婦女福利會李炳紀念學校校本AI學習平台
@@ -147,7 +147,7 @@ const LoginPage: React.FC = () => {
             </form>
           </div>
 
-          <div className="relative min-h-[280px] lg:min-h-[640px] border-t-4 lg:border-t-0 lg:border-l-4 border-brand-brown">
+          <div className="relative min-h-0 border-t-4 lg:border-t-0 lg:border-l-4 border-brand-brown">
             <div
               className="absolute inset-0 bg-cover bg-center"
               style={{ backgroundImage: `url('/bg.png')` }}

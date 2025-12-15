@@ -395,7 +395,7 @@ const AdminDashboard: React.FC = () => {
       {/* Header */}
       <header className="relative z-10 bg-[#A1D9AE] border-b-4 border-brand-brown py-4 px-6 flex justify-between items-center shadow-md">
         <div className="flex items-center gap-4">
-          <h1 className="text-4xl font-black text-brand-brown font-rounded">Lpedia Admin</h1>
+          <h1 className="text-4xl font-black text-brand-brown font-rounded">LPedia Admin</h1>
         </div>
         <div className="flex gap-4">
           <button
