@@ -1,10 +1,92 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import type { MathToken, Rational } from '../services/mathGame';
-import { normalizeRational, parseRationalInput, rationalKey } from '../services/mathGame';
+import { normalizeRational, rationalKey } from '../services/mathGame';
 import { FractionView, MathExpressionView } from './MathExpressionView';
 
 type MathQuestionMcq = { tokens: MathToken[]; answer: Rational; choices: Rational[]; correctIndex: number };
 type MathQuestionInput = { tokens: MathToken[]; answer: Rational };
+
+type InputMode = 'int' | 'frac' | 'mixed';
+type InputFocus = 'whole' | 'num' | 'den';
+
+const clampDigits = (s: string, maxLen = 6) => String(s || '').replace(/[^\d]/g, '').slice(0, maxLen);
+
+const parseSafeInt = (s: string) => {
+  const v = Number.parseInt(String(s || '').trim(), 10);
+  if (!Number.isFinite(v)) return null;
+  return v;
+};
+
+const buildRationalFromUi = (state: {
+  sign: 1 | -1;
+  mode: InputMode;
+  whole: string;
+  num: string;
+  den: string;
+}): { ok: true; value: Rational } | { ok: false; error: string } => {
+  const sign = state.sign === -1 ? -1 : 1;
+  const mode = state.mode;
+
+  const wholeAbs = parseSafeInt(state.whole);
+  const whole = wholeAbs === null ? 0 : Math.abs(wholeAbs);
+  const numAbs = parseSafeInt(state.num);
+  const num = numAbs === null ? 0 : Math.abs(numAbs);
+  const denAbs = parseSafeInt(state.den);
+  const den = denAbs === null ? 0 : Math.abs(denAbs);
+
+  if (mode === 'int') {
+    const w = parseSafeInt(state.whole);
+    if (w === null) return { ok: false, error: '請輸入整數答案' };
+    return { ok: true, value: normalizeRational({ n: sign * Math.abs(w), d: 1 }) };
+  }
+
+  if (mode === 'frac') {
+    const nRaw = parseSafeInt(state.num);
+    if (nRaw === null) return { ok: false, error: '請輸入分子/整數' };
+    if (!state.den.trim()) {
+      return { ok: true, value: normalizeRational({ n: sign * Math.abs(nRaw), d: 1 }) };
+    }
+    if (den === 0) return { ok: false, error: '分母不可為 0' };
+    return { ok: true, value: normalizeRational({ n: sign * Math.abs(nRaw), d: den }) };
+  }
+
+  // mixed
+  if (!state.den.trim() && !state.num.trim()) {
+    const w = parseSafeInt(state.whole);
+    if (w === null) return { ok: false, error: '請輸入帶分數或切換成整數模式' };
+    return { ok: true, value: normalizeRational({ n: sign * Math.abs(w), d: 1 }) };
+  }
+
+  if (den === 0) return { ok: false, error: '分母不可為 0' };
+  if (num === 0 && whole === 0) return { ok: false, error: '請輸入答案' };
+  if (num >= den && den > 0) {
+    // Allow improper, but hint user.
+    // Still accept because equality is rational-based.
+  }
+
+  const n = (whole * den + num) * sign;
+  return { ok: true, value: normalizeRational({ n, d: den || 1 }) };
+};
+
+const KeypadButton: React.FC<{
+  label: string;
+  onClick: () => void;
+  disabled?: boolean;
+  className?: string;
+}> = ({ label, onClick, disabled, className }) => (
+  <button
+    type="button"
+    disabled={disabled}
+    onClick={onClick}
+    className={[
+      'h-14 rounded-2xl border-2 font-black text-xl',
+      disabled ? 'bg-[#222] border-[#333] text-gray-600 cursor-not-allowed' : 'bg-[#1A1A1A] border-[#444] text-white hover:bg-[#222] hover:border-[#A1D9AE]',
+      className || ''
+    ].join(' ')}
+  >
+    {label}
+  </button>
+);
 
 export const MathGame: React.FC<{
   game: any;
@@ -26,12 +108,21 @@ export const MathGame: React.FC<{
   const [locked, setLocked] = useState(false);
   const [feedback, setFeedback] = useState<{ ok: boolean; correctAnswer: Rational } | null>(null);
 
-  const [inputN, setInputN] = useState('');
-  const [inputD, setInputD] = useState('');
+  const [inputMode, setInputMode] = useState<InputMode>('int');
+  const [inputSign, setInputSign] = useState<1 | -1>(1);
+  const [inputWhole, setInputWhole] = useState('');
+  const [inputNum, setInputNum] = useState('');
+  const [inputDen, setInputDen] = useState('');
+  const [inputFocus, setInputFocus] = useState<InputFocus>('whole');
 
   const startedRef = useRef(false);
   const startTimeRef = useRef<number | null>(null);
   const completedRef = useRef(false);
+  const [pendingResult, setPendingResult] = useState<{
+    shouldEnd: boolean;
+    success: boolean;
+    correctDelta: number;
+  } | null>(null);
 
   useEffect(() => {
     if (startedRef.current) return;
@@ -65,32 +156,19 @@ export const MathGame: React.FC<{
     return 'input';
   })();
 
-  const clearInput = () => {
-    setInputN('');
-    setInputD('');
+  const clearAllInput = () => {
+    setInputWhole('');
+    setInputNum('');
+    setInputDen('');
+    setInputSign(1);
+    setInputFocus(inputMode === 'frac' ? 'num' : 'whole');
   };
 
-  const proceed = (wasCorrect: boolean, correctAnswer: Rational) => {
+  const lockWithFeedback = (wasCorrect: boolean, correctAnswer: Rational, correctDelta: number, shouldEnd: boolean, success: boolean) => {
     if (locked) return;
     setLocked(true);
     setFeedback({ ok: wasCorrect, correctAnswer });
-
-    window.setTimeout(() => {
-      setFeedback(null);
-      setLocked(false);
-      clearInput();
-
-      const nextIndex = index + 1;
-      if (nextIndex >= totalQuestions) {
-        if (completedRef.current) return;
-        completedRef.current = true;
-        const timeSpent = startTimeRef.current ? Math.round((Date.now() - startTimeRef.current) / 1000) : 0;
-        const score = totalQuestions > 0 ? Math.round((correct + (wasCorrect ? 1 : 0)) / totalQuestions * 100) : 0;
-        onComplete({ success: true, score, correctAnswers: correct + (wasCorrect ? 1 : 0), totalQuestions, timeSpent });
-        return;
-      }
-      setIndex(nextIndex);
-    }, 900);
+    setPendingResult({ shouldEnd, success, correctDelta });
   };
 
   const handleWrongWithLives = () => {
@@ -107,33 +185,91 @@ export const MathGame: React.FC<{
     return false;
   };
 
-  const checkAndProceed = (userAnswer: Rational) => {
+  const checkAndLock = (userAnswer: Rational) => {
     if (!answer) return;
     const ok = rationalKey(userAnswer) === rationalKey(answer);
+    const ended = ok ? false : handleWrongWithLives();
+    const correctDelta = ok ? 1 : 0;
     if (ok) setCorrect((c) => c + 1);
-    else {
-      const ended = handleWrongWithLives();
-      if (ended) return;
-    }
-    proceed(ok, answer);
+
+    const nextIndex = index + 1;
+    const reachedEnd = nextIndex >= totalQuestions;
+    const shouldEnd = ended || reachedEnd;
+    const success = ended ? false : true;
+    lockWithFeedback(ok, answer, correctDelta, shouldEnd, success);
   };
 
   const onSelectMcq = (choice: Rational, choiceIndex: number) => {
     if (locked || !answer) return;
     const ok = choiceIndex === Number((current as MathQuestionMcq).correctIndex);
+    const ended = ok ? false : handleWrongWithLives();
+    const correctDelta = ok ? 1 : 0;
     if (ok) setCorrect((c) => c + 1);
-    else {
-      const ended = handleWrongWithLives();
-      if (ended) return;
-    }
-    proceed(ok, answer);
+
+    const nextIndex = index + 1;
+    const reachedEnd = nextIndex >= totalQuestions;
+    const shouldEnd = ended || reachedEnd;
+    const success = ended ? false : true;
+    lockWithFeedback(ok, answer, correctDelta, shouldEnd, success);
   };
 
   const onSubmitInput = () => {
     if (locked || !answer) return;
-    const parsed = parseRationalInput(inputN, inputD);
-    if (!parsed) return alert('請輸入有效答案（分母不可為 0）');
-    checkAndProceed(parsed);
+    const built = buildRationalFromUi({ sign: inputSign, mode: inputMode, whole: inputWhole, num: inputNum, den: inputDen });
+    if (!built.ok) return alert(built.error);
+    checkAndLock(built.value);
+  };
+
+  const goNextOrFinish = () => {
+    if (!pendingResult) return;
+    const nextIndex = index + 1;
+    const timeSpent = startTimeRef.current ? Math.round((Date.now() - startTimeRef.current) / 1000) : 0;
+
+    if (pendingResult.shouldEnd) {
+      if (completedRef.current) return;
+      completedRef.current = true;
+      const score = totalQuestions > 0 ? Math.round((correct + pendingResult.correctDelta) / totalQuestions * 100) : 0;
+      onComplete({ success: pendingResult.success, score, correctAnswers: correct + pendingResult.correctDelta, totalQuestions, timeSpent });
+      return;
+    }
+
+    setFeedback(null);
+    setPendingResult(null);
+    setLocked(false);
+    clearAllInput();
+    setIndex(nextIndex);
+  };
+
+  const applyKey = (key: string) => {
+    if (locked || feedback) return;
+    const setTarget = (setter: (v: string) => void, currentValue: string) => {
+      if (key === '⌫') return setter(currentValue.slice(0, -1));
+      if (key === '清除') return setter('');
+      if (isNaN(Number(key))) return;
+      setter(clampDigits(currentValue + key));
+    };
+
+    if (key === '±') {
+      setInputSign((s) => (s === 1 ? -1 : 1));
+      return;
+    }
+
+    if (inputMode === 'int') {
+      setTarget(setInputWhole, inputWhole);
+      return;
+    }
+
+    if (inputMode === 'frac') {
+      const focus: InputFocus = inputFocus === 'whole' ? 'num' : inputFocus;
+      if (focus === 'num') setTarget(setInputNum, inputNum);
+      if (focus === 'den') setTarget(setInputDen, inputDen);
+      return;
+    }
+
+    // mixed
+    if (inputFocus === 'whole') setTarget(setInputWhole, inputWhole);
+    if (inputFocus === 'num') setTarget(setInputNum, inputNum);
+    if (inputFocus === 'den') setTarget(setInputDen, inputDen);
   };
 
   if (!current || !Array.isArray(current.tokens)) {
@@ -210,44 +346,168 @@ export const MathGame: React.FC<{
             </div>
           ) : (
             <div className="bg-[#222] border-2 border-[#444] rounded-2xl p-4">
-              <div className="text-sm text-gray-300 font-bold mb-2">輸入答案（分數請上下輸入）</div>
-              <div className="flex items-center gap-4 flex-wrap">
-                <div className="inline-flex flex-col items-stretch">
-                  <input
-                    value={inputN}
-                    onChange={(e) => setInputN(e.target.value)}
-                    placeholder="分子/整數"
-                    className="w-40 px-3 py-2 rounded-t-xl border-2 border-[#555] bg-[#111] text-white focus:outline-none focus:border-[#A1D9AE]"
-                    inputMode="numeric"
+              <div className="flex items-center justify-between gap-3 flex-wrap">
+                <div className="text-sm text-gray-300 font-bold">輸入答案（使用下方數字鍵盤）</div>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => { setInputMode('int'); setInputFocus('whole'); }}
                     disabled={locked || feedback !== null}
-                  />
-                  <div className="h-[2px] bg-[#777]" />
-                  <input
-                    value={inputD}
-                    onChange={(e) => setInputD(e.target.value)}
-                    placeholder="分母（可留空）"
-                    className="w-40 px-3 py-2 rounded-b-xl border-2 border-t-0 border-[#555] bg-[#111] text-white focus:outline-none focus:border-[#A1D9AE]"
-                    inputMode="numeric"
+                    className={`px-3 py-1 rounded-xl border-2 font-black ${inputMode === 'int' ? 'bg-[#A1D9AE] border-[#5E8B66] text-white' : 'bg-[#111] border-[#444] text-gray-200 hover:bg-[#1A1A1A]'} disabled:opacity-50 disabled:cursor-not-allowed`}
+                  >
+                    整數
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => { setInputMode('frac'); setInputFocus('num'); }}
                     disabled={locked || feedback !== null}
-                  />
+                    className={`px-3 py-1 rounded-xl border-2 font-black ${inputMode === 'frac' ? 'bg-[#A1D9AE] border-[#5E8B66] text-white' : 'bg-[#111] border-[#444] text-gray-200 hover:bg-[#1A1A1A]'} disabled:opacity-50 disabled:cursor-not-allowed`}
+                  >
+                    分數
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => { setInputMode('mixed'); setInputFocus('whole'); }}
+                    disabled={locked || feedback !== null}
+                    className={`px-3 py-1 rounded-xl border-2 font-black ${inputMode === 'mixed' ? 'bg-[#A1D9AE] border-[#5E8B66] text-white' : 'bg-[#111] border-[#444] text-gray-200 hover:bg-[#1A1A1A]'} disabled:opacity-50 disabled:cursor-not-allowed`}
+                  >
+                    帶分數
+                  </button>
                 </div>
-                <button
-                  type="button"
-                  onClick={onSubmitInput}
-                  disabled={locked || feedback !== null}
-                  className="px-6 py-3 rounded-2xl bg-[#A1D9AE] text-brand-brown font-black text-lg hover:bg-white disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  提交
-                </button>
-                <button
-                  type="button"
-                  onClick={clearInput}
-                  disabled={locked || feedback !== null}
-                  className="px-4 py-3 rounded-2xl bg-[#333] hover:bg-[#444] text-white font-bold border border-[#555] disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  清除
-                </button>
               </div>
+
+              <div className="mt-3 flex items-center justify-between gap-3 flex-wrap">
+                <div className="flex items-center gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setInputSign((s) => (s === 1 ? -1 : 1))}
+                    disabled={locked || feedback !== null}
+                    className="h-12 w-12 rounded-2xl bg-[#111] border-2 border-[#444] text-white font-black text-xl hover:bg-[#1A1A1A] disabled:opacity-50 disabled:cursor-not-allowed"
+                    title="正負號"
+                  >
+                    {inputSign === 1 ? '＋' : '−'}
+                  </button>
+
+                  {/* Answer display */}
+                  <div className="flex items-center gap-3">
+                    {inputMode === 'int' && (
+                      <button
+                        type="button"
+                        onClick={() => setInputFocus('whole')}
+                        disabled={locked || feedback !== null}
+                        className={`min-w-[140px] h-12 px-4 rounded-2xl border-2 text-left font-black text-white bg-[#111] ${inputFocus === 'whole' ? 'border-[#A1D9AE]' : 'border-[#444]'} disabled:opacity-50 disabled:cursor-not-allowed`}
+                      >
+                        {inputWhole ? inputWhole : '輸入整數'}
+                      </button>
+                    )}
+
+                    {inputMode === 'frac' && (
+                      <div className="inline-flex items-center gap-3">
+                        <div className="inline-flex flex-col items-stretch">
+                          <button
+                            type="button"
+                            onClick={() => setInputFocus('num')}
+                            disabled={locked || feedback !== null}
+                            className={`w-44 h-12 px-4 rounded-t-2xl border-2 font-black text-white bg-[#111] text-left ${inputFocus === 'num' ? 'border-[#A1D9AE]' : 'border-[#444]'} disabled:opacity-50 disabled:cursor-not-allowed`}
+                          >
+                            {inputNum ? inputNum : '分子/整數'}
+                          </button>
+                          <div className="h-[2px] bg-[#777]" />
+                          <button
+                            type="button"
+                            onClick={() => setInputFocus('den')}
+                            disabled={locked || feedback !== null}
+                            className={`w-44 h-12 px-4 rounded-b-2xl border-2 border-t-0 font-black text-white bg-[#111] text-left ${inputFocus === 'den' ? 'border-[#A1D9AE]' : 'border-[#444]'} disabled:opacity-50 disabled:cursor-not-allowed`}
+                          >
+                            {inputDen ? inputDen : '分母（可留空）'}
+                          </button>
+                        </div>
+                      </div>
+                    )}
+
+                    {inputMode === 'mixed' && (
+                      <div className="flex items-center gap-3">
+                        <button
+                          type="button"
+                          onClick={() => setInputFocus('whole')}
+                          disabled={locked || feedback !== null}
+                          className={`min-w-[120px] h-12 px-4 rounded-2xl border-2 text-left font-black text-white bg-[#111] ${inputFocus === 'whole' ? 'border-[#A1D9AE]' : 'border-[#444]'} disabled:opacity-50 disabled:cursor-not-allowed`}
+                        >
+                          {inputWhole ? inputWhole : '整數部分'}
+                        </button>
+                        <div className="inline-flex flex-col items-stretch">
+                          <button
+                            type="button"
+                            onClick={() => setInputFocus('num')}
+                            disabled={locked || feedback !== null}
+                            className={`w-40 h-12 px-4 rounded-t-2xl border-2 font-black text-white bg-[#111] text-left ${inputFocus === 'num' ? 'border-[#A1D9AE]' : 'border-[#444]'} disabled:opacity-50 disabled:cursor-not-allowed`}
+                          >
+                            {inputNum ? inputNum : '分子'}
+                          </button>
+                          <div className="h-[2px] bg-[#777]" />
+                          <button
+                            type="button"
+                            onClick={() => setInputFocus('den')}
+                            disabled={locked || feedback !== null}
+                            className={`w-40 h-12 px-4 rounded-b-2xl border-2 border-t-0 font-black text-white bg-[#111] text-left ${inputFocus === 'den' ? 'border-[#A1D9AE]' : 'border-[#444]'} disabled:opacity-50 disabled:cursor-not-allowed`}
+                          >
+                            {inputDen ? inputDen : '分母'}
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (locked || feedback) return;
+                      if (inputFocus === 'whole') setInputWhole('');
+                      if (inputFocus === 'num') setInputNum('');
+                      if (inputFocus === 'den') setInputDen('');
+                    }}
+                    disabled={locked || feedback !== null}
+                    className="px-4 py-3 rounded-2xl bg-[#333] hover:bg-[#444] text-white font-bold border border-[#555] disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    清除
+                  </button>
+                  <button
+                    type="button"
+                    onClick={onSubmitInput}
+                    disabled={locked || feedback !== null}
+                    className="px-6 py-3 rounded-2xl bg-[#A1D9AE] text-brand-brown font-black text-lg hover:bg-white disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    提交
+                  </button>
+                </div>
+              </div>
+
+              {/* On-screen keypad */}
+              <div className="mt-4 grid grid-cols-3 gap-2">
+                {['7', '8', '9', '4', '5', '6', '1', '2', '3', '±', '0', '⌫'].map((k) => (
+                  <KeypadButton
+                    key={k}
+                    label={k}
+                    onClick={() => applyKey(k)}
+                    disabled={locked || feedback !== null}
+                    className={k === '±' ? 'text-yellow-200' : k === '⌫' ? 'text-red-200' : ''}
+                  />
+                ))}
+              </div>
+
+              {(locked || feedback) && (
+                <div className="mt-4 flex justify-end">
+                  <button
+                    type="button"
+                    onClick={goNextOrFinish}
+                    className="px-6 py-3 rounded-2xl bg-[#FDEEAD] border-2 border-brand-brown text-brand-brown font-black text-lg hover:bg-[#F9E08F]"
+                  >
+                    {pendingResult?.shouldEnd ? '完成' : '下一題'}
+                  </button>
+                </div>
+              )}
             </div>
           )}
         </div>
