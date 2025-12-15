@@ -259,6 +259,10 @@ export const MathGame: React.FC<{
       setInputSign(-1);
       return;
     }
+    if (key === '±') {
+      setInputSign((s) => (s === 1 ? -1 : 1));
+      return;
+    }
 
     if (inputMode === 'int') {
       setTarget(setInputWhole, inputWhole);
@@ -324,42 +328,44 @@ export const MathGame: React.FC<{
           </div>
         </div>
 
-        {feedback && (
-          <div className={`mt-3 p-3 rounded-3xl border-4 font-black shadow-sm ${feedback.ok ? 'bg-[#E8FFF0] border-[#7AD8A1] text-[#2F5E3A]' : 'bg-[#FFE8F0] border-[#FF9BB8] text-[#7A1F1F]'}`}>
-            <div className="flex items-center justify-between gap-3 flex-wrap">
-              <div>
-                {feedback.ok ? '答對了！' : (
-                  <span className="inline-flex items-center gap-2">
-                    答錯了，正確答案：
-                    <FractionView value={feedback.correctAnswer} className="text-lg font-black" />
-                  </span>
-                )}
-              </div>
-              <button
-                type="button"
-                onClick={goNextOrFinish}
-                className="px-4 py-2 rounded-2xl bg-white border-2 border-black/10 text-[#2F2A4A] font-black hover:bg-[#FFF6D6]"
-              >
-                {pendingResult?.shouldEnd ? '完成' : '下一題'}
-              </button>
-            </div>
-          </div>
-        )}
-
         <div className="mt-3">
           {effectiveMode === 'mcq' ? (
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              {(current as MathQuestionMcq).choices?.map((c, i) => (
-                <button
-                  key={i}
-                  type="button"
-                  disabled={locked || feedback !== null}
-                  onClick={() => onSelectMcq(c, i)}
-                  className="p-3 rounded-3xl bg-white/80 border-4 border-white/80 hover:bg-white text-[#2F2A4A] font-black text-xl disabled:opacity-50 disabled:cursor-not-allowed shadow-sm"
-                >
-                  <FractionView value={normalizeRational(c)} className="text-2xl" />
-                </button>
-              ))}
+            <div className="space-y-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                {(current as MathQuestionMcq).choices?.map((c, i) => (
+                  <button
+                    key={i}
+                    type="button"
+                    disabled={locked || feedback !== null}
+                    onClick={() => onSelectMcq(c, i)}
+                    className="p-3 rounded-3xl bg-white/80 border-4 border-white/80 hover:bg-white text-[#2F2A4A] font-black text-xl disabled:opacity-50 disabled:cursor-not-allowed shadow-sm"
+                  >
+                    <FractionView value={normalizeRational(c)} className="text-2xl" />
+                  </button>
+                ))}
+              </div>
+
+              {feedback && (
+                <div className={`p-3 rounded-3xl border-4 font-black shadow-sm ${feedback.ok ? 'bg-[#E8FFF0] border-[#7AD8A1] text-[#2F5E3A]' : 'bg-[#FFE8F0] border-[#FF9BB8] text-[#7A1F1F]'}`}>
+                  <div className="flex items-center justify-between gap-3 flex-wrap">
+                    <div>
+                      {feedback.ok ? '答對了！' : (
+                        <span className="inline-flex items-center gap-2">
+                          答錯了，正確答案：
+                          <FractionView value={feedback.correctAnswer} className="text-lg font-black" />
+                        </span>
+                      )}
+                    </div>
+                    <button
+                      type="button"
+                      onClick={goNextOrFinish}
+                      className="px-4 py-2 rounded-2xl bg-white border-2 border-black/10 text-[#2F2A4A] font-black hover:bg-[#FFF6D6]"
+                    >
+                      {pendingResult?.shouldEnd ? '完成' : '下一題'}
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
           ) : (
             <div className="bg-white/60 border-4 border-white/70 rounded-3xl p-3">
@@ -496,22 +502,16 @@ export const MathGame: React.FC<{
               </div>
 
               {/* On-screen keypad */}
-              <div className="mt-3 grid grid-cols-4 gap-2">
-                {[
-                  '1', '2', '3', '',
-                  '4', '5', '6', '',
-                  '7', '8', '9', '',
-                  '+', '−', '0', '<'
-                ].map((k, idx) => {
-                  if (!k) return <div key={`sp-${idx}`} />;
+              <div className="mt-3 grid grid-cols-3 gap-2">
+                {['7', '8', '9', '4', '5', '6', '1', '2', '3', '±', '0', '⌫'].map((k) => {
                   const colorClass = (() => {
-                    if (k === '<') return 'bg-[#FFE8F0] text-[#7A1F1F]';
-                    if (k === '+' || k === '−') return 'bg-[#E8FFF0] text-[#2F5E3A]';
+                    if (k === '⌫') return 'bg-[#FFE8F0] text-[#7A1F1F]';
+                    if (k === '±') return 'bg-[#E8FFF0] text-[#2F5E3A]';
                     return 'bg-white/80';
                   })();
                   return (
                     <KeypadButton
-                      key={`${k}-${idx}`}
+                      key={k}
                       label={k}
                       onClick={() => applyKey(k)}
                       disabled={locked || feedback !== null}
@@ -520,6 +520,28 @@ export const MathGame: React.FC<{
                   );
                 })}
               </div>
+
+              {feedback && (
+                <div className={`mt-3 p-3 rounded-3xl border-4 font-black shadow-sm ${feedback.ok ? 'bg-[#E8FFF0] border-[#7AD8A1] text-[#2F5E3A]' : 'bg-[#FFE8F0] border-[#FF9BB8] text-[#7A1F1F]'}`}>
+                  <div className="flex items-center justify-between gap-3 flex-wrap">
+                    <div>
+                      {feedback.ok ? '答對了！' : (
+                        <span className="inline-flex items-center gap-2">
+                          答錯了，正確答案：
+                          <FractionView value={feedback.correctAnswer} className="text-lg font-black" />
+                        </span>
+                      )}
+                    </div>
+                    <button
+                      type="button"
+                      onClick={goNextOrFinish}
+                      className="px-4 py-2 rounded-2xl bg-white border-2 border-black/10 text-[#2F2A4A] font-black hover:bg-[#FFF6D6]"
+                    >
+                      {pendingResult?.shouldEnd ? '完成' : '下一題'}
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
           )}
         </div>
