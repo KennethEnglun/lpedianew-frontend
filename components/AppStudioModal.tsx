@@ -1643,12 +1643,13 @@ const AppStudioModal: React.FC<{
                   </div>
                 </div>
                 <div className="p-3 flex-1 min-h-0 flex flex-col gap-2 overflow-y-auto">
-                  <textarea
-                    value={prompt}
-                    onChange={(e) => setPrompt(e.target.value)}
-                    placeholder="例如：做一個可以輸入英文單字、按下開始後每 5 秒顯示一個提示的練習小工具..."
-                    className="w-full h-20 resize-none px-3 py-2 border-2 border-gray-300 rounded-xl font-bold"
-                  />
+	                  <textarea
+	                    rows={1}
+	                    value={prompt}
+	                    onChange={(e) => setPrompt(e.target.value)}
+	                    placeholder="例如：做一個可以輸入英文單字、按下開始後每 5 秒顯示一個提示的練習小工具..."
+	                    className="w-full h-10 max-h-10 resize-none px-3 py-2 border-2 border-gray-300 rounded-xl font-bold leading-6 overflow-y-auto"
+	                  />
                   {generating && (
                     <div className="text-sm text-gray-700 font-bold bg-[#F7FAFF] border-2 border-[#BBD7FF] rounded-2xl p-3">
                       <div className="flex items-center gap-2">
