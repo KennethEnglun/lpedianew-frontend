@@ -89,9 +89,9 @@ const LoginPage: React.FC = () => {
         <div className="pointer-events-none absolute -bottom-10 -right-10 w-28 h-28 rounded-full bg-brand-pink/50" aria-hidden="true" />
 
         <div className="h-full bg-white/80 backdrop-blur-sm border-4 border-brand-brown rounded-[2.5rem] shadow-comic-xl overflow-hidden flex flex-col lg:flex-row">
-          <div className="bg-white p-6 sm:p-10 lg:w-1/4 lg:flex-none min-h-0 flex items-center justify-center">
+          <div className="bg-[#FDE7F4] p-6 sm:p-10 lg:w-1/4 lg:flex-none min-h-0 flex items-center justify-center">
             <div className="w-full max-w-sm max-h-full overflow-y-auto">
-              <div className="mb-10">
+              <div className="mb-10 text-center">
                 <h1 className="text-6xl sm:text-7xl font-rounded font-black text-brand-brown leading-none tracking-tight">
                   LPedia
                 </h1>
