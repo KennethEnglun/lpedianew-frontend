@@ -17,6 +17,9 @@ type StudioApp = {
   owner?: any;
 };
 
+const EMPTY_APP_HTML = (title: string) =>
+  `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${String(title || '新作品')}</title></head><body></body></html>`;
+
 const AppStudioModal: React.FC<{
   open: boolean;
   onClose: () => void;
@@ -438,7 +441,7 @@ const AppStudioModal: React.FC<{
     }
   };
 
-  const loadAppVersions = async (appId: string) => {
+  const loadAppVersions = async (appId: string): Promise<any[]> => {
     try {
       setLoadingVersion(true);
       setVersionError('');
@@ -453,8 +456,10 @@ const AppStudioModal: React.FC<{
         setGeneratedTitle(String(v.version?.title || ''));
         setPreviewKey((k) => k + 1);
       }
+      return list;
     } catch (e) {
       setVersionError(e instanceof Error ? e.message : '載入失敗');
+      return [];
     } finally {
       setLoadingVersion(false);
     }
@@ -624,13 +629,22 @@ const AppStudioModal: React.FC<{
   };
 
   const openApp = async (appId: string) => {
+    const pool = [...apps, ...publicApps];
+    const found = pool.find((a) => String(a.id) === String(appId));
+    const fallbackTitle = String(found?.title || '新作品');
     setSelectedAppId(appId);
     setVersions([]);
     setSelectedVersionId(null);
     setSubmittedAt(null);
     setPreviewStopped(false);
-    await loadAppVersions(appId);
+    const list = await loadAppVersions(appId);
     tryRestoreDraft();
+    // New apps have no versions yet: show a blank HTML instead of keeping previous app's preview.
+    if (!list.length) {
+      setGeneratedTitle(fallbackTitle);
+      setGeneratedHtml(EMPTY_APP_HTML(fallbackTitle));
+      setPreviewKey((k) => k + 1);
+    }
   };
 
   useEffect(() => {
