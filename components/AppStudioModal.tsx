@@ -78,8 +78,6 @@ const AppStudioModal: React.FC<{
   const [draftNotice, setDraftNotice] = useState<null | { key: string; savedAt: number }>(null);
   const [thumbHtmlByAppId, setThumbHtmlByAppId] = useState<Record<string, string>>({});
   const [consoleOpen, setConsoleOpen] = useState(false);
-  const [consoleUnread, setConsoleUnread] = useState(0);
-  const [consoleLines, setConsoleLines] = useState<Array<{ id: string; at: number; level: string; message: string }>>([]);
   const [showInbox, setShowInbox] = useState(false);
   const [loadingInbox, setLoadingInbox] = useState(false);
   const [inboxSubmissions, setInboxSubmissions] = useState<any[]>([]);
@@ -92,7 +90,7 @@ const AppStudioModal: React.FC<{
   const [reviewRating, setReviewRating] = useState<number | null>(null);
   const [reviewComment, setReviewComment] = useState<string>('');
   const [savingReview, setSavingReview] = useState(false);
-  const [showTemplates, setShowTemplates] = useState(false);
+  const [aiNotes, setAiNotes] = useState<string>('');
   const editHistoryKey = useMemo(() => {
     const uid = user?.id || 'anon';
     const appId = selectedAppId || 'new';
@@ -100,7 +98,7 @@ const AppStudioModal: React.FC<{
   }, [selectedAppId, user?.id]);
   const [editHistory, setEditHistory] = useState<Array<{ at: number; prompt: string; title: string; indexHtml: string }>>([]);
 
-  const templates = useMemo(() => ([
+  const templates = useMemo(() => ([]), []); /* templates removed
     {
       id: 'typing',
       title: '英文打字遊戲',
@@ -410,7 +408,7 @@ const AppStudioModal: React.FC<{
   document.getElementById('download').onclick=()=>{ const a=document.createElement('a'); a.download='drawing.png'; a.href=c.toDataURL('image/png'); a.click(); };
 </script></body></html>`
     }
-  ]), []);
+  */
 
   const iframeRef = useRef<HTMLIFrameElement | null>(null);
   const fullscreenIframeRef = useRef<HTMLIFrameElement | null>(null);
@@ -487,24 +485,22 @@ const AppStudioModal: React.FC<{
     setPreviewFullscreen(false);
     setDiffOpen(false);
     setDraftNotice(null);
-    setThumbHtmlByAppId({});
-    setConsoleOpen(false);
-    setConsoleUnread(0);
-    setConsoleLines([]);
-    setShowInbox(false);
-    setLoadingInbox(false);
-    setInboxSubmissions([]);
+	    setThumbHtmlByAppId({});
+	    setConsoleOpen(false);
+	    setShowInbox(false);
+	    setLoadingInbox(false);
+	    setInboxSubmissions([]);
     setShowMySubmissions(false);
     setLoadingMySubmissions(false);
     setMySubmissions([]);
-    setReviewTarget(null);
-    setReviewHtml('');
-    setSavingReview(false);
-    setShowTemplates(false);
-    setEditHistory([]);
-    loadLists();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open]);
+	    setReviewTarget(null);
+	    setReviewHtml('');
+	    setSavingReview(false);
+	    setAiNotes('');
+	    setEditHistory([]);
+	    loadLists();
+	    // eslint-disable-next-line react-hooks/exhaustive-deps
+	  }, [open]);
 
   useEffect(() => {
     if (!open) return;
@@ -637,6 +633,7 @@ const AppStudioModal: React.FC<{
     setSelectedVersionId(null);
     setSubmittedAt(null);
     setPreviewStopped(false);
+    setAiNotes('');
     const list = await loadAppVersions(appId);
     tryRestoreDraft();
     // New apps have no versions yet: show a blank HTML instead of keeping previous app's preview.
@@ -674,6 +671,7 @@ const AppStudioModal: React.FC<{
       setGenerating(true);
       setGenerateStage(0);
       setGenerateError('');
+      setAiNotes('');
       const baseIndexHtml = String(generatedHtml || '').trim();
       const isEdit = Boolean(baseIndexHtml);
       const resp = await authService.generateAppStudio({
@@ -684,6 +682,7 @@ const AppStudioModal: React.FC<{
       });
       setGeneratedTitle(String(resp.title || '小程式'));
       setGeneratedHtml(String(resp.indexHtml || ''));
+      setAiNotes(String((resp as any)?.notes || ''));
       setPreviewStopped(false);
       setPreviewKey((k) => k + 1);
       pushEditHistory({
@@ -921,6 +920,20 @@ const AppStudioModal: React.FC<{
     }
   };
 
+  const downloadHtml = () => {
+    const html = String(generatedHtml || '');
+    if (!html.trim()) return;
+    const blob = new Blob([html], { type: 'text/html;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${String(generatedTitle || selectedApp?.title || 'index').trim() || 'index'}.html`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  };
+
   const buildPreviewHtml = (html: string, opts?: { appId?: string; versionId?: string; submitEnabled?: boolean }) => {
     const appId = String(opts?.appId ?? selectedAppId ?? '');
     const versionId = String(opts?.versionId ?? selectedVersionId ?? '');
@@ -947,53 +960,11 @@ const AppStudioModal: React.FC<{
     }catch(e){}
   })();
 </script>`;
-    const consoleBridge = `
-<script>
-  (function(){
-    try{
-      function safeStr(v){
-        try{
-          if(typeof v==='string') return v;
-          if(v && typeof v==='object') return JSON.stringify(v);
-          return String(v);
-        }catch(e){ try{return String(v);}catch(_){return '[unserializable]';} }
-      }
-      function send(level, parts){
-        try{
-          var msg = (parts||[]).map(safeStr).join(' ');
-          if(msg && msg.length>3000) msg = msg.slice(0,3000)+'…';
-          parent.postMessage({type:'LPEDIA_APP_CONSOLE', level: String(level||'log'), message: msg, at: Date.now()}, '*');
-        }catch(e){}
-      }
-      ['log','info','warn','error'].forEach(function(k){
-        var orig = console[k];
-        console[k] = function(){
-          try{ send(k, Array.prototype.slice.call(arguments)); }catch(e){}
-          try{ return orig && orig.apply(console, arguments); }catch(e){}
-        };
-      });
-      window.addEventListener('error', function(e){
-        try{
-          send('error', [e && e.message ? e.message : 'error', (e && e.filename ? e.filename : '') + ':' + (e && e.lineno ? e.lineno : '') + ':' + (e && e.colno ? e.colno : ''), e && e.error && e.error.stack ? e.error.stack : '']);
-        }catch(_){}
-      });
-      window.addEventListener('unhandledrejection', function(e){
-        try{
-          var r = e && e.reason;
-          send('error', ['unhandledrejection', r && r.message ? r.message : safeStr(r), r && r.stack ? r.stack : '']);
-        }catch(_){}
-      });
-      send('info', ['preview ready']);
-    }catch(e){}
-  })();
-</script>`;
     const raw = String(html || '');
-    const hasConsoleBridge = raw.includes('LPEDIA_APP_CONSOLE');
     const hasSubmitInjector = raw.includes('lpedia-submit-btn');
-    const consolePart = hasConsoleBridge ? '' : consoleBridge;
     const submitPart = (!submitEnabled || hasSubmitInjector) ? '' : injector;
-    if (raw.includes('</body>')) return raw.replace('</body>', `${consolePart}${submitPart}</body>`);
-    return `${raw}${consolePart}${submitPart}`;
+    if (raw.includes('</body>')) return raw.replace('</body>', `${submitPart}</body>`);
+    return `${raw}${submitPart}`;
   };
 
   // in-app submit bridge
@@ -1010,27 +981,11 @@ const AppStudioModal: React.FC<{
         openSubmitPicker();
         return;
       }
-      if (data.type === 'LPEDIA_APP_CONSOLE') {
-        const level = String(data.level || 'log');
-        const message = String(data.message || '').trim();
-        if (!message) return;
-        const at = Number(data.at || Date.now());
-        const id = `${at}-${Math.random().toString(16).slice(2)}`;
-        setConsoleLines((prev) => {
-          const next = [...prev, { id, at, level, message }];
-          return next.length > 200 ? next.slice(next.length - 200) : next;
-        });
-        if (!consoleOpen) setConsoleUnread((n) => Math.min(99, n + 1));
-        if (level === 'error') {
-          setConsoleOpen(true);
-          setConsoleUnread(0);
-        }
-      }
     };
     window.addEventListener('message', onMsg);
     return () => window.removeEventListener('message', onMsg);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, selectedAppId, selectedVersionId, submitting, user?.role, consoleOpen]);
+  }, [open, selectedAppId, selectedVersionId, submitting, user?.role]);
 
   if (!open) return null;
 
@@ -1580,19 +1535,18 @@ const AppStudioModal: React.FC<{
                 <div className="p-3 border-b-2 border-gray-200 bg-gray-50 flex items-center gap-2">
                   <div className="font-black text-gray-700">預覽</div>
                   <div className="ml-auto flex items-center gap-2">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setConsoleOpen((v) => !v);
-                        setConsoleUnread(0);
-                      }}
-                      className={`h-9 px-3 rounded-full bg-white border-2 flex items-center gap-2 font-black text-sm ${consoleOpen ? 'border-brand-brown text-brand-brown' : 'border-gray-200 text-gray-600 hover:border-brand-brown'}`}
-                      aria-label="控制台"
-                      title="控制台"
-                    >
-                      <Terminal className="w-4 h-4" />
-                      控制台{consoleUnread ? `（${consoleUnread}）` : ''}
-                    </button>
+	                    <button
+	                      type="button"
+	                      onClick={() => {
+	                        setConsoleOpen((v) => !v);
+	                      }}
+	                      className={`h-9 px-3 rounded-full bg-white border-2 flex items-center gap-2 font-black text-sm ${consoleOpen ? 'border-brand-brown text-brand-brown' : 'border-gray-200 text-gray-600 hover:border-brand-brown'}`}
+	                      aria-label="查看 HTML 原始碼"
+	                      title="查看 HTML 原始碼"
+	                    >
+	                      <Terminal className="w-4 h-4" />
+	                      控制台（HTML）
+	                    </button>
                     <button
                       type="button"
                       onClick={() => setPreviewFullscreen(true)}
@@ -1628,54 +1582,52 @@ const AppStudioModal: React.FC<{
                   )}
                   </div>
 
-                  {consoleOpen && (
-                    <div className="w-[360px] border-l-2 border-gray-200 bg-white flex flex-col min-h-0">
-                      <div className="p-2 border-b border-gray-200 flex items-center gap-2 bg-gray-50">
-                        <div className="font-black text-gray-700 text-sm">錯誤控制台</div>
-                        <button
-                          type="button"
-                          onClick={() => setConsoleLines([])}
-                          className="ml-auto text-xs font-black text-brand-brown underline"
-                        >
-                          清空
-                        </button>
-                      </div>
-                      <div className="flex-1 min-h-0 overflow-y-auto p-2 space-y-2 text-xs">
-                        {consoleLines.length === 0 ? (
-                          <div className="text-gray-500 font-bold p-2">沒有訊息</div>
-                        ) : (
-                          consoleLines.map((l) => (
-                            <div
-                              key={l.id}
-                              className={`p-2 rounded-xl border ${l.level === 'error' ? 'border-red-300 bg-red-50 text-red-800' : l.level === 'warn' ? 'border-amber-300 bg-amber-50 text-amber-800' : 'border-gray-200 bg-white text-gray-800'}`}
-                            >
-                              <div className="font-black mb-1">
-                                {l.level.toUpperCase()} • {new Date(l.at).toLocaleTimeString()}
-                              </div>
-                              <pre className="whitespace-pre-wrap break-words font-mono">{l.message}</pre>
-                            </div>
-                          ))
-                        )}
-                      </div>
-                    </div>
-                  )}
+	                  {consoleOpen && (
+	                    <div className="w-[420px] border-l-2 border-gray-200 bg-white flex flex-col min-h-0">
+	                      <div className="p-2 border-b border-gray-200 flex items-center gap-2 bg-gray-50">
+	                        <div className="font-black text-gray-700 text-sm">HTML 原始碼</div>
+	                        <button
+	                          type="button"
+	                          onClick={copyCode}
+	                          disabled={!generatedHtml.trim()}
+	                          className={`ml-auto text-xs font-black underline ${generatedHtml.trim() ? 'text-brand-brown' : 'text-gray-400 cursor-not-allowed'}`}
+	                        >
+	                          複製
+	                        </button>
+	                        <button
+	                          type="button"
+	                          onClick={downloadHtml}
+	                          disabled={!generatedHtml.trim()}
+	                          className={`text-xs font-black underline ${generatedHtml.trim() ? 'text-brand-brown' : 'text-gray-400 cursor-not-allowed'}`}
+	                        >
+	                          下載
+	                        </button>
+	                      </div>
+	                      <div className="flex-1 min-h-0 overflow-y-auto p-2">
+	                        {!generatedHtml.trim() ? (
+	                          <div className="text-gray-500 font-bold p-2">尚未有程式碼</div>
+	                        ) : (
+	                          <textarea
+	                            value={generatedHtml}
+	                            readOnly
+	                            spellCheck={false}
+	                            className="w-full h-full min-h-[200px] resize-none px-3 py-2 border-2 border-gray-200 rounded-xl font-mono text-xs leading-5"
+	                          />
+	                        )}
+	                      </div>
+	                    </div>
+	                  )}
                 </div>
               </div>
 
               <div className="h-[210px] min-h-[180px] max-h-[270px] flex flex-col bg-white border-2 border-gray-200 rounded-2xl overflow-hidden">
                 <div className="p-3 border-b-2 border-gray-200 bg-gray-50 flex items-center gap-2">
-                  <div className="font-black text-gray-700">需求描述</div>
-                  <div className="ml-auto flex items-center gap-2">
-                    <Button
-                      className="bg-white hover:bg-gray-50 border-2 border-brand-brown text-brand-brown"
-                      onClick={() => setShowTemplates(true)}
-                    >
-                      模板
-                    </Button>
-                    <Button
-                      className="bg-blue-500 hover:bg-blue-600 text-white"
-                      onClick={generate}
-                      disabled={generating}
+	                  <div className="font-black text-gray-700">需求描述</div>
+	                  <div className="ml-auto flex items-center gap-2">
+	                    <Button
+	                      className="bg-blue-500 hover:bg-blue-600 text-white"
+	                      onClick={generate}
+	                      disabled={generating}
                     >
                       {generating ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : null}
                       生成
@@ -1710,17 +1662,23 @@ const AppStudioModal: React.FC<{
                           </div>
                         ))}
                       </div>
-                      <div className="mt-2 text-[11px] text-gray-500 font-bold">
-                        提示：為安全原因，這裡只顯示生成進度，不展示模型內部推理細節。
-                      </div>
-                    </div>
-                  )}
-                  {generateError && <div className="text-sm text-red-600 font-bold">{generateError}</div>}
-                  {submittedAt && (
-                    <div className="text-sm text-emerald-700 font-black">
-                      {submitTeacherName ? `已提交給 ${submitTeacherName}：` : '已提交：'}
-                      {new Date(submittedAt).toLocaleString()}
-                    </div>
+	                      <div className="mt-2 text-[11px] text-gray-500 font-bold">
+	                        提示：生成完成後會顯示「AI 設計說明」（功能/操作/假設/外部庫），不包含模型內部推理鏈。
+	                      </div>
+	                    </div>
+	                  )}
+	                  {generateError && <div className="text-sm text-red-600 font-bold">{generateError}</div>}
+	                  {aiNotes.trim() && (
+	                    <div className="text-sm text-gray-700 font-bold bg-[#FEF7EC] border-2 border-[#FAD8A5] rounded-2xl p-3">
+	                      <div className="font-black text-brand-brown">AI 設計說明</div>
+	                      <pre className="mt-2 whitespace-pre-wrap break-words font-mono text-xs leading-5">{aiNotes}</pre>
+	                    </div>
+	                  )}
+	                  {submittedAt && (
+	                    <div className="text-sm text-emerald-700 font-black">
+	                      {submitTeacherName ? `已提交給 ${submitTeacherName}：` : '已提交：'}
+	                      {new Date(submittedAt).toLocaleString()}
+	                    </div>
                   )}
                 </div>
               </div>
@@ -2134,53 +2092,6 @@ const AppStudioModal: React.FC<{
                     </div>
                   )}
                 </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {showTemplates && (
-        <div className="fixed inset-0 z-[95] bg-black/50 flex items-center justify-center p-4">
-          <div className="bg-white w-full max-w-3xl max-h-[80vh] overflow-hidden rounded-3xl border-4 border-brand-brown shadow-comic-xl flex flex-col">
-            <div className="p-4 border-b-4 border-brand-brown bg-[#D2EFFF] flex items-center gap-2">
-              <div className="text-xl font-black text-brand-brown">模板庫</div>
-              <button
-                type="button"
-                onClick={() => setShowTemplates(false)}
-                className="ml-auto w-9 h-9 rounded-full bg-white border-2 border-brand-brown hover:bg-gray-100 flex items-center justify-center"
-                aria-label="關閉"
-              >
-                <X className="w-5 h-5 text-brand-brown" />
-              </button>
-            </div>
-            <div className="p-4 overflow-y-auto space-y-3">
-              {templates.map((t) => (
-                <div key={t.id} className="bg-white border-2 border-gray-200 rounded-2xl p-4">
-                  <div className="flex items-center gap-2">
-                    <div className="font-black text-brand-brown text-lg">{t.title}</div>
-                    <div className="ml-auto">
-                      <Button
-                        className="bg-emerald-500 hover:bg-emerald-600 text-white"
-                        onClick={() => {
-                          setPrompt(String(t.prompt || ''));
-                          setGeneratedTitle(String(t.title || '小程式'));
-                          setGeneratedHtml(String(t.indexHtml || ''));
-                          setGenerateError('');
-                          setPreviewStopped(false);
-                          setPreviewKey((k) => k + 1);
-                          setShowTemplates(false);
-                        }}
-                      >
-                        使用此模板
-                      </Button>
-                    </div>
-                  </div>
-                  <div className="mt-2 text-sm text-gray-600 font-bold">{t.description}</div>
-                </div>
-              ))}
-              <div className="text-xs text-gray-500 font-bold">
-                提示：模板可直接預覽與儲存版本；也可以在需求描述中改寫後再用 AI 生成。
               </div>
             </div>
           </div>

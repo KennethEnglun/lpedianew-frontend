@@ -999,7 +999,7 @@ class AuthService {
   }
 
   // === App Studio (WebSim-like) ===
-  async generateAppStudio(payload: { prompt: string; baseIndexHtml?: string; baseTitle?: string; mode?: 'new' | 'edit' }): Promise<{ title: string; indexHtml: string; externalScripts: string[]; externalStyles: string[] }> {
+  async generateAppStudio(payload: { prompt: string; baseIndexHtml?: string; baseTitle?: string; mode?: 'new' | 'edit' }): Promise<{ title: string; indexHtml: string; externalScripts: string[]; externalStyles: string[]; notes?: string }> {
     const response = await fetch(`${this.API_BASE}/app-studio/generate`, {
       method: 'POST',
       headers: this.getAuthHeaders(),
