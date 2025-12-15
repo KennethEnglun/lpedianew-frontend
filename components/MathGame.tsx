@@ -59,6 +59,11 @@ export const MathGame: React.FC<{
 
   const current = questions[index] as any;
   const answer: Rational | null = current?.answer ? normalizeRational(current.answer) : null;
+  const effectiveMode: 'mcq' | 'input' = (() => {
+    if (answerMode === 'input') return 'input';
+    if (Array.isArray(current?.choices) && current.choices.length > 0) return 'mcq';
+    return 'input';
+  })();
 
   const clearInput = () => {
     setInputN('');
@@ -189,7 +194,7 @@ export const MathGame: React.FC<{
         )}
 
         <div className="mt-4">
-          {answerMode === 'mcq' ? (
+          {effectiveMode === 'mcq' ? (
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               {(current as MathQuestionMcq).choices?.map((c, i) => (
                 <button
@@ -250,4 +255,3 @@ export const MathGame: React.FC<{
     </div>
   );
 };
-
