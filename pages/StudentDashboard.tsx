@@ -657,7 +657,13 @@ const StudentDashboard: React.FC = () => {
         createdAt: contest.createdAt || contest.updatedAt,
         completed: false, // 問答比賽可重複參賽，不設為已完成
         score: contest.bestScore || null,
-        attempts: contest.attempts || 0
+        attempts: contest.attempts || 0,
+        // 添加QuizContestModal所需的欄位
+        topic: contest.topic,
+        grade: contest.grade,
+        questionCount: contest.questionCount || 0,
+        timeLimitSeconds: contest.timeLimitSeconds,
+        bestScore: contest.bestScore
       }));
 
       // 合併所有任務
