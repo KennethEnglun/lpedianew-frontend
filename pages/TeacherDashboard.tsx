@@ -145,6 +145,21 @@ const TeacherDashboard: React.FC = () => {
   // 小遊戲相關狀態
   const [showGameModal, setShowGameModal] = useState(false);
 	  const [gameType, setGameType] = useState<'maze' | 'matching' | 'tower-defense' | 'math' | null>(null);
+
+  // 問答比賽相關狀態
+  const [showContestModal, setShowContestModal] = useState(false);
+  const [contestForm, setContestForm] = useState({
+    title: '',
+    topic: '',
+    scopeText: '',
+    advancedOnly: false,
+    subject: Subject.CHINESE,
+    grade: '小一',
+    questionCount: 10,
+    timeLimitSeconds: null as number | null,
+    targetClasses: [] as string[],
+    targetGroups: [] as string[]
+  });
   const [gameForm, setGameForm] = useState({
     title: '',
     description: '',
@@ -1082,6 +1097,13 @@ const TeacherDashboard: React.FC = () => {
     }
   }, [showGameModal, gameType]);
 
+  // 監聽問答比賽模態框開啟
+  useEffect(() => {
+    if (showContestModal) {
+      loadClassesAndGroups(contestForm.subject);
+    }
+  }, [showContestModal]);
+
   useEffect(() => {
     setMathTimeSecondsText(String(mathTimeSeconds));
   }, [mathTimeSeconds]);
@@ -1264,6 +1286,58 @@ const TeacherDashboard: React.FC = () => {
     } catch (error) {
       console.error('創建小測驗失敗:', error);
       alert('創建小測驗失敗：' + (error instanceof Error ? error.message : '未知錯誤'));
+    }
+  };
+
+  // 提交問答比賽
+  const handleSubmitContest = async () => {
+    if (!contestForm.title) {
+      alert('請填寫標題');
+      return;
+    }
+    if (!contestForm.subject) {
+      alert('請選擇科目');
+      return;
+    }
+    if (!contestForm.grade) {
+      alert('請選擇年級');
+      return;
+    }
+    if (contestForm.targetClasses.length === 0 && contestForm.targetGroups.length === 0) {
+      alert('請選擇至少一個班級或分組');
+      return;
+    }
+
+    try {
+      await authService.createContest({
+        title: contestForm.title,
+        topic: contestForm.topic,
+        scopeText: contestForm.scopeText,
+        advancedOnly: contestForm.advancedOnly,
+        subject: contestForm.subject,
+        grade: contestForm.grade,
+        questionCount: contestForm.questionCount,
+        timeLimitSeconds: contestForm.timeLimitSeconds,
+        targetClasses: contestForm.targetClasses,
+        targetGroups: contestForm.targetGroups
+      });
+      alert('問答比賽創建成功！');
+      setShowContestModal(false);
+      setContestForm({
+        title: '',
+        topic: '',
+        scopeText: '',
+        advancedOnly: false,
+        subject: Subject.CHINESE,
+        grade: '小一',
+        questionCount: 10,
+        timeLimitSeconds: null,
+        targetClasses: [],
+        targetGroups: []
+      });
+    } catch (error) {
+      console.error('創建問答比賽失敗:', error);
+      alert('創建問答比賽失敗：' + (error instanceof Error ? error.message : '未知錯誤'));
     }
   };
 
@@ -1683,6 +1757,16 @@ const TeacherDashboard: React.FC = () => {
                 >
                   🎮 創建小遊戲
                 </Button>
+                <Button
+                  fullWidth
+                  className="bg-[#FFF2DC] hover:bg-[#FCEBCD] flex items-center justify-center gap-2"
+                  onClick={() => {
+                    setShowContestModal(true);
+                    closeSidebar();
+                  }}
+                >
+                  🏁 創建問答比賽
+                </Button>
                 <Button fullWidth className="bg-[#FAD5BE] hover:bg-[#F8C4A6]" onClick={closeSidebar}>
                   更多功能開發中⋯⋯
                 </Button>
@@ -1776,6 +1860,13 @@ const TeacherDashboard: React.FC = () => {
 	          >
 	            🎮 創建小遊戲
 	          </Button>
+          <Button
+            fullWidth
+            className="bg-[#FFF2DC] hover:bg-[#FCEBCD] text-lg flex items-center justify-center gap-2"
+            onClick={() => setShowContestModal(true)}
+          >
+            🏁 創建問答比賽
+          </Button>
           <Button fullWidth className="bg-[#FAD5BE] hover:bg-[#F8C4A6] text-lg">更多功能開發中⋯⋯</Button>
         </nav>
       </aside>
@@ -5270,6 +5361,244 @@ const TeacherDashboard: React.FC = () => {
           </div>
         )
       }
+
+      {/* Contest Creation Modal */}
+      {showContestModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
+          <div className="bg-white border-4 border-brand-brown rounded-3xl w-full max-w-4xl max-h-[90vh] overflow-y-auto shadow-comic">
+            <div className="p-6 border-b-4 border-brand-brown bg-[#FFF2DC]">
+              <div className="flex justify-between items-center">
+                <h2 className="text-3xl font-black text-brand-brown">🏁 創建問答比賽</h2>
+                <button
+                  onClick={() => setShowContestModal(false)}
+                  className="w-10 h-10 rounded-full bg-white border-2 border-brand-brown hover:bg-gray-100 flex items-center justify-center"
+                  aria-label="關閉"
+                >
+                  <X className="w-6 h-6 text-brand-brown" />
+                </button>
+              </div>
+            </div>
+
+            <div className="p-6">
+              <div className="bg-orange-50 p-4 rounded-xl border-2 border-orange-200 mb-6">
+                <p className="text-orange-800 text-sm">
+                  🏁 <strong>比賽說明：</strong>教師只需設定題目規則，學生點擊開始時由AI即時生成不同題目。每位學生可重複參賽，系統會記錄所有成績並提供3種排行榜。
+                </p>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                {/* 基本資訊 */}
+                <div className="space-y-4">
+                  <h3 className="text-xl font-bold text-brand-brown">基本資訊</h3>
+
+                  <Input
+                    label="比賽標題"
+                    placeholder="輸入比賽標題..."
+                    value={contestForm.title}
+                    onChange={(e) => setContestForm(prev => ({ ...prev, title: e.target.value }))}
+                  />
+
+                  <Input
+                    label="主題 (可選)"
+                    placeholder="例如：第一單元 - 自然景觀..."
+                    value={contestForm.topic}
+                    onChange={(e) => setContestForm(prev => ({ ...prev, topic: e.target.value }))}
+                  />
+
+                  <div>
+                    <label className="block text-sm font-bold text-brand-brown mb-2">科目</label>
+                    <select
+                      className="w-full px-4 py-2 border-4 border-gray-300 rounded-2xl bg-white font-bold"
+                      value={contestForm.subject}
+                      onChange={(e) => setContestForm(prev => ({ ...prev, subject: e.target.value as Subject }))}
+                    >
+                      {Object.values(Subject).map(subject => (
+                        <option key={subject} value={subject}>{subject}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-bold text-brand-brown mb-2">年級</label>
+                    <select
+                      className="w-full px-4 py-2 border-4 border-gray-300 rounded-2xl bg-white font-bold"
+                      value={contestForm.grade}
+                      onChange={(e) => setContestForm(prev => ({ ...prev, grade: e.target.value }))}
+                    >
+                      {['小一', '小二', '小三', '小四', '小五', '小六'].map(grade => (
+                        <option key={grade} value={grade}>{grade}</option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+
+                {/* 題目設定 */}
+                <div className="space-y-4">
+                  <h3 className="text-xl font-bold text-brand-brown">題目設定</h3>
+
+                  <div>
+                    <label className="block text-sm font-bold text-brand-brown mb-2">題目數量</label>
+                    <input
+                      type="number"
+                      min="1"
+                      max="50"
+                      className="w-full px-4 py-2 border-4 border-gray-300 rounded-2xl font-bold"
+                      value={contestForm.questionCount}
+                      onChange={(e) => setContestForm(prev => ({ ...prev, questionCount: parseInt(e.target.value) || 10 }))}
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-bold text-brand-brown mb-2">限時 (秒，留空表示不限時)</label>
+                    <input
+                      type="number"
+                      min="10"
+                      max="1800"
+                      className="w-full px-4 py-2 border-4 border-gray-300 rounded-2xl font-bold"
+                      placeholder="例如：300"
+                      value={contestForm.timeLimitSeconds ?? ''}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        setContestForm(prev => ({
+                          ...prev,
+                          timeLimitSeconds: val === '' ? null : parseInt(val) || null
+                        }));
+                      }}
+                    />
+                  </div>
+
+                  <div>
+                    <label className="flex items-center gap-3 p-3 rounded-xl border-2 border-gray-200 bg-gray-50 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={contestForm.advancedOnly}
+                        onChange={(e) => setContestForm(prev => ({ ...prev, advancedOnly: e.target.checked }))}
+                        className="w-5 h-5"
+                      />
+                      <div>
+                        <div className="font-bold text-brand-brown">進階模式</div>
+                        <div className="text-sm text-gray-600">開啟後，AI只會根據下方「範圍輸入」出題，不會使用外部知識</div>
+                      </div>
+                    </label>
+                  </div>
+                </div>
+              </div>
+
+              {/* 範圍輸入 */}
+              <div className="mt-6">
+                <h3 className="text-xl font-bold text-brand-brown mb-2">範圍輸入 (可選)</h3>
+                <p className="text-sm text-gray-600 mb-3">
+                  可貼入課文、筆記、詞彙表等內容，AI會優先從這些範圍出題
+                </p>
+                <textarea
+                  className="w-full px-4 py-3 border-4 border-gray-300 rounded-2xl font-mono text-sm"
+                  rows={6}
+                  placeholder="例如：春天到了，樹木長出新芽，花朵綻放..."
+                  value={contestForm.scopeText}
+                  onChange={(e) => setContestForm(prev => ({ ...prev, scopeText: e.target.value }))}
+                />
+              </div>
+
+              {/* 派發對象 */}
+              <div className="mt-6 grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div>
+                  <h3 className="text-xl font-bold text-brand-brown mb-2">目標班級</h3>
+                  <div className="space-y-2">
+                    {availableClasses.map((className) => (
+                      <label
+                        key={className}
+                        className={`flex items-center gap-3 p-3 rounded-xl border-2 cursor-pointer ${
+                          contestForm.targetClasses.includes(className)
+                            ? 'bg-[#FDEEAD] border-brand-brown'
+                            : 'bg-white border-gray-200 hover:border-brand-brown'
+                        }`}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={contestForm.targetClasses.includes(className)}
+                          onChange={(e) => {
+                            if (e.target.checked) {
+                              setContestForm(prev => ({
+                                ...prev,
+                                targetClasses: [...prev.targetClasses, className]
+                              }));
+                            } else {
+                              setContestForm(prev => ({
+                                ...prev,
+                                targetClasses: prev.targetClasses.filter(c => c !== className)
+                              }));
+                            }
+                          }}
+                          className="w-4 h-4"
+                        />
+                        <span className="font-bold text-gray-700">{className}</span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+
+                <div>
+                  <h3 className="text-xl font-bold text-brand-brown mb-2">目標分組</h3>
+                  {availableGroups.length > 0 ? (
+                    <div className="space-y-2">
+                      {availableGroups.map((group) => (
+                        <label
+                          key={group}
+                          className={`flex items-center gap-3 p-3 rounded-xl border-2 cursor-pointer ${
+                            contestForm.targetGroups.includes(group)
+                              ? 'bg-[#E0D2F8] border-brand-brown'
+                              : 'bg-white border-gray-200 hover:border-brand-brown'
+                          }`}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={contestForm.targetGroups.includes(group)}
+                            onChange={(e) => {
+                              if (e.target.checked) {
+                                setContestForm(prev => ({
+                                  ...prev,
+                                  targetGroups: [...prev.targetGroups, group]
+                                }));
+                              } else {
+                                setContestForm(prev => ({
+                                  ...prev,
+                                  targetGroups: prev.targetGroups.filter(g => g !== group)
+                                }));
+                              }
+                            }}
+                            className="w-4 h-4"
+                          />
+                          <span className="font-bold text-gray-700">{group}</span>
+                        </label>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="text-center py-6 text-gray-500 border-2 border-dashed border-gray-300 rounded-xl">
+                      該科目暫無分組
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* 按鈕區 */}
+              <div className="flex gap-4 pt-6 mt-6 border-t-4 border-gray-200">
+                <button
+                  onClick={() => setShowContestModal(false)}
+                  className="flex-1 py-3 rounded-2xl border-4 border-gray-300 text-gray-600 font-bold hover:bg-gray-100"
+                >
+                  取消
+                </button>
+                <button
+                  onClick={handleSubmitContest}
+                  className="flex-1 py-3 rounded-2xl border-4 border-brand-brown bg-[#FFF2DC] text-brand-brown font-bold hover:bg-[#FCEBCD] shadow-comic active:translate-y-1 active:shadow-none"
+                >
+                  創建比賽
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div >
   );
 };

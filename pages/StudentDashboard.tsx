@@ -8,6 +8,7 @@ import { sanitizeHtml } from '../services/sanitizeHtml';
 import { MazeGame } from '../components/MazeGame';
 import TowerDefenseGame from '../components/TowerDefenseGame';
 import { MathGame } from '../components/MathGame';
+import { QuizContestModal } from '../components/QuizContestModal';
 import UiSettingsModal from '../components/UiSettingsModal';
 import AiChatModal from '../components/AiChatModal';
 import BotTaskChatModal from '../components/BotTaskChatModal';
@@ -147,6 +148,10 @@ const StudentDashboard: React.FC = () => {
   const [quizStartTime, setQuizStartTime] = useState<Date | null>(null);
   const [submittingQuiz, setSubmittingQuiz] = useState(false);
   const [viewingQuizResult, setViewingQuizResult] = useState<any>(null); // State for reviewing quiz result
+
+  // 問答比賽相關狀態
+  const [showContestModal, setShowContestModal] = useState(false);
+  const [selectedContest, setSelectedContest] = useState<any>(null);
 
   // 遊戲相關狀態
   const [showGameModal, setShowGameModal] = useState(false);
@@ -581,12 +586,13 @@ const StudentDashboard: React.FC = () => {
         }
       }
 
-      // 並行載入討論串、小測驗和遊戲
-      const [discussionResponse, quizResponse, gameResponse, botTaskResponse] = await Promise.all([
+      // 並行載入討論串、小測驗、遊戲和問答比賽
+      const [discussionResponse, quizResponse, gameResponse, botTaskResponse, contestResponse] = await Promise.all([
         authService.getStudentDiscussions(),
         authService.getStudentQuizzes(),
         authService.getStudentGames(),
-        authService.getStudentBotTasks()
+        authService.getStudentBotTasks(),
+        authService.getStudentContests()
       ]);
 
       const discussionList = Array.isArray(discussionResponse.discussions) ? discussionResponse.discussions : [];
@@ -640,8 +646,22 @@ const StudentDashboard: React.FC = () => {
         completed: !!t.completed
       }));
 
+      // 轉換問答比賽為任務格式
+      const contestTasks: Task[] = (contestResponse.contests || []).map((contest: any) => ({
+        id: String(contest.id),
+        title: String(contest.title),
+        type: 'contest' as const,
+        subject: contest.subject,
+        teacherName: '系統',
+        teacherAvatar: '/teacher_login.png',
+        createdAt: contest.createdAt || contest.updatedAt,
+        completed: false, // 問答比賽可重複參賽，不設為已完成
+        score: contest.bestScore || null,
+        attempts: contest.attempts || 0
+      }));
+
       // 合併所有任務
-      const allTasks = [...discussionTasks, ...quizTasks, ...gameTasks, ...botTasks];
+      const allTasks = [...discussionTasks, ...quizTasks, ...gameTasks, ...botTasks, ...contestTasks];
       setTasks(allTasks);
       setLastRefresh(new Date());
 
@@ -691,6 +711,15 @@ const StudentDashboard: React.FC = () => {
       setShowDiscussionModal(true);
       // 載入所有回應
       loadAllResponses(taskId);
+    }
+  };
+
+  // 處理問答比賽點擊
+  const handleContestClick = (contestId: string) => {
+    const contest = tasks.find(t => t.id === contestId && t.type === 'contest');
+    if (contest) {
+      setSelectedContest(contest);
+      setShowContestModal(true);
     }
   };
 
@@ -1025,6 +1054,7 @@ const StudentDashboard: React.FC = () => {
   const isTaskCompleted = (task: Task) => {
     if (task.type === 'discussion') return !!responseStatus[task.id]?.hasResponded;
     if (task.type === 'quiz' || task.type === 'game') return !!task.completed;
+    if (task.type === 'contest') return false; // 問答比賽可重複參賽，不算已完成
     return false;
   };
 
@@ -1267,6 +1297,7 @@ const StudentDashboard: React.FC = () => {
                     case 'ai-bot': return <Bot className="w-5 h-5 text-green-600" />;
                     case 'discussion': return <MessageSquare className="w-5 h-5 text-purple-600" />;
                     case 'game': return <span className="text-xl">🎮</span>;
+                    case 'contest': return <span className="text-xl">🏁</span>;
                     default: return null;
                   }
                 };
@@ -1290,6 +1321,13 @@ const StudentDashboard: React.FC = () => {
                       return task.score !== null ? `最佳分數: ${Math.round(task.score)}%` : '已遊玩 ✓';
                     }
                     return '開始遊戲';
+                  }
+                  if (task.type === 'contest') {
+                    if (task.attempts && task.attempts > 0) {
+                      const bestScore = task.score !== null ? `最佳: ${Math.round(task.score)}%` : '';
+                      return `${bestScore} (${task.attempts}次)`;
+                    }
+                    return '開始比賽';
                   }
                   switch (task.type) {
                     case 'ai-bot': return task.completed ? '已完成 ✓' : '開始對話';
@@ -1319,6 +1357,7 @@ const StudentDashboard: React.FC = () => {
                   }
                   switch (task.type) {
                     case 'ai-bot': return task.completed ? 'bg-[#93C47D] hover:bg-[#86b572]' : 'bg-[#B5D8F8] hover:bg-[#A1CCF0]';
+                    case 'contest': return task.attempts && task.attempts > 0 ? 'bg-[#FFE4B5] hover:bg-[#FFDBA1]' : 'bg-[#FFF2DC] hover:bg-[#FCEBCD]'; // 已參賽：橙色，未參賽：淺橙色
                     default: return 'bg-[#93C47D] hover:bg-[#86b572]';
                   }
                 };
@@ -1356,6 +1395,8 @@ const StudentDashboard: React.FC = () => {
                           handleGameClick(task.id);
                         } else if (task.type === 'ai-bot') {
                           handleBotTaskClick(task.id);
+                        } else if (task.type === 'contest') {
+                          handleContestClick(task.id);
                         }
                       }}
                       className={`${getTaskButtonColor()} text-brand-brown font-bold px-6 py-2 rounded-2xl border-4 border-brand-brown shadow-comic active:translate-y-1 active:shadow-none bg-opacity-100 ${task.type === 'quiz' && task.completed ? 'cursor-pointer hover:bg-green-300' : ''
@@ -1395,6 +1436,7 @@ const StudentDashboard: React.FC = () => {
                       else if (task.type === 'quiz') handleQuizClick(task.id);
                       else if (task.type === 'game') handleGameClick(task.id);
                       else if (task.type === 'ai-bot') handleBotTaskClick(task.id);
+                      else if (task.type === 'contest') handleContestClick(task.id);
                     };
 
                     return (
@@ -1410,7 +1452,9 @@ const StudentDashboard: React.FC = () => {
                                 ? <HelpCircle className="w-5 h-5 text-blue-600" />
                                 : task.type === 'ai-bot'
                                   ? <Bot className="w-5 h-5 text-green-600" />
-                                  : <MessageSquare className="w-5 h-5 text-purple-600" />
+                                  : task.type === 'contest'
+                                    ? <span className="text-xl">🏁</span>
+                                    : <MessageSquare className="w-5 h-5 text-purple-600" />
                             }
                             <h5 className="text-xl font-bold text-brand-brown">{task.title}</h5>
                             {autoHidden && (
@@ -2070,6 +2114,22 @@ const StudentDashboard: React.FC = () => {
           </div>
         )
       }
+
+      {/* Contest Modal */}
+      {showContestModal && selectedContest && (
+        <QuizContestModal
+          open={showContestModal}
+          contest={selectedContest}
+          onClose={() => {
+            setShowContestModal(false);
+            setSelectedContest(null);
+          }}
+          onFinished={() => {
+            // 重新載入任務以更新比賽記錄
+            loadDiscussions(false);
+          }}
+        />
+      )}
     </div >
   );
 };

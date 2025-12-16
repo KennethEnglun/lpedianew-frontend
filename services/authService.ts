@@ -949,6 +949,112 @@ class AuthService {
     await this.handleResponse(response);
   }
 
+  // === 問答比賽（即時 AI 生成）===
+
+  async createContest(payload: {
+    title: string;
+    topic?: string;
+    scopeText?: string;
+    advancedOnly?: boolean;
+    subject: string;
+    grade: '小一' | '小二' | '小三' | '小四' | '小五' | '小六';
+    questionCount: number;
+    timeLimitSeconds?: number | null;
+    targetClasses: string[];
+    targetGroups?: string[];
+  }): Promise<{ message: string; contest: any }> {
+    const response = await fetch(`${this.API_BASE}/contests`, {
+      method: 'POST',
+      headers: this.getAuthHeaders(),
+      body: JSON.stringify(payload)
+    });
+    return this.handleResponse(response);
+  }
+
+  async getTeacherContests(subject?: string, targetClass?: string): Promise<{ contests: any[]; total: number }> {
+    const params = new URLSearchParams();
+    if (subject) params.append('subject', subject);
+    if (targetClass) params.append('targetClass', targetClass);
+    const query = params.toString() ? `?${params.toString()}` : '';
+    const response = await fetch(`${this.API_BASE}/contests/teacher${query}`, {
+      headers: this.getAuthHeaders()
+    });
+    return this.handleResponse(response);
+  }
+
+  async getSharedContests(params: {
+    subject: string;
+    grade: string;
+    targetClass?: string;
+    groups?: string[];
+  }): Promise<{ contests: any[]; total: number }> {
+    const searchParams = new URLSearchParams();
+    searchParams.append('subject', params.subject);
+    searchParams.append('grade', params.grade);
+    if (params.targetClass) searchParams.append('targetClass', params.targetClass);
+    if (params.groups && params.groups.length > 0) searchParams.append('groups', params.groups.join(','));
+    const response = await fetch(`${this.API_BASE}/contests/shared?${searchParams.toString()}`, {
+      headers: this.getAuthHeaders()
+    });
+    return this.handleResponse(response);
+  }
+
+  async getStudentContests(): Promise<{ contests: any[]; total: number }> {
+    const response = await fetch(`${this.API_BASE}/contests/student`, {
+      headers: this.getAuthHeaders()
+    });
+    return this.handleResponse(response);
+  }
+
+  async startContest(contestId: string): Promise<{
+    contest: any;
+    attempt: { id: string; startedAt: string; timeLimitSeconds: number | null; questions: Array<{ id: number; question: string; options: string[] }> };
+  }> {
+    const response = await fetch(`${this.API_BASE}/contests/${contestId}/start`, {
+      method: 'POST',
+      headers: this.getAuthHeaders()
+    });
+    return this.handleResponse(response);
+  }
+
+  async submitContestAttempt(attemptId: string, payload: { answers: number[]; timeSpentSeconds?: number | null }): Promise<{ message: string; result: any }> {
+    const response = await fetch(`${this.API_BASE}/contests/attempts/${attemptId}/submit`, {
+      method: 'POST',
+      headers: this.getAuthHeaders(),
+      body: JSON.stringify(payload)
+    });
+    return this.handleResponse(response);
+  }
+
+  async getContestLeaderboard(contestId: string): Promise<{ contest: any; leaderboards: any }> {
+    const response = await fetch(`${this.API_BASE}/contests/${contestId}/leaderboard`, {
+      headers: this.getAuthHeaders()
+    });
+    return this.handleResponse(response);
+  }
+
+  async getContestResults(contestId: string): Promise<{ contest: any; attempts: any[]; leaderboards: any }> {
+    const response = await fetch(`${this.API_BASE}/contests/${contestId}/results`, {
+      headers: this.getAuthHeaders()
+    });
+    return this.handleResponse(response);
+  }
+
+  async getContestAttemptDetail(attemptId: string): Promise<{ contest: any; attempt: any }> {
+    const response = await fetch(`${this.API_BASE}/contests/attempts/${attemptId}`, {
+      headers: this.getAuthHeaders()
+    });
+    return this.handleResponse(response);
+  }
+
+  async deleteContest(contestId: string): Promise<void> {
+    const response = await fetch(`${this.API_BASE}/contests/${contestId}`, {
+      method: 'DELETE',
+      headers: this.getAuthHeaders()
+    });
+    await this.handleResponse(response);
+  }
+
   // === AI (Grok) ===
   async getAiSettings(): Promise<{ provider: string; model: string; hasApiKey: boolean; updatedAt: string | null }> {
     const response = await fetch(`${this.API_BASE}/ai/settings`, {
