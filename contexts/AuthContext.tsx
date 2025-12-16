@@ -5,7 +5,7 @@ interface AuthContextType {
   user: User | null;
   isLoading: boolean;
   isAuthenticated: boolean;
-  login: (username: string, password: string, role: 'admin' | 'teacher' | 'student') => Promise<void>;
+  login: (username: string, password: string) => Promise<void>;
   logout: () => void;
   refreshUser: () => void;
 }
@@ -39,10 +39,10 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     initAuth();
   }, []);
 
-  const login = async (username: string, password: string, role: 'admin' | 'teacher' | 'student') => {
+  const login = async (username: string, password: string) => {
     try {
       setIsLoading(true);
-      const userData = await authService.login({ username, password, role });
+      const userData = await authService.login({ username, password });
       setUser(userData);
     } catch (error) {
       console.error('登入失敗:', error);

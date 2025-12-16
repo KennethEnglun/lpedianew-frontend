@@ -8,13 +8,7 @@ const LoginPage: React.FC = () => {
   const navigate = useNavigate();
   const { login, isAuthenticated, user, isLoading } = useAuth();
 
-  type LoginRole = 'teacher' | 'student' | 'admin';
-  const [role, setRole] = useState<LoginRole>('student');
-  const [forms, setForms] = useState<Record<LoginRole, { username: string; password: string }>>({
-    teacher: { username: '', password: '' },
-    student: { username: '', password: '' },
-    admin: { username: 'admin', password: '' }
-  });
+  const [form, setForm] = useState<{ username: string; password: string }>({ username: '', password: '' });
 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState('');
@@ -38,20 +32,14 @@ const LoginPage: React.FC = () => {
     }
   }, [isAuthenticated, user, navigate]);
 
-  const setField = (field: 'username' | 'password', value: string) => {
-    setForms((prev) => ({
-      ...prev,
-      [role]: { ...prev[role], [field]: value }
-    }));
-  };
+  const setField = (field: 'username' | 'password', value: string) => setForm((prev) => ({ ...prev, [field]: value }));
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    const form = forms[role];
     const username = String(form.username || '').trim();
     const password = String(form.password || '').trim();
     if (!username || !password) {
-      setError(role === 'admin' ? '請輸入管理員帳號和密碼' : '請填寫完整的登入資料');
+      setError('請填寫完整的登入資料');
       return;
     }
 
@@ -59,13 +47,9 @@ const LoginPage: React.FC = () => {
     setError('');
 
     try {
-      await login(username, password, role);
+      await login(username, password);
     } catch (error) {
-      if (role === 'admin') {
-        setError(error instanceof Error ? error.message : '管理員登入失敗，請聯絡系統管理員');
-      } else {
-        setError(error instanceof Error ? error.message : '登入失敗，請檢查用戶名和密碼');
-      }
+      setError(error instanceof Error ? error.message : '登入失敗，請檢查用戶名和密碼');
     } finally {
       setIsSubmitting(false);
     }
@@ -100,36 +84,24 @@ const LoginPage: React.FC = () => {
                 </div>
               </div>
 
-              <div className="flex items-center gap-2 mb-6">
-                {(['teacher', 'student', 'admin'] as const).map((r) => (
-                  <button
-                    key={r}
-                    type="button"
-                    onClick={() => { setRole(r); setError(''); }}
-                    disabled={isSubmitting}
-                    className={`flex-1 py-2 px-3 rounded-2xl border-2 font-rounded font-black transition-all ${
-                      role === r
-                        ? 'bg-brand-yellow border-brand-brown text-brand-brown shadow-comic'
-                        : 'bg-white border-gray-200 text-gray-600 hover:border-brand-brown'
-                    }`}
-                  >
-                    {r === 'teacher' ? '教師' : r === 'student' ? '學生' : '管理員'}
-                  </button>
-                ))}
+              <div className="mb-6 text-center">
+                <div className="inline-flex items-center gap-2 px-4 py-2 rounded-2xl bg-white/80 border-2 border-white/80 text-brand-brown font-black">
+                  系統會按帳號自動辨識身分
+                </div>
               </div>
 
               <form onSubmit={handleLogin} className="space-y-4">
                 <Input
-                  placeholder={role === 'admin' ? '管理員帳號' : '帳號'}
+                  placeholder="帳號"
                   autoComplete="username"
-                  value={forms[role].username}
+                  value={form.username}
                   onChange={(e) => setField('username', e.target.value)}
                 />
                 <Input
                   type="password"
-                  placeholder={role === 'admin' ? '管理員密碼' : '密碼'}
+                  placeholder="密碼"
                   autoComplete="current-password"
-                  value={forms[role].password}
+                  value={form.password}
                   onChange={(e) => setField('password', e.target.value)}
                 />
                 {error && (

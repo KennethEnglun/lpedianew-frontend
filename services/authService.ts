@@ -1,7 +1,6 @@
 interface LoginCredentials {
   username: string;
   password: string;
-  role: 'admin' | 'teacher' | 'student';
 }
 
 interface User {
