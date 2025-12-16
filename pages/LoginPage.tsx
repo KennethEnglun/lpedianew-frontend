@@ -84,12 +84,6 @@ const LoginPage: React.FC = () => {
                 </div>
               </div>
 
-              <div className="mb-6 text-center">
-                <div className="inline-flex items-center gap-2 px-4 py-2 rounded-2xl bg-white/80 border-2 border-white/80 text-brand-brown font-black">
-                  系統會按帳號自動辨識身分
-                </div>
-              </div>
-
               <form onSubmit={handleLogin} className="space-y-4">
                 <Input
                   placeholder="帳號"
