@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { GameLeaderboard, GameType, GAME_TYPE_CONFIG, SUBJECT_CONFIG } from '../types';
-import authService from '../services/authService';
+import { authService } from '../services/authService';
 
 interface Props {
   gameId: string;
@@ -110,15 +110,13 @@ const GameLeaderboardModal: React.FC<Props> = ({ gameId, onClose, onStartGame })
           </div>
 
           <div className="flex items-center gap-4 text-sm text-gray-600">
-            <div className="flex items-center gap-2"
-                 style={{ backgroundColor: gameTypeConfig.color + '40' }}
-                 className="px-3 py-1 rounded-full">
+            <div className="flex items-center gap-2 px-3 py-1 rounded-full"
+                 style={{ backgroundColor: gameTypeConfig.color + '40' }}>
               <span>{gameTypeConfig.icon}</span>
               <span>{gameTypeConfig.name}</span>
             </div>
-            <div className="flex items-center gap-2"
-                 style={{ backgroundColor: subjectConfig.color + '40' }}
-                 className="px-3 py-1 rounded-full">
+            <div className="flex items-center gap-2 px-3 py-1 rounded-full"
+                 style={{ backgroundColor: subjectConfig.color + '40' }}>
               <span>{subjectConfig.icon}</span>
               <span>{leaderboard.subject}</span>
             </div>
