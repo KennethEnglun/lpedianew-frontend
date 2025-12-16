@@ -140,6 +140,7 @@ const TeacherDashboard: React.FC = () => {
   const [progressSearch, setProgressSearch] = useState('');
   const [progressFilterClass, setProgressFilterClass] = useState('');
   const [progressFilterSubject, setProgressFilterSubject] = useState('');
+  const [progressFilterGroup, setProgressFilterGroup] = useState('');
   const [progressIncludeHidden, setProgressIncludeHidden] = useState(false);
 
   // 小遊戲相關狀態
@@ -906,6 +907,18 @@ const TeacherDashboard: React.FC = () => {
     setHiddenTaskKeys(loadHiddenTaskKeys(user.id, 'teacher'));
   }, [showStudentProgressModal, user?.id]);
 
+  // 清除分組篩選當科目改變時
+  useEffect(() => {
+    setProgressFilterGroup('');
+  }, [progressFilterSubject]);
+
+  // 重新載入進度當篩選條件改變時
+  useEffect(() => {
+    if (showStudentProgressModal) {
+      loadStudentProgress();
+    }
+  }, [progressFilterSubject, progressFilterClass, progressFilterGroup, progressIncludeHidden]);
+
   const openStudentProgress = async () => {
     setShowStudentProgressModal(true);
     setProgressError('');
@@ -969,12 +982,13 @@ const TeacherDashboard: React.FC = () => {
       const teacherHidden = loadHiddenTaskKeys(user.id, 'teacher');
       setHiddenTaskKeys(teacherHidden);
 
-      const [studentsData, assignmentData, quizData, gameData, botTaskData] = await Promise.all([
+      const [studentsData, assignmentData, quizData, gameData, botTaskData, contestData] = await Promise.all([
         authService.getStudentRoster({ limit: 2000 }),
-        authService.getTeacherAssignments(progressFilterSubject || undefined, progressFilterClass || undefined),
-        authService.getTeacherQuizzes(progressFilterSubject || undefined, progressFilterClass || undefined),
-        authService.getTeacherGames(progressFilterSubject || undefined, progressFilterClass || undefined),
-        authService.getTeacherBotTasks(progressFilterSubject || undefined, progressFilterClass || undefined)
+        authService.getTeacherAssignments(progressFilterSubject || undefined, progressFilterClass || undefined, progressFilterGroup || undefined),
+        authService.getTeacherQuizzes(progressFilterSubject || undefined, progressFilterClass || undefined, progressFilterGroup || undefined),
+        authService.getTeacherGames(progressFilterSubject || undefined, progressFilterClass || undefined, progressFilterGroup || undefined),
+        authService.getTeacherBotTasks(progressFilterSubject || undefined, progressFilterClass || undefined, progressFilterGroup || undefined),
+        authService.getTeacherContests(progressFilterSubject || undefined, progressFilterClass || undefined, progressFilterGroup || undefined)
       ]);
 
       const students = (studentsData.users || []).filter((u: any) => u?.role === 'student');
@@ -983,7 +997,8 @@ const TeacherDashboard: React.FC = () => {
         ...(assignmentData.assignments || []).map((item: any) => ({ ...item, type: 'assignment' as const })),
         ...(quizData.quizzes || []).map((item: any) => ({ ...item, type: 'quiz' as const })),
         ...(gameData.games || []).map((item: any) => ({ ...item, type: 'game' as const })),
-        ...(botTaskData.tasks || []).map((item: any) => ({ ...item, type: 'ai-bot' as const }))
+        ...(botTaskData.tasks || []).map((item: any) => ({ ...item, type: 'ai-bot' as const })),
+        ...(contestData.contests || []).map((item: any) => ({ ...item, type: 'contest' as const }))
       ];
 
       const countedTasks = progressIncludeHidden
@@ -1538,7 +1553,7 @@ const TeacherDashboard: React.FC = () => {
 
             <div className="p-6">
               <div className="mb-4 p-4 bg-gray-50 rounded-2xl border-2 border-gray-200">
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 items-end">
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4 items-end">
                   <div>
                     <label className="block text-sm font-bold text-gray-600 mb-2">科目</label>
                     <select
@@ -1547,7 +1562,7 @@ const TeacherDashboard: React.FC = () => {
                       className="w-full px-3 py-2 border-2 border-gray-300 rounded-xl"
                     >
                       <option value="">全部科目</option>
-                      {availableSubjects.map(subject => (
+                      {(user?.profile?.subjectsTaught || []).map(subject => (
                         <option key={subject} value={subject}>{subject}</option>
                       ))}
                     </select>
@@ -1563,6 +1578,21 @@ const TeacherDashboard: React.FC = () => {
                       <option value="">全部班級</option>
                       {availableClasses.map(className => (
                         <option key={className} value={className}>{className}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-bold text-gray-600 mb-2">分組</label>
+                    <select
+                      value={progressFilterGroup}
+                      onChange={(e) => setProgressFilterGroup(e.target.value)}
+                      className="w-full px-3 py-2 border-2 border-gray-300 rounded-xl"
+                      disabled={!progressFilterSubject}
+                    >
+                      <option value="">全部分組</option>
+                      {progressFilterSubject && (user?.profile?.subjectGroups?.[progressFilterSubject] || []).map(group => (
+                        <option key={group} value={group}>{group}</option>
                       ))}
                     </select>
                   </div>
