@@ -919,6 +919,7 @@ class AuthService {
     correctAnswers: number;
     totalQuestions: number;
     timeSpent: number;
+    details?: any;
   }): Promise<{ message: string; result: any }> {
     const response = await fetch(`${this.API_BASE}/games/${gameId}/score`, {
       method: 'POST',

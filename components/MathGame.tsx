@@ -94,7 +94,7 @@ export const MathGame: React.FC<{
   game: any;
   onExit: () => void;
   onStart: () => void;
-  onComplete: (result: { success: boolean; score: number; correctAnswers: number; totalQuestions: number; timeSpent: number }) => void;
+  onComplete: (result: { success: boolean; score: number; correctAnswers: number; totalQuestions: number; timeSpent: number; details?: any }) => void;
 }> = ({ game, onExit, onStart, onComplete }) => {
   const answerMode: 'mcq' | 'input' = String(game?.math?.answerMode || game?.answerMode || 'mcq') === 'input' ? 'input' : 'mcq';
   const questions = useMemo(() => (Array.isArray(game?.questions) ? game.questions : []), [game?.id]);
@@ -125,6 +125,12 @@ export const MathGame: React.FC<{
     success: boolean;
     correctDelta: number;
   } | null>(null);
+  const [answerDetails, setAnswerDetails] = useState<Array<{
+    index: number;
+    userAnswer: Rational;
+    correctAnswer: Rational;
+    ok: boolean;
+  }>>([]);
 
   useEffect(() => {
     if (startedRef.current) return;
@@ -190,6 +196,11 @@ export const MathGame: React.FC<{
   const checkAndLock = (userAnswer: Rational) => {
     if (!answer) return;
     const ok = rationalKey(userAnswer) === rationalKey(answer);
+    setAnswerDetails((prev) => {
+      const next = [...prev];
+      next[index] = { index, userAnswer, correctAnswer: answer, ok };
+      return next;
+    });
     const ended = ok ? false : handleWrongWithLives();
     const correctDelta = ok ? 1 : 0;
     if (ok) setCorrect((c) => c + 1);
@@ -204,6 +215,11 @@ export const MathGame: React.FC<{
   const onSelectMcq = (choice: Rational, choiceIndex: number) => {
     if (locked || !answer) return;
     const ok = choiceIndex === Number((current as MathQuestionMcq).correctIndex);
+    setAnswerDetails((prev) => {
+      const next = [...prev];
+      next[index] = { index, userAnswer: choice, correctAnswer: answer, ok };
+      return next;
+    });
     const ended = ok ? false : handleWrongWithLives();
     const correctDelta = ok ? 1 : 0;
     if (ok) setCorrect((c) => c + 1);
@@ -231,7 +247,16 @@ export const MathGame: React.FC<{
       if (completedRef.current) return;
       completedRef.current = true;
       const score = totalQuestions > 0 ? Math.round((correct + pendingResult.correctDelta) / totalQuestions * 100) : 0;
-      onComplete({ success: pendingResult.success, score, correctAnswers: correct + pendingResult.correctDelta, totalQuestions, timeSpent });
+      const detailsPayload = {
+        type: 'math',
+        answers: answerDetails.filter(Boolean).map((d) => ({
+          index: d.index,
+          ok: d.ok,
+          userAnswer: d.userAnswer,
+          correctAnswer: d.correctAnswer
+        }))
+      };
+      onComplete({ success: pendingResult.success, score, correctAnswers: correct + pendingResult.correctDelta, totalQuestions, timeSpent, details: detailsPayload });
       return;
     }
 

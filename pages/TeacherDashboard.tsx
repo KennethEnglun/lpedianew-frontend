@@ -8,6 +8,11 @@ import UiSettingsModal from '../components/UiSettingsModal';
 import AiChatModal from '../components/AiChatModal';
 import AppStudioModal from '../components/AppStudioModal';
 import { MathExpressionBuilder, finalizeMathQuestions } from '../components/MathExpressionBuilder';
+import { MathExpressionView, FractionView } from '../components/MathExpressionView';
+import { MathGame } from '../components/MathGame';
+import { MazeGame } from '../components/MazeGame';
+import TowerDefenseGame from '../components/TowerDefenseGame';
+import { MatchingGamePreview } from '../components/MatchingGamePreview';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { authService } from '../services/authService';
@@ -104,6 +109,9 @@ const TeacherDashboard: React.FC = () => {
   const [isEditingContent, setIsEditingContent] = useState(false);
   const [editedContent, setEditedContent] = useState('');
   const [viewingResultDetails, setViewingResultDetails] = useState<any>(null); // State for viewing specific student result details
+  const [showGamePreviewModal, setShowGamePreviewModal] = useState(false);
+  const [previewGame, setPreviewGame] = useState<any>(null);
+  const [previewResult, setPreviewResult] = useState<any>(null);
   const [allStudents, setAllStudents] = useState<any[]>([]); // Store all students for completion checking
 
   // 分組篩選狀態
@@ -683,8 +691,30 @@ const TeacherDashboard: React.FC = () => {
       if (isGame) {
         // 載入遊戲結果
         const data = await authService.getGameResults(assignment.id);
+        const scores = Array.isArray(data.scores) ? data.scores : [];
+        const attemptsByStudent = scores.reduce((acc: Record<string, number>, s: any) => {
+          const sid = String(s.studentId || '');
+          if (!sid) return acc;
+          acc[sid] = (acc[sid] || 0) + 1;
+          return acc;
+        }, {});
+
+        const studentById = new Map(
+          allStudents.map((s: any) => [String(s.id), s])
+        );
+
         setSelectedAssignment(assignment);
-        setAssignmentResponses(data.scores || []); // 遊戲成績
+        setAssignmentResponses(scores.map((s: any) => {
+          const student = studentById.get(String(s.studentId || ''));
+          return {
+            ...s,
+            submittedAt: s.completedAt,
+            playedAt: s.completedAt,
+            studentUsername: student?.username || s.studentUsername,
+            studentClass: student?.profile?.class || s.studentClass,
+            attempts: attemptsByStudent[String(s.studentId || '')] || s.attempts
+          };
+        })); // 遊戲成績
         setEditedContent(assignment.description || '迷宮追逐遊戲');
       } else if (isQuiz) {
         // 載入小測驗結果
@@ -4039,23 +4069,36 @@ const TeacherDashboard: React.FC = () => {
 	                        </div>
 	                      ) : selectedAssignment?.type === 'game' ? (
 	                        <div className="bg-white p-4 rounded-xl border-2 border-yellow-300">
-	                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
-	                            <div>
-	                              <span className="font-bold text-brand-brown">標題：</span>
-	                              <span>{selectedAssignment.title}</span>
+	                          <div className="flex items-start justify-between gap-3 flex-wrap">
+	                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm flex-1">
+	                              <div>
+	                                <span className="font-bold text-brand-brown">標題：</span>
+	                                <span>{selectedAssignment.title}</span>
+	                              </div>
+	                              <div>
+	                                <span className="font-bold text-brand-brown">科目：</span>
+	                                <span>{selectedAssignment.subject}</span>
+	                              </div>
+	                              <div>
+	                                <span className="font-bold text-brand-brown">類型：</span>
+	                                <span>{selectedAssignment.gameType || '小遊戲'}</span>
+	                              </div>
+	                              <div>
+	                                <span className="font-bold text-brand-brown">描述：</span>
+	                                <span>{selectedAssignment.description || '—'}</span>
+	                              </div>
 	                            </div>
-	                            <div>
-	                              <span className="font-bold text-brand-brown">科目：</span>
-	                              <span>{selectedAssignment.subject}</span>
-	                            </div>
-	                            <div>
-	                              <span className="font-bold text-brand-brown">類型：</span>
-	                              <span>{selectedAssignment.gameType || '小遊戲'}</span>
-	                            </div>
-	                            <div>
-	                              <span className="font-bold text-brand-brown">描述：</span>
-	                              <span>{selectedAssignment.description || '—'}</span>
-	                            </div>
+	                            <button
+	                              type="button"
+	                              onClick={() => {
+	                                setPreviewGame(selectedAssignment);
+	                                setPreviewResult(null);
+	                                setShowGamePreviewModal(true);
+	                              }}
+	                              className="px-4 py-2 bg-emerald-100 text-emerald-900 rounded-xl hover:bg-emerald-200 text-sm font-black border-2 border-emerald-300"
+	                            >
+	                              🎮 試玩預覽
+	                            </button>
 	                          </div>
 	                        </div>
 	                      ) : (
@@ -4326,7 +4369,12 @@ const TeacherDashboard: React.FC = () => {
 	
 	                                    {selectedAssignment?.type !== 'quiz' && (
 	                                      <p className="text-xs text-gray-500 mt-2">
-	                                        {new Date(response.createdAt).toLocaleString()}
+	                                        {(() => {
+	                                          const ts = response.createdAt || response.completedAt || response.submittedAt || response.playedAt || null;
+	                                          if (!ts) return '—';
+	                                          const d = new Date(ts);
+	                                          return Number.isNaN(d.getTime()) ? '—' : d.toLocaleString();
+	                                        })()}
 	                                      </p>
 	                                    )}
 	                                  </div>
@@ -4968,6 +5016,113 @@ const TeacherDashboard: React.FC = () => {
 			        onClose={() => setShowAiGenerator(false)}
 			        onImport={(payload, importMode) => aiGeneratorOnImportRef.current(payload, importMode)}
 			      />
+
+      {/* Teacher Game Preview Modal */}
+      {showGamePreviewModal && previewGame && (
+        <div className="fixed inset-0 bg-black bg-opacity-80 z-[70] flex items-center justify-center p-4">
+          <div className="bg-[#2D2D2D] border-4 border-[#4A4A4A] rounded-3xl w-full max-w-5xl h-[90vh] flex flex-col shadow-2xl overflow-hidden relative">
+            <div className="bg-[#1A1A1A] p-4 flex justify-between items-center border-b-2 border-[#4A4A4A]">
+              <div>
+                <h2 className="text-2xl font-black text-white tracking-widest">{previewGame.title}（試玩預覽）</h2>
+                <p className="text-gray-400 text-sm">
+                  {previewGame.gameType === 'matching'
+                    ? '記憶配對'
+                    : previewGame.gameType === 'math'
+                      ? '數學遊戲'
+                      : previewGame.gameType === 'maze'
+                        ? '知識迷宮'
+                        : '答題塔防'} • {previewGame.subject}
+                </p>
+              </div>
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={() => { setShowGamePreviewModal(false); setPreviewGame(null); setPreviewResult(null); }}
+                  className="w-10 h-10 rounded-full bg-[#333] hover:bg-[#444] text-white flex items-center justify-center transition-colors"
+                >
+                  <X />
+                </button>
+              </div>
+            </div>
+
+            <div className="flex-1 bg-[#222] p-6 overflow-y-auto relative">
+              {previewGame.gameType === 'math' && (
+                <MathGame
+                  game={previewGame}
+                  onExit={() => { setShowGamePreviewModal(false); setPreviewGame(null); setPreviewResult(null); }}
+                  onStart={() => { }}
+                  onComplete={(result) => setPreviewResult(result)}
+                />
+              )}
+
+              {previewGame.gameType === 'tower-defense' && (
+                <TowerDefenseGame
+                  questions={previewGame.questions || []}
+                  subject={previewGame.subject as Subject}
+                  difficulty={(previewGame.difficulty || 'medium') as any}
+                  durationSeconds={Number(previewGame.timeLimitSeconds) || 60}
+                  livesLimit={previewGame.livesLimit ?? null}
+                  onExit={() => { setShowGamePreviewModal(false); setPreviewGame(null); setPreviewResult(null); }}
+                  onStart={() => { }}
+                  onComplete={(result) => setPreviewResult(result)}
+                />
+              )}
+
+              {previewGame.gameType === 'maze' && (
+                <MazeGame
+                  questions={(Array.isArray(previewGame.questions) ? previewGame.questions : []).map((q: any, i: number) => {
+                    const allOptions = [q.answer, ...(q.wrongOptions || [])].filter(Boolean);
+                    const shuffledOptions = [...allOptions].sort(() => Math.random() - 0.5).slice(0, 4);
+                    const correctIndex = shuffledOptions.indexOf(q.answer);
+                    return {
+                      id: `mz-prev-${previewGame.id}-${i}`,
+                      text: q.question,
+                      options: shuffledOptions,
+                      correctIndex: correctIndex >= 0 ? correctIndex : 0
+                    };
+                  })}
+                  onExit={() => { setShowGamePreviewModal(false); setPreviewGame(null); setPreviewResult(null); }}
+                  onComplete={(finalScore) => setPreviewResult({ success: true, score: finalScore })}
+                />
+              )}
+
+              {previewGame.gameType === 'matching' && (
+                <MatchingGamePreview
+                  questions={previewGame.questions || []}
+                  onExit={() => { setShowGamePreviewModal(false); setPreviewGame(null); setPreviewResult(null); }}
+                  onComplete={(result) => setPreviewResult(result)}
+                />
+              )}
+
+              {previewResult && (
+                <div className="absolute inset-0 bg-black/70 flex items-center justify-center p-6">
+                  <div className="bg-white rounded-3xl border-4 border-brand-brown shadow-comic p-6 w-full max-w-md text-center">
+                    <div className="text-3xl font-black text-brand-brown mb-2">預覽完成</div>
+                    {'score' in previewResult && (
+                      <div className="text-lg font-bold text-gray-700 mb-4">分數：{Math.round(Number(previewResult.score) || 0)}</div>
+                    )}
+                    <div className="flex gap-3 justify-center">
+                      <button
+                        type="button"
+                        onClick={() => setPreviewResult(null)}
+                        className="px-5 py-2 rounded-2xl bg-[#FDEEAD] border-2 border-brand-brown text-brand-brown font-black hover:bg-[#FCE690]"
+                      >
+                        再玩一次
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => { setShowGamePreviewModal(false); setPreviewGame(null); setPreviewResult(null); }}
+                        className="px-5 py-2 rounded-2xl bg-gray-100 border-2 border-gray-300 text-gray-700 font-black hover:bg-gray-200"
+                      >
+                        關閉
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
       {/* Student Quiz Result Detail Modal */}
       {
         viewingResultDetails && selectedAssignment && (
@@ -4994,16 +5149,15 @@ const TeacherDashboard: React.FC = () => {
               </div>
 
               <div className="p-6 space-y-6">
-                {selectedAssignment.questions?.map((question: any, index: number) => {
-                  const studentAnswer = viewingResultDetails.answers[index];
+                {selectedAssignment.type === 'quiz' && selectedAssignment.questions?.map((question: any, index: number) => {
+                  const answersArr = Array.isArray(viewingResultDetails.answers) ? viewingResultDetails.answers : [];
+                  const studentAnswer = answersArr[index];
                   const isCorrect = studentAnswer === question.correctAnswer;
 
                   return (
-                    <div key={index} className={`p-6 rounded-2xl border-2 ${isCorrect ? 'bg-green-50 border-green-200' : 'bg-red-50 border-red-200'
-                      }`}>
+                    <div key={index} className={`p-6 rounded-2xl border-2 ${isCorrect ? 'bg-green-50 border-green-200' : 'bg-red-50 border-red-200'}`}>
                       <div className="flex gap-4">
-                        <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 text-white font-bold ${isCorrect ? 'bg-green-500' : 'bg-red-500'
-                          }`}>
+                        <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 text-white font-bold ${isCorrect ? 'bg-green-500' : 'bg-red-500'}`}>
                           {index + 1}
                         </div>
                         <div className="flex-1">
@@ -5053,6 +5207,55 @@ const TeacherDashboard: React.FC = () => {
                     </div>
                   );
                 })}
+
+                {selectedAssignment.type === 'game' && (
+                  <div className="space-y-4">
+                    <div className="bg-white border-2 border-gray-200 rounded-2xl p-4">
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
+                        <div><span className="font-bold text-gray-600">遊戲：</span>{selectedAssignment.title}</div>
+                        <div><span className="font-bold text-gray-600">類型：</span>{selectedAssignment.gameType}</div>
+                        <div><span className="font-bold text-gray-600">得分：</span>{Math.round(viewingResultDetails.score)}%</div>
+                        <div><span className="font-bold text-gray-600">正確：</span>{viewingResultDetails.correctAnswers}/{viewingResultDetails.totalQuestions}</div>
+                        <div><span className="font-bold text-gray-600">用時：</span>{viewingResultDetails.timeSpent ? `${Math.round(viewingResultDetails.timeSpent)} 秒` : '未記錄'}</div>
+                        <div><span className="font-bold text-gray-600">提交：</span>{new Date(viewingResultDetails.completedAt || viewingResultDetails.submittedAt || Date.now()).toLocaleString()}</div>
+                      </div>
+                    </div>
+
+                    {selectedAssignment.gameType === 'math' && viewingResultDetails.details?.type === 'math' && Array.isArray(viewingResultDetails.details?.answers) ? (
+                      <div className="space-y-3">
+                        {viewingResultDetails.details.answers.map((row: any) => {
+                          const q = (Array.isArray(selectedAssignment.questions) ? selectedAssignment.questions : [])[row.index];
+                          return (
+                            <div key={row.index} className={`p-4 rounded-2xl border-2 ${row.ok ? 'bg-green-50 border-green-200' : 'bg-red-50 border-red-200'}`}>
+                              <div className="flex items-start gap-3">
+                                <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 text-white font-bold ${row.ok ? 'bg-green-500' : 'bg-red-500'}`}>{row.index + 1}</div>
+                                <div className="flex-1">
+                                  <div className="font-bold text-brand-brown mb-2">
+                                    {q?.tokens ? <MathExpressionView tokens={q.tokens} /> : '（題目缺失）'}
+                                  </div>
+                                  <div className="flex items-center gap-6 flex-wrap text-sm">
+                                    <div className="inline-flex items-center gap-2">
+                                      <span className="font-bold text-gray-700">學生：</span>
+                                      <FractionView value={row.userAnswer} className="font-black" />
+                                    </div>
+                                    <div className="inline-flex items-center gap-2">
+                                      <span className="font-bold text-gray-700">正確：</span>
+                                      <FractionView value={row.correctAnswer} className="font-black" />
+                                    </div>
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    ) : (
+                      <div className="bg-yellow-50 border-2 border-yellow-200 rounded-2xl p-4 text-sm text-yellow-900 font-bold">
+                        此遊戲暫未提供逐題作答記錄回放（只有數學遊戲會記錄學生每題答案）。
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
 
               <div className="p-6 border-t-2 border-gray-200 bg-gray-50 rounded-b-3xl">

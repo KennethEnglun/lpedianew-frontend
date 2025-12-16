@@ -852,6 +852,7 @@ const StudentDashboard: React.FC = () => {
       correctAnswers: number;
       totalQuestions: number;
       timeSpent: number;
+      details?: any;
     }
   ) => {
     if (gameCompleteOnceRef.current) return;
@@ -870,7 +871,8 @@ const StudentDashboard: React.FC = () => {
         score,
         correctAnswers,
         totalQuestions,
-        timeSpent
+        timeSpent,
+        ...(override?.details ? { details: override.details } : null)
       });
 
       if (success) {
@@ -1845,7 +1847,8 @@ const StudentDashboard: React.FC = () => {
 	                      score: result.score,
 	                      correctAnswers: result.correctAnswers,
 	                      totalQuestions: result.totalQuestions,
-	                      timeSpent: result.timeSpent
+	                      timeSpent: result.timeSpent,
+	                      ...(result.details ? { details: result.details } : null)
 	                    });
 	                  }}
 	                />
