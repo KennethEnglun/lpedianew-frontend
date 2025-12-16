@@ -456,12 +456,13 @@ const TeacherDashboard: React.FC = () => {
     try {
       setLoading(true);
 
-      // 並行載入自己的作業、小測驗和遊戲
-      const [assignmentData, quizData, gameData, botTaskData] = await Promise.all([
+      // 並行載入自己的作業、小測驗、遊戲和問答比賽
+      const [assignmentData, quizData, gameData, botTaskData, contestData] = await Promise.all([
         authService.getTeacherAssignments(filterSubject || undefined, filterClass || undefined),
         authService.getTeacherQuizzes(filterSubject || undefined, filterClass || undefined),
         authService.getTeacherGames(filterSubject || undefined, filterClass || undefined),
-        authService.getTeacherBotTasks(filterSubject || undefined, filterClass || undefined)
+        authService.getTeacherBotTasks(filterSubject || undefined, filterClass || undefined),
+        authService.getTeacherContests(filterSubject || undefined, filterClass || undefined)
       ]);
 
       const mine = [
@@ -475,7 +476,14 @@ const TeacherDashboard: React.FC = () => {
 	          targetClasses: item.targetClasses || [],
 	          responseCount: item.completedStudents ?? 0,
 	          uniqueStudents: item.completedStudents ?? 0
-	        }))
+	        })),
+        ...(contestData.contests || []).map((item: any) => ({
+          ...item,
+          type: 'contest',
+          responseCount: item.totalAttempts ?? 0,
+          uniqueStudents: item.uniqueParticipants ?? 0,
+          averageScore: item.averageScore ?? 0
+        }))
 	      ];
 
       // 同科同級其他教師任務（需要先在設定中填寫所屬班級/任教科目）
@@ -702,6 +710,7 @@ const TeacherDashboard: React.FC = () => {
       const isQuiz = assignment.type === 'quiz';
       const isGame = assignment.type === 'game';
       const isBotTask = assignment.type === 'ai-bot';
+      const isContest = assignment.type === 'contest';
 
       if (isGame) {
         // 載入遊戲結果
@@ -737,6 +746,12 @@ const TeacherDashboard: React.FC = () => {
         setSelectedAssignment(assignment);
         setAssignmentResponses(data.results || []); // 測驗結果
         setEditedContent(assignment.description || '小測驗');
+      } else if (isContest) {
+        // 載入問答比賽結果
+        const data = await authService.getContestResults(assignment.id);
+        setSelectedAssignment(assignment);
+        setAssignmentResponses(data.attempts || []); // 比賽參賽記錄
+        setEditedContent(assignment.topic || '問答比賽');
       } else if (isBotTask) {
         const data = await authService.getBotTaskThreads(assignment.id);
         setSelectedAssignment(assignment);
@@ -796,13 +811,14 @@ const TeacherDashboard: React.FC = () => {
 
   // 刪除整個作業或小測驗
   const handleDeleteAssignment = async (assignment: any) => {
-    const itemType = assignment.type === 'quiz' ? '小測驗' : assignment.type === 'game' ? '遊戲' : assignment.type === 'ai-bot' ? 'Pedia任務' : '作業';
+    const itemType = assignment.type === 'quiz' ? '小測驗' : assignment.type === 'game' ? '遊戲' : assignment.type === 'ai-bot' ? 'Pedia任務' : assignment.type === 'contest' ? '問答比賽' : '作業';
     if (!confirm(`確定要刪除整個${itemType}及其所有回應嗎？此操作無法復原！`)) return;
 
     try {
       if (assignment.type === 'quiz') await authService.deleteQuiz(assignment.id);
       else if (assignment.type === 'game') await authService.deleteGame(assignment.id);
       else if (assignment.type === 'ai-bot') await authService.deleteBotTask(assignment.id);
+      else if (assignment.type === 'contest') await authService.deleteContest(assignment.id);
       else await authService.deleteAssignment(assignment.id);
 
       alert(`${itemType}已刪除`);
@@ -993,6 +1009,11 @@ const TeacherDashboard: React.FC = () => {
             if (task.type === 'ai-bot') {
               const data = await authService.getBotTaskThreads(task.id);
               const ids = (data.threads || []).filter((r: any) => r?.completed).map((r: any) => String(r.studentId)).filter(Boolean) as string[];
+              return { key, set: new Set(ids) };
+            }
+            if (task.type === 'contest') {
+              const data = await authService.getContestResults(task.id);
+              const ids = (data.attempts || []).map(extractStudentId).filter(Boolean) as string[];
               return { key, set: new Set(ids) };
             }
             const data = await authService.getAssignmentResponses(task.id);
@@ -3743,6 +3764,7 @@ const TeacherDashboard: React.FC = () => {
 	                          const isQuiz = assignment.type === 'quiz';
 	                          const isGame = assignment.type === 'game';
 	                          const isBot = assignment.type === 'ai-bot';
+	                          const isContest = assignment.type === 'contest';
 	                          const isShared = !!(assignment as any).isShared;
 	                          const assignmentKey = makeTaskKey(assignment.type, assignment.id);
 	                          const isSelected = selectedAssignments.includes(assignmentKey);
@@ -3774,6 +3796,8 @@ const TeacherDashboard: React.FC = () => {
 	                                        <HelpCircle className="w-5 h-5 text-yellow-600" />
 	                                      ) : isBot ? (
 	                                        <Bot className="w-5 h-5 text-green-700" />
+	                                      ) : isContest ? (
+	                                        <span className="text-2xl">🏁</span>
 	                                      ) : (
 	                                        <MessageSquare className="w-5 h-5 text-purple-600" />
 	                                      )}
@@ -3785,8 +3809,8 @@ const TeacherDashboard: React.FC = () => {
                                           🤝 其他教師：{(assignment as any).teacherName || '—'}
                                         </span>
                                       )}
-	                                      <span className={`px-2 py-1 rounded-lg ${isGame ? 'bg-green-100' : isQuiz ? 'bg-yellow-100' : isBot ? 'bg-emerald-100' : 'bg-purple-100'}`}>
-	                                        {isGame ? '🎮' : isQuiz ? '🧠' : isBot ? '🤖' : '📚'} {assignment.subject}
+	                                      <span className={`px-2 py-1 rounded-lg ${isGame ? 'bg-green-100' : isQuiz ? 'bg-yellow-100' : isBot ? 'bg-emerald-100' : isContest ? 'bg-orange-100' : 'bg-purple-100'}`}>
+	                                        {isGame ? '🎮' : isQuiz ? '🧠' : isBot ? '🤖' : isContest ? '🏁' : '📚'} {assignment.subject}
 	                                      </span>
                                       <span className="bg-green-100 px-2 py-1 rounded-lg">
                                         🏫 {(() => {
@@ -3805,8 +3829,8 @@ const TeacherDashboard: React.FC = () => {
 	                                              🤖 完成 {(assignment.completedStudents ?? assignment.responseCount ?? 0)}/{(assignment.expectedStudents ?? 0)}
 	                                            </span>
 	                                          ) : (
-	                                            <span className={`px-2 py-1 rounded-lg ${isGame ? 'bg-blue-100' : isQuiz ? 'bg-orange-100' : 'bg-yellow-100'}`}>
-	                                              {isGame ? '🏆' : isQuiz ? '📊' : '💬'} {isGame ? (assignment.totalAttempts || 0) : isQuiz ? (assignment.totalSubmissions || 0) : (assignment.responseCount || 0)} 個{isGame ? '遊玩記錄' : isQuiz ? '提交' : '回應'}
+	                                            <span className={`px-2 py-1 rounded-lg ${isGame ? 'bg-blue-100' : isQuiz ? 'bg-orange-100' : isContest ? 'bg-orange-100' : 'bg-yellow-100'}`}>
+	                                              {isGame ? '🏆' : isQuiz ? '📊' : isContest ? '🏁' : '💬'} {isGame ? (assignment.totalAttempts || 0) : isQuiz ? (assignment.totalSubmissions || 0) : isContest ? (assignment.responseCount || 0) : (assignment.responseCount || 0)} 個{isGame ? '遊玩記錄' : isQuiz ? '提交' : isContest ? '參賽記錄' : '回應'}
 	                                            </span>
 	                                          )}
 	                                          {!isBot && (
@@ -3814,7 +3838,7 @@ const TeacherDashboard: React.FC = () => {
 	                                              👥 {assignment.uniqueStudents || 0} 位學生
 	                                            </span>
 	                                          )}
-	                                          {(isQuiz || isGame) && assignment.averageScore !== undefined && (
+	                                          {(isQuiz || isGame || isContest) && assignment.averageScore !== undefined && (
 	                                            <span className="bg-blue-100 px-2 py-1 rounded-lg">
 	                                              📈 平均分數: {Math.round(assignment.averageScore)}%
 	                                            </span>
@@ -3829,11 +3853,15 @@ const TeacherDashboard: React.FC = () => {
 		                                          ? 'bg-emerald-200 text-emerald-900'
 		                                          : isBot
 		                                            ? 'bg-emerald-200 text-emerald-900'
-		                                            : 'bg-purple-200 text-purple-800'
+		                                            : isContest
+		                                              ? 'bg-orange-200 text-orange-800'
+		                                              : 'bg-purple-200 text-purple-800'
 		                                        }`}>
 		                                        {isQuiz
 		                                          ? '小測驗'
-		                                          : isGame
+		                                          : isContest
+		                                            ? '問答比賽'
+		                                            : isGame
 	                                            ? (assignment.gameType === 'maze'
 	                                              ? '迷宮闖關'
 	                                              : assignment.gameType === 'matching'
@@ -3856,7 +3884,7 @@ const TeacherDashboard: React.FC = () => {
 	                                      className="flex items-center gap-1 px-4 py-2 bg-blue-100 text-blue-700 rounded-xl hover:bg-blue-200 font-bold"
 	                                    >
 		                                      <Eye className="w-4 h-4" />
-		                                      {isBot ? '查看對話' : (isQuiz || isGame) ? '查看結果' : '查看回應'}
+		                                      {isBot ? '查看對話' : (isQuiz || isGame || isContest) ? '查看結果' : '查看回應'}
 		                                    </button>
                                     {!isSelectMode && (
                                       <button
@@ -3905,6 +3933,7 @@ const TeacherDashboard: React.FC = () => {
 	                              const isQuiz = assignment.type === 'quiz';
 	                              const isGame = assignment.type === 'game';
 	                              const isBot = assignment.type === 'ai-bot';
+	                              const isContest = assignment.type === 'contest';
 	                              const isShared = !!(assignment as any).isShared;
                               const assignmentKey = makeTaskKey(assignment.type, assignment.id);
                               const autoHidden = isAutoHidden(assignment.createdAt);
@@ -3939,6 +3968,8 @@ const TeacherDashboard: React.FC = () => {
 	                                            <HelpCircle className="w-5 h-5 text-yellow-600" />
 	                                          ) : isBot ? (
 	                                            <Bot className="w-5 h-5 text-green-700" />
+	                                          ) : isContest ? (
+	                                            <span className="text-2xl">🏁</span>
 	                                          ) : (
 	                                            <MessageSquare className="w-5 h-5 text-purple-600" />
 	                                          )}
@@ -3961,23 +3992,27 @@ const TeacherDashboard: React.FC = () => {
 	                                              ? 'bg-emerald-200 text-emerald-900'
 	                                              : isBot
 	                                                ? 'bg-emerald-200 text-emerald-900'
-	                                                : 'bg-purple-200 text-purple-800'
+	                                                : isContest
+	                                                  ? 'bg-orange-200 text-orange-800'
+	                                                  : 'bg-purple-200 text-purple-800'
 	                                            }`}>
 	                                            {isQuiz
 	                                              ? '小測驗'
-	                                              : isGame
-                                                ? (assignment.gameType === 'maze'
-                                                  ? '迷宮闖關'
-                                                  : assignment.gameType === 'matching'
-                                                    ? '翻牌記憶'
-                                                    : assignment.gameType === 'math'
-                                                      ? '數學遊戲'
-                                                    : assignment.gameType === 'tower-defense'
-                                                      ? '答題塔防'
-                                                      : '小遊戲')
-		                                                : isBot
-		                                                  ? 'Pedia任務'
-		                                                  : '討論串'}
+	                                              : isContest
+	                                                ? '問答比賽'
+	                                                : isGame
+                                                  ? (assignment.gameType === 'maze'
+                                                    ? '迷宮闖關'
+                                                    : assignment.gameType === 'matching'
+                                                      ? '翻牌記憶'
+                                                      : assignment.gameType === 'math'
+                                                        ? '數學遊戲'
+                                                      : assignment.gameType === 'tower-defense'
+                                                        ? '答題塔防'
+                                                        : '小遊戲')
+		                                                  : isBot
+		                                                    ? 'Pedia任務'
+		                                                    : '討論串'}
 	                                          </span>
                                           <span>創建時間: {new Date(assignment.createdAt).toLocaleString()}</span>
                                         </div>
@@ -3988,7 +4023,7 @@ const TeacherDashboard: React.FC = () => {
                                           className="flex items-center gap-1 px-4 py-2 bg-blue-100 text-blue-700 rounded-xl hover:bg-blue-200 font-bold"
                                         >
 	                                          <Eye className="w-4 h-4" />
-	                                          {isBot ? '查看對話' : (isQuiz || isGame) ? '查看結果' : '查看回應'}
+	                                          {isBot ? '查看對話' : (isQuiz || isGame || isContest) ? '查看結果' : '查看回應'}
 	                                        </button>
                                         {manuallyHidden && !isSelectMode && (
                                           <button
@@ -4384,12 +4419,12 @@ const TeacherDashboard: React.FC = () => {
 	                            </div>
 	                          ) : assignmentResponses.length > 0 ? (
 	                            assignmentResponses.map(response => (
-	                              <div key={response.id} className={`border-2 rounded-2xl p-4 ${selectedAssignment?.type === 'quiz' ? 'bg-yellow-50 border-yellow-200' : 'bg-gray-50 border-gray-300'
+	                              <div key={response.id} className={`border-2 rounded-2xl p-4 ${selectedAssignment?.type === 'quiz' ? 'bg-yellow-50 border-yellow-200' : selectedAssignment?.type === 'contest' ? 'bg-orange-50 border-orange-200' : 'bg-gray-50 border-gray-300'
 	                                }`}>
 	                                <div className="flex justify-between items-start">
 	                                  <div className="flex-1">
 	                                    <div className="flex items-center gap-3 mb-2">
-	                                      <div className={`w-8 h-8 rounded-full flex items-center justify-center ${selectedAssignment?.type === 'quiz' ? 'bg-yellow-500' : 'bg-brand-green-light'
+	                                      <div className={`w-8 h-8 rounded-full flex items-center justify-center ${selectedAssignment?.type === 'quiz' ? 'bg-yellow-500' : selectedAssignment?.type === 'contest' ? 'bg-orange-500' : 'bg-brand-green-light'
 	                                        }`}>
 	                                        <span className="text-white font-bold text-sm">
 	                                          {response.studentName?.charAt(0) || '學'}
@@ -4399,7 +4434,7 @@ const TeacherDashboard: React.FC = () => {
 	                                        <p className="font-bold text-brand-brown">{response.studentName}</p>
 	                                        <p className="text-sm text-gray-600">{response.studentClass} • {response.studentUsername}</p>
 	                                      </div>
-	                                      {selectedAssignment?.type === 'quiz' && (
+	                                      {(selectedAssignment?.type === 'quiz' || selectedAssignment?.type === 'contest') && (
 	                                        <div className="ml-auto flex items-center gap-4">
 	                                          <div className={`px-3 py-1 rounded-full text-sm font-bold ${response.score >= 80 ? 'bg-green-100 text-green-700' :
 	                                            response.score >= 60 ? 'bg-yellow-100 text-yellow-700' :
@@ -4410,11 +4445,16 @@ const TeacherDashboard: React.FC = () => {
 	                                          <div className="text-sm text-gray-500">
 	                                            {response.correctAnswers}/{response.totalQuestions} 正確
 	                                          </div>
+	                                          {selectedAssignment?.type === 'contest' && (
+	                                            <div className="text-sm text-gray-500">
+	                                              🏁 第 {response.attempt} 次參賽
+	                                            </div>
+	                                          )}
 	                                        </div>
 	                                      )}
 	                                    </div>
 	
-	                                    {selectedAssignment?.type === 'quiz' || selectedAssignment?.type === 'game' ? (
+	                                    {selectedAssignment?.type === 'quiz' || selectedAssignment?.type === 'game' || selectedAssignment?.type === 'contest' ? (
 	                                      <>
 	                                        <div className="bg-white p-3 rounded-xl border border-gray-200">
 	                                          <div className="grid grid-cols-2 gap-4 text-sm">
@@ -4426,6 +4466,12 @@ const TeacherDashboard: React.FC = () => {
 	                                              <div>
 	                                                <span className="font-medium text-gray-600">遊玩次數:</span>
 	                                                <span className="ml-2">{response.attempts}</span>
+	                                              </div>
+	                                            )}
+	                                            {selectedAssignment?.type === 'contest' && (
+	                                              <div>
+	                                                <span className="font-medium text-gray-600">參賽次數:</span>
+	                                                <span className="ml-2">第 {response.attempt} 次</span>
 	                                              </div>
 	                                            )}
 	                                            <div>
