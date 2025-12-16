@@ -39,6 +39,47 @@ export interface Discussion {
   updatedAt: string;
 }
 
+// 遊戲類型定義
+export enum GameType {
+  MATH = 'math',
+  TOWER_DEFENSE = 'tower-defense',
+  MAZE = 'maze',
+  MATCHING = 'matching'
+}
+
+// 遊戲排行榜條目
+export interface GameLeaderboardEntry {
+  id: string;
+  gameId: string;
+  userId: string;
+  userName: string;
+  userAvatar?: string;
+  userClass?: string;
+  score: number;
+  correctAnswers: number;
+  totalQuestions: number;
+  timeSpent: number; // 秒
+  completedAt: string;
+  rank?: number;
+  // 遊戲特定數據
+  extraData?: {
+    wavesSurvived?: number; // 塔防遊戲
+    mathLevel?: string; // 數學遊戲
+    matchingAccuracy?: number; // 配對遊戲
+    mazeCompletionTime?: number; // 迷宮遊戲
+  };
+}
+
+// 遊戲排行榜
+export interface GameLeaderboard {
+  gameId: string;
+  gameTitle: string;
+  gameType: GameType;
+  subject: Subject;
+  entries: GameLeaderboardEntry[];
+  lastUpdated: string;
+}
+
 export const SUBJECT_CONFIG: Record<Subject, { color: string; icon: string }> = {
   [Subject.CHINESE]: { color: '#F8C5C5', icon: '📖' },
   [Subject.ENGLISH]: { color: '#F8E2B5', icon: '🔤' },
@@ -51,4 +92,12 @@ export const SUBJECT_CONFIG: Record<Subject, { color: string; icon: string }> = 
   [Subject.MUSIC]: { color: '#E5B5F8', icon: '🎵' },
   [Subject.LIBRARY]: { color: '#C5D8F8', icon: '📚' },
   [Subject.PE]: { color: '#B5F8B5', icon: '⚽' },
+};
+
+// 遊戲類型配置
+export const GAME_TYPE_CONFIG: Record<GameType, { name: string; icon: string; color: string }> = {
+  [GameType.MATH]: { name: '數學遊戲', icon: '🧮', color: '#B5D8F8' },
+  [GameType.TOWER_DEFENSE]: { name: '塔防遊戲', icon: '🏰', color: '#FFB5B5' },
+  [GameType.MAZE]: { name: '迷宮遊戲', icon: '🌀', color: '#B5F8CE' },
+  [GameType.MATCHING]: { name: '配對遊戲', icon: '🔗', color: '#F8B5E0' }
 };

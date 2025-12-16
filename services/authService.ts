@@ -939,6 +939,18 @@ class AuthService {
     return this.handleResponse(response);
   }
 
+  // 獲取遊戲排行榜
+  async getGameLeaderboard(gameId: string, limit?: number): Promise<any> {
+    const params = new URLSearchParams();
+    if (limit) params.append('limit', limit.toString());
+
+    const response = await fetch(`${this.API_BASE}/games/${gameId}/leaderboard?${params.toString()}`, {
+      headers: this.getAuthHeaders()
+    });
+
+    return this.handleResponse(response);
+  }
+
   // 刪除遊戲
   async deleteGame(gameId: string): Promise<void> {
     const response = await fetch(`${this.API_BASE}/games/${gameId}`, {

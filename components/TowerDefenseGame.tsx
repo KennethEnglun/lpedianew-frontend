@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Subject, SUBJECT_CONFIG } from '../types';
+import GameLeaderboardModal from './GameLeaderboardModal';
 
 type Difficulty = 'easy' | 'medium' | 'hard';
 type TowerType = 'soldier' | 'archer' | 'cannon' | 'mage-ice' | 'mage-lightning';
@@ -13,6 +14,7 @@ type TowerDefenseQuestionRaw =
 type NormalizedQuestion = { kind: 'mcq' | 'match'; stem: string; options: string[]; correctIndex: number };
 
 interface Props {
+  gameId: string;
   questions: TowerDefenseQuestionRaw[];
   subject: Subject;
   difficulty: Difficulty;
@@ -1192,7 +1194,7 @@ function drawCuteCatHead(
   ctx.restore();
 }
 
-export const TowerDefenseGame: React.FC<Props> = ({ questions, subject, difficulty, durationSeconds, livesLimit, onExit, onStart, onComplete }) => {
+export const TowerDefenseGame: React.FC<Props> = ({ gameId, questions, subject, difficulty, durationSeconds, livesLimit, onExit, onStart, onComplete }) => {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
   const lastTimeRef = useRef<number>(0);

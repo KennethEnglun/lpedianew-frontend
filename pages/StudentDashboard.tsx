@@ -1889,6 +1889,7 @@ const StudentDashboard: React.FC = () => {
 	              {selectedGame.gameType === 'math' && (
 	                <MathGame
 	                  game={selectedGame}
+	                  gameId={selectedGame.id}
 	                  onExit={() => setShowGameModal(false)}
 	                  onStart={() => { setGameStartTime(new Date()); setGameTimerTick(0); }}
 	                  onComplete={(result) => {

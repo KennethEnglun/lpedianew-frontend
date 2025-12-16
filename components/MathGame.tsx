@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import type { MathToken, Rational } from '../services/mathGame';
 import { normalizeRational, rationalKey } from '../services/mathGame';
 import { FractionView, MathExpressionView } from './MathExpressionView';
+import GameLeaderboardModal from './GameLeaderboardModal';
 
 type MathQuestionMcq = { tokens: MathToken[]; answer: Rational; choices: Rational[]; correctIndex: number };
 type MathQuestionInput = { tokens: MathToken[]; answer: Rational };
@@ -92,10 +93,11 @@ const KeypadButton: React.FC<{
 
 export const MathGame: React.FC<{
   game: any;
+  gameId: string;
   onExit: () => void;
   onStart: () => void;
   onComplete: (result: { success: boolean; score: number; correctAnswers: number; totalQuestions: number; timeSpent: number; details?: any }) => void;
-}> = ({ game, onExit, onStart, onComplete }) => {
+}> = ({ game, gameId, onExit, onStart, onComplete }) => {
   const answerMode: 'mcq' | 'input' = String(game?.math?.answerMode || game?.answerMode || 'mcq') === 'input' ? 'input' : 'mcq';
   const questions = useMemo(() => (Array.isArray(game?.questions) ? game.questions : []), [game?.id]);
 
@@ -103,6 +105,7 @@ export const MathGame: React.FC<{
   const timeLimitSeconds: number | null = game?.timeLimitSeconds ?? null;
   const livesLimit: number | null = game?.livesLimit ?? null;
 
+  const [gameState, setGameState] = useState<'leaderboard' | 'ready' | 'playing' | 'complete'>('leaderboard');
   const [index, setIndex] = useState(0);
   const [correct, setCorrect] = useState(0);
   const [lives, setLives] = useState<number | null>(livesLimit ?? null);
@@ -133,11 +136,13 @@ export const MathGame: React.FC<{
   }>>([]);
 
   useEffect(() => {
+    // 只有在遊戲狀態為 'playing' 時才自動開始
+    if (gameState !== 'playing') return;
     if (startedRef.current) return;
     startedRef.current = true;
     startTimeRef.current = Date.now();
     onStart();
-  }, [onStart]);
+  }, [gameState, onStart]);
 
   useEffect(() => {
     if (remaining === null) return;
@@ -306,6 +311,23 @@ export const MathGame: React.FC<{
     if (inputFocus === 'num') setTarget(setInputNum, inputNum);
     if (inputFocus === 'den') setTarget(setInputDen, inputDen);
   };
+
+  const handleStartGame = () => {
+    setGameState('playing');
+    startTimeRef.current = Date.now();
+    onStart();
+  };
+
+  // 顯示排行榜
+  if (gameState === 'leaderboard') {
+    return (
+      <GameLeaderboardModal
+        gameId={gameId}
+        onClose={onExit}
+        onStartGame={handleStartGame}
+      />
+    );
+  }
 
   if (!current || !Array.isArray(current.tokens)) {
     return (
