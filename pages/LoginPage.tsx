@@ -118,7 +118,7 @@ const LoginPage: React.FC = () => {
           <div className="relative flex-1 min-h-[240px] border-t-4 lg:border-t-0 lg:border-l-4 border-brand-brown">
             <div
               className="absolute inset-0 bg-cover bg-center"
-              style={{ backgroundImage: `url('/bg.png')` }}
+              style={{ backgroundImage: `url('/bg.gif')` }}
               aria-hidden="true"
             />
             <div className="absolute inset-0 bg-gradient-to-br from-white/10 via-transparent to-black/15" aria-hidden="true" />
