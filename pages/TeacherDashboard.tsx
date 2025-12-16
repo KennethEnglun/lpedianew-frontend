@@ -143,6 +143,12 @@ const TeacherDashboard: React.FC = () => {
   const [progressFilterGroup, setProgressFilterGroup] = useState('');
   const [progressIncludeHidden, setProgressIncludeHidden] = useState(false);
 
+  // 學生詳細任務查看
+  const [showStudentTaskModal, setShowStudentTaskModal] = useState(false);
+  const [selectedStudent, setSelectedStudent] = useState<any>(null);
+  const [studentTasks, setStudentTasks] = useState<any[]>([]);
+  const [studentTasksLoading, setStudentTasksLoading] = useState(false);
+
   // 小遊戲相關狀態
   const [showGameModal, setShowGameModal] = useState(false);
 	  const [gameType, setGameType] = useState<'maze' | 'matching' | 'tower-defense' | 'math' | null>(null);
@@ -907,10 +913,101 @@ const TeacherDashboard: React.FC = () => {
     setHiddenTaskKeys(loadHiddenTaskKeys(user.id, 'teacher'));
   }, [showStudentProgressModal, user?.id]);
 
-  // 清除分組篩選當科目改變時
+  // 清除分組篩選當科目改變時，並載入分組選項
   useEffect(() => {
     setProgressFilterGroup('');
+    // 如果選擇的科目不是教師任教的科目，需要載入分組選項
+    if (progressFilterSubject && !(user?.profile?.subjectGroups?.[progressFilterSubject]?.length > 0)) {
+      loadGroupOptionsForSubject(progressFilterSubject);
+    }
   }, [progressFilterSubject]);
+
+  // 載入科目分組選項
+  const loadGroupOptionsForSubject = async (subject: string) => {
+    try {
+      const data = await authService.getAvailableClasses(subject);
+      const groups = (data.groups || []).slice().sort();
+      setGroupOptionsBySubject(prev => ({ ...prev, [subject]: groups }));
+    } catch (error) {
+      console.error('載入分組選項失敗:', error);
+    }
+  };
+
+  // 查看學生詳細任務
+  const viewStudentTasks = async (student: any) => {
+    setSelectedStudent(student);
+    setShowStudentTaskModal(true);
+    setStudentTasksLoading(true);
+    setStudentTasks([]);
+
+    try {
+      const teacherHidden = loadHiddenTaskKeys(user.id, 'teacher');
+
+      const [assignmentData, quizData, gameData, botTaskData, contestData] = await Promise.all([
+        authService.getTeacherAssignments(progressFilterSubject || undefined, progressFilterClass || undefined, progressFilterGroup || undefined),
+        authService.getTeacherQuizzes(progressFilterSubject || undefined, progressFilterClass || undefined, progressFilterGroup || undefined),
+        authService.getTeacherGames(progressFilterSubject || undefined, progressFilterClass || undefined, progressFilterGroup || undefined),
+        authService.getTeacherBotTasks(progressFilterSubject || undefined, progressFilterClass || undefined, progressFilterGroup || undefined),
+        authService.getTeacherContests(progressFilterSubject || undefined, progressFilterClass || undefined, progressFilterGroup || undefined)
+      ]);
+
+      const allTasks = [
+        ...(assignmentData.assignments || []).map((item: any) => ({ ...item, type: 'assignment' as const })),
+        ...(quizData.quizzes || []).map((item: any) => ({ ...item, type: 'quiz' as const })),
+        ...(gameData.games || []).map((item: any) => ({ ...item, type: 'game' as const })),
+        ...(botTaskData.tasks || []).map((item: any) => ({ ...item, type: 'ai-bot' as const })),
+        ...(contestData.contests || []).map((item: any) => ({ ...item, type: 'contest' as const }))
+      ];
+
+      const filteredTasks = progressIncludeHidden
+        ? allTasks
+        : allTasks.filter((t: any) => !isAutoHidden(t.createdAt) && !teacherHidden.has(makeTaskKey(t.type, t.id)));
+
+      // 檢查每個任務的完成狀態
+      const tasksWithStatus = await Promise.all(
+        filteredTasks.filter(task => isStudentTargeted(student, task)).map(async (task: any) => {
+          let completed = false;
+          try {
+            if (task.type === 'quiz') {
+              const data = await authService.getQuizResults(task.id);
+              const results = data.results || [];
+              completed = results.some((r: any) => String(r.studentId) === String(student.id));
+            } else if (task.type === 'game') {
+              const data = await authService.getGameResults(task.id);
+              const scores = data.scores || [];
+              completed = scores.some((s: any) => String(s.studentId) === String(student.id));
+            } else if (task.type === 'ai-bot') {
+              const data = await authService.getBotTaskThreads(task.id);
+              const threads = data.threads || [];
+              completed = threads.some((t: any) => String(t.studentId) === String(student.id) && t.completed);
+            } else if (task.type === 'contest') {
+              const data = await authService.getContestResults(task.id);
+              const attempts = data.attempts || [];
+              completed = attempts.some((a: any) => String(a.studentId) === String(student.id));
+            } else {
+              const data = await authService.getAssignmentResponses(task.id);
+              const responses = data.responses || [];
+              completed = responses.some((r: any) => String(r.studentId) === String(student.id));
+            }
+          } catch (error) {
+            console.error('檢查任務完成狀態失敗:', task.type, task.id, error);
+          }
+
+          return {
+            ...task,
+            completed,
+            createdAtFormatted: new Date(task.createdAt).toLocaleString()
+          };
+        })
+      );
+
+      setStudentTasks(tasksWithStatus.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()));
+    } catch (error) {
+      console.error('載入學生任務失敗:', error);
+    } finally {
+      setStudentTasksLoading(false);
+    }
+  };
 
   // 重新載入進度當篩選條件改變時
   useEffect(() => {
@@ -1562,7 +1659,7 @@ const TeacherDashboard: React.FC = () => {
                       className="w-full px-3 py-2 border-2 border-gray-300 rounded-xl"
                     >
                       <option value="">全部科目</option>
-                      {(user?.profile?.subjectsTaught || []).map(subject => (
+                      {Object.values(Subject).map(subject => (
                         <option key={subject} value={subject}>{subject}</option>
                       ))}
                     </select>
@@ -1591,9 +1688,16 @@ const TeacherDashboard: React.FC = () => {
                       disabled={!progressFilterSubject}
                     >
                       <option value="">全部分組</option>
-                      {progressFilterSubject && (user?.profile?.subjectGroups?.[progressFilterSubject] || []).map(group => (
-                        <option key={group} value={group}>{group}</option>
-                      ))}
+                      {progressFilterSubject && (
+                        // 如果是教師任教的科目，顯示已設定的分組；否則從後端載入
+                        (user?.profile?.subjectGroups?.[progressFilterSubject] || []).length > 0
+                          ? (user?.profile?.subjectGroups?.[progressFilterSubject] || []).map(group => (
+                              <option key={group} value={group}>{group}</option>
+                            ))
+                          : groupOptionsBySubject[progressFilterSubject]?.map(group => (
+                              <option key={group} value={group}>{group}</option>
+                            )) || []
+                      )}
                     </select>
                   </div>
 
@@ -1650,6 +1754,7 @@ const TeacherDashboard: React.FC = () => {
                         <th className="p-4 border-b-4 border-brand-brown text-brand-brown font-black">完成</th>
                         <th className="p-4 border-b-4 border-brand-brown text-brand-brown font-black">未完成</th>
                         <th className="p-4 border-b-4 border-brand-brown text-brand-brown font-black">完成率</th>
+                        <th className="p-4 border-b-4 border-brand-brown text-brand-brown font-black">操作</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -1673,6 +1778,14 @@ const TeacherDashboard: React.FC = () => {
                                 <div className="w-12 text-right text-sm font-black text-brand-brown">{pct}%</div>
                               </div>
                             </td>
+                            <td className="p-4 border-b-2 border-gray-200">
+                              <button
+                                onClick={() => viewStudentTasks(row)}
+                                className="px-3 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 text-sm font-bold"
+                              >
+                                查看詳情
+                              </button>
+                            </td>
                           </tr>
                         );
                       })}
@@ -1682,6 +1795,93 @@ const TeacherDashboard: React.FC = () => {
               ) : (
                 <div className="text-center py-12 text-gray-400 font-bold text-xl border-4 border-dashed border-gray-300 rounded-3xl">
                   沒有資料
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 學生任務詳情模態框 */}
+      {showStudentTaskModal && selectedStudent && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
+          <div className="bg-white border-4 border-brand-brown rounded-3xl w-full max-w-4xl max-h-[90vh] overflow-y-auto shadow-comic">
+            <div className="p-6 border-b-4 border-brand-brown bg-[#E0D2F8]">
+              <div className="flex justify-between items-center gap-4">
+                <div>
+                  <h2 className="text-3xl font-black text-brand-brown">
+                    {selectedStudent.name} 的任務詳情
+                  </h2>
+                  <div className="text-sm text-gray-700 font-bold mt-1">
+                    {selectedStudent.className} • {selectedStudent.username}
+                  </div>
+                </div>
+                <button
+                  onClick={() => setShowStudentTaskModal(false)}
+                  className="w-10 h-10 rounded-full bg-white border-2 border-brand-brown hover:bg-gray-100 flex items-center justify-center"
+                  aria-label="關閉"
+                >
+                  <X className="w-6 h-6 text-brand-brown" />
+                </button>
+              </div>
+            </div>
+
+            <div className="p-6">
+              {studentTasksLoading ? (
+                <div className="text-center py-12">
+                  <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-brand-brown mx-auto mb-4"></div>
+                  <p className="text-brand-brown font-bold">載入中...</p>
+                </div>
+              ) : studentTasks.length > 0 ? (
+                <div className="space-y-4">
+                  {studentTasks.map((task) => {
+                    const isQuiz = task.type === 'quiz';
+                    const isGame = task.type === 'game';
+                    const isBot = task.type === 'ai-bot';
+                    const isContest = task.type === 'contest';
+
+                    return (
+                      <div key={`${task.type}-${task.id}`} className={`border-2 rounded-2xl p-4 ${task.completed ? 'bg-green-50 border-green-200' : 'bg-red-50 border-red-200'}`}>
+                        <div className="flex items-start gap-3">
+                          <div className="flex-shrink-0">
+                            {isGame ? (
+                              <span className="text-2xl">🎮</span>
+                            ) : isQuiz ? (
+                              <span className="text-2xl">🧠</span>
+                            ) : isBot ? (
+                              <span className="text-2xl">🤖</span>
+                            ) : isContest ? (
+                              <span className="text-2xl">🏁</span>
+                            ) : (
+                              <span className="text-2xl">📚</span>
+                            )}
+                          </div>
+                          <div className="flex-1">
+                            <div className="flex items-center gap-2 mb-2">
+                              <h4 className="text-lg font-bold text-brand-brown">{task.title}</h4>
+                              <span className={`px-2 py-1 rounded text-xs font-bold ${
+                                task.completed ? 'bg-green-200 text-green-800' : 'bg-red-200 text-red-800'
+                              }`}>
+                                {task.completed ? '已完成' : '未完成'}
+                              </span>
+                            </div>
+                            <div className="text-sm text-gray-600 mb-2">
+                              <span className="font-medium">科目：</span>{task.subject} •
+                              <span className="font-medium ml-2">類型：</span>
+                              {isQuiz ? '小測驗' : isGame ? '遊戲' : isBot ? 'Pedia任務' : isContest ? '問答比賽' : '討論串'}
+                            </div>
+                            <div className="text-sm text-gray-500">
+                              <span className="font-medium">創建時間：</span>{task.createdAtFormatted}
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : (
+                <div className="text-center py-12 text-gray-400 font-bold text-xl border-4 border-dashed border-gray-300 rounded-3xl">
+                  沒有找到任務
                 </div>
               )}
             </div>
@@ -5087,7 +5287,7 @@ const TeacherDashboard: React.FC = () => {
 			                <div>
 			                  <div className="text-sm font-black text-gray-700 mb-2">任教科目</div>
 			                  <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
-			                    {availableSubjects.map((subject) => {
+			                    {Object.values(Subject).map((subject) => {
 			                      const checked = teacherSettingsDraft.subjectsTaught.includes(subject);
 			                      return (
 			                        <label
