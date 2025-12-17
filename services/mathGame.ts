@@ -13,6 +13,13 @@ export type MathToken =
 
 export type Rational = { n: number; d: number };
 
+export const isPowerOfTen = (n: number) => {
+  if (!Number.isInteger(n) || n <= 0) return false;
+  let x = n;
+  while (x % 10 === 0) x = Math.trunc(x / 10);
+  return x === 1;
+};
+
 const gcd = (a: number, b: number) => {
   let x = Math.abs(a);
   let y = Math.abs(b);
@@ -197,7 +204,7 @@ const shuffleInPlace = <T,>(arr: T[]) => {
   return arr;
 };
 
-export const generateMcqChoices = (answer: Rational) => {
+export const generateMcqChoices = (answer: Rational, options?: { numberMode?: 'any' | 'decimal' | 'fraction' }) => {
   const correct = normalizeRational(answer);
   const seen = new Set([rationalKey(correct)]);
   const choices: Rational[] = [correct];
@@ -205,6 +212,10 @@ export const generateMcqChoices = (answer: Rational) => {
   const isInt = correct.d === 1;
   const baseN = correct.n;
   const baseD = correct.d;
+  const numberMode: 'any' | 'decimal' | 'fraction' = options?.numberMode === 'decimal' || options?.numberMode === 'fraction'
+    ? options.numberMode
+    : 'any';
+  const isDecimalDen = isPowerOfTen(baseD);
   const candidates: Rational[] = [];
 
   if (isInt) {
@@ -212,12 +223,19 @@ export const generateMcqChoices = (answer: Rational) => {
     candidates.push({ n: baseN * 2, d: 1 });
     candidates.push({ n: baseN === 0 ? 1 : Math.trunc(baseN / 2), d: 1 });
   } else {
-    for (const delta of [1, 2, -1, -2]) {
-      candidates.push({ n: baseN + delta, d: baseD });
-      candidates.push({ n: baseN, d: Math.max(1, baseD + delta) });
+    // Keep denominator stable for decimals to avoid showing fractions.
+    if (numberMode === 'decimal' || (numberMode === 'any' && isDecimalDen)) {
+      for (const delta of [1, 2, 3, -1, -2, -3]) candidates.push({ n: baseN + delta, d: baseD });
+      candidates.push({ n: baseN + Math.trunc(baseD / 10 || 1), d: baseD });
+      candidates.push({ n: baseN - Math.trunc(baseD / 10 || 1), d: baseD });
+    } else {
+      for (const delta of [1, 2, -1, -2]) {
+        candidates.push({ n: baseN + delta, d: baseD });
+        candidates.push({ n: baseN, d: Math.max(1, baseD + delta) });
+      }
+      candidates.push({ n: baseN + baseD, d: baseD });
+      candidates.push({ n: baseN - baseD, d: baseD });
     }
-    candidates.push({ n: baseN + baseD, d: baseD });
-    candidates.push({ n: baseN - baseD, d: baseD });
   }
 
   for (const c of candidates) {
@@ -239,7 +257,12 @@ export const generateMcqChoices = (answer: Rational) => {
     try {
       const guess = isInt
         ? { n: baseN + (Math.floor(Math.random() * 19) - 9 || 1), d: 1 }
-        : { n: baseN + (Math.floor(Math.random() * 7) - 3 || 1), d: Math.max(1, baseD + (Math.floor(Math.random() * 5) - 2)) };
+        : (() => {
+          if (numberMode === 'decimal' || (numberMode === 'any' && isDecimalDen)) {
+            return { n: baseN + (Math.floor(Math.random() * 13) - 6 || 1), d: baseD };
+          }
+          return { n: baseN + (Math.floor(Math.random() * 7) - 3 || 1), d: Math.max(1, baseD + (Math.floor(Math.random() * 5) - 2)) };
+        })();
       const normalized = normalizeRational(guess);
       const key = rationalKey(normalized);
       if (seen.has(key)) continue;

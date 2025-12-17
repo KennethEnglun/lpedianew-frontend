@@ -1,17 +1,35 @@
 import React, { useMemo, useRef, useState } from 'react';
 import type { MathOp, MathToken, Rational } from '../services/mathGame';
-import { evaluateTokens, generateMcqChoices, normalizeRational, validateTokens } from '../services/mathGame';
+import { evaluateTokens, generateMcqChoices, isPowerOfTen, normalizeRational, validateTokens } from '../services/mathGame';
 import { parseMathExpressionToTokens } from '../services/mathExpressionParser';
 import { FractionView, MathExpressionView } from './MathExpressionView';
+
+const validateTokensNumberMode = (tokens: MathToken[], numberMode?: 'fraction' | 'decimal') => {
+  if (!numberMode) return null;
+  if (numberMode === 'decimal') {
+    for (const t of tokens) {
+      if (t.t !== 'num') continue;
+      if (t.display?.kind === 'frac' || t.display?.kind === 'mixed') return '小數模式不接受分數（請用小數，例如 1.25）';
+      if (t.d !== 1 && !isPowerOfTen(Number(t.d))) return '小數模式只接受小數（分母需為 10/100/1000...）';
+    }
+  } else {
+    for (const t of tokens) {
+      if (t.t !== 'num') continue;
+      if (t.display?.kind === 'dec') return '分數模式不接受小數（請用分數，例如 2/5 或 3^1/2）';
+    }
+  }
+  return null;
+};
 
 export const MathExpressionBuilder: React.FC<{
   tokens: MathToken[];
   onChange: (next: MathToken[]) => void;
   allowedOps: MathOp[];
   allowParentheses: boolean;
+  numberMode?: 'fraction' | 'decimal';
   showAnswerPreview?: boolean;
   className?: string;
-}> = ({ tokens, onChange, allowedOps, allowParentheses, showAnswerPreview = true, className }) => {
+}> = ({ tokens, onChange, allowedOps, allowParentheses, numberMode, showAnswerPreview = true, className }) => {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [rawText, setRawText] = useState('');
   const [dialogError, setDialogError] = useState('');
@@ -98,6 +116,11 @@ export const MathExpressionBuilder: React.FC<{
       setDialogError(result.error);
       return;
     }
+    const modeErr = validateTokensNumberMode(result.tokens, numberMode);
+    if (modeErr) {
+      setDialogError(modeErr);
+      return;
+    }
     onChange(result.tokens);
     setDialogOpen(false);
   };
@@ -117,7 +140,7 @@ export const MathExpressionBuilder: React.FC<{
             {validation.ok && answerPreview && (
               <div className="mt-2 text-sm text-gray-700">
                 <span className="font-bold">答案：</span>
-                <FractionView value={answerPreview as Rational} className="font-black" />
+                <FractionView value={answerPreview as Rational} className="font-black" format={numberMode === 'decimal' ? 'decimal' : numberMode === 'fraction' ? 'fraction' : 'auto'} />
               </div>
             )}
           </div>
@@ -224,6 +247,10 @@ export const MathExpressionBuilder: React.FC<{
                   if (!parsed.ok) {
                     return <div className="text-gray-500 text-sm">（輸入後會顯示）</div>;
                   }
+                  const modeErr = validateTokensNumberMode(parsed.tokens, numberMode);
+                  if (modeErr) {
+                    return <div className="text-red-600 text-sm font-bold">{modeErr}</div>;
+                  }
                   return (
                     <div className="text-lg font-black text-gray-900">
                       <MathExpressionView tokens={parsed.tokens} />
@@ -260,14 +287,20 @@ export const finalizeMathQuestions = (drafts: Array<{ tokens: MathToken[] }>, co
   answerMode: 'mcq' | 'input';
   allowedOps: MathOp[];
   allowParentheses: boolean;
+  numberMode?: 'decimal' | 'fraction';
 }) => {
   return drafts.map((d, idx) => {
     const tokens = Array.isArray(d.tokens) ? d.tokens : [];
     const v = validateTokens(tokens, config.allowedOps, config.allowParentheses);
     if (!v.ok) throw new Error(`第 ${idx + 1} 題：${v.error}`);
+    const modeErr = validateTokensNumberMode(tokens, config.numberMode);
+    if (modeErr) throw new Error(`第 ${idx + 1} 題：${modeErr}`);
     const answer = evaluateTokens(tokens);
+    if (config.numberMode === 'decimal' && answer.d !== 1 && !isPowerOfTen(Number(answer.d))) {
+      throw new Error(`第 ${idx + 1} 題：小數模式的答案必須是小數（分母需為 10/100/1000...）`);
+    }
     if (config.answerMode === 'mcq') {
-      const { choices, correctIndex } = generateMcqChoices(answer);
+      const { choices, correctIndex } = generateMcqChoices(answer, { numberMode: config.numberMode || 'any' });
       return { tokens, answer, choices, correctIndex };
     }
     return { tokens, answer };

@@ -67,15 +67,17 @@ const formatDisplay = (display: MathNumDisplay | undefined, fallback: Rational) 
   return null;
 };
 
-export const FractionView: React.FC<{ value: Rational; className?: string; display?: MathNumDisplay }> = ({ value, className, display }) => {
+export const FractionView: React.FC<{ value: Rational; className?: string; display?: MathNumDisplay; format?: 'auto' | 'fraction' | 'decimal' }> = ({ value, className, display, format = 'auto' }) => {
   const custom = formatDisplay(display, value);
   if (typeof custom === 'string') return <span className={className}>{custom}</span>;
   if (custom) return <span className={className}>{custom}</span>;
 
   const isInt = value.d === 1;
   if (isInt) return <span className={className}>{formatInt(value.n)}</span>;
-  const dec = formatDecimalFromRational(value);
-  if (dec) return <span className={className}>{dec}</span>;
+  if (format === 'decimal' || format === 'auto') {
+    const dec = formatDecimalFromRational(value);
+    if (dec) return <span className={className}>{dec}</span>;
+  }
   return <FractionLayout n={value.n} d={value.d} className={className} />;
 };
 
@@ -115,7 +117,7 @@ export const MathExpressionView: React.FC<{
           const clickable = typeof onNumberClick === 'function';
           const inner = (
             <span className="px-0.5 font-black text-[#2F2A4A]">
-              {t.name}
+              □
             </span>
           );
           return (

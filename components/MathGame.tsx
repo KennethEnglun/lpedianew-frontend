@@ -199,13 +199,26 @@ export const MathGame: React.FC<{
   const equationLeft: MathToken[] | null = Array.isArray(current?.equation?.leftTokens) ? current.equation.leftTokens : null;
   const equationRight: MathToken[] | null = Array.isArray(current?.equation?.rightTokens) ? current.equation.rightTokens : null;
   const isEquation = Boolean(equationLeft && equationRight);
+  const configuredNumberMode: 'fraction' | 'decimal' | null = (() => {
+    const m = String(game?.math?.numberMode || '').trim();
+    if (m === 'decimal') return 'decimal';
+    if (m === 'fraction') return 'fraction';
+    return null;
+  })();
   const answerNumberType: 'int' | 'frac' | 'dec' = (() => {
     if (!answer) return 'int';
+    if (configuredNumberMode === 'decimal') return 'dec';
     if (answer.d === 1) return 'int';
+    if (configuredNumberMode === 'fraction') return 'frac';
     const d = Number(answer.d);
     if (Number.isInteger(d) && d > 0 && String(d).match(/^10+$/)) return 'dec';
     return 'frac';
   })();
+  const answerFormat: 'auto' | 'fraction' | 'decimal' = configuredNumberMode === 'decimal'
+    ? 'decimal'
+    : configuredNumberMode === 'fraction'
+      ? 'fraction'
+      : 'auto';
   const effectiveMode: 'mcq' | 'input' = (() => {
     if (answerMode === 'input') return 'input';
     if (Array.isArray(current?.choices) && current.choices.length > 0) return 'mcq';
@@ -466,7 +479,7 @@ export const MathGame: React.FC<{
                     onClick={() => onSelectMcq(c, i)}
                     className="p-3 rounded-3xl bg-white/80 border-4 border-white/80 hover:bg-white text-[#2F2A4A] font-black text-xl disabled:opacity-50 disabled:cursor-not-allowed shadow-sm"
                   >
-                    <FractionView value={normalizeRational(c)} className="text-2xl" />
+                    <FractionView value={normalizeRational(c)} className="text-2xl" format={answerFormat} />
                   </button>
                 ))}
               </div>
@@ -478,7 +491,7 @@ export const MathGame: React.FC<{
                       {feedback.ok ? '答對了！' : (
                         <span className="inline-flex items-center gap-2">
                           答錯了，正確答案：
-                          <FractionView value={feedback.correctAnswer} className="text-lg font-black" />
+                          <FractionView value={feedback.correctAnswer} className="text-lg font-black" format={answerFormat} />
                         </span>
                       )}
                     </div>
@@ -501,7 +514,7 @@ export const MathGame: React.FC<{
                   <button
                     type="button"
                     onClick={() => { setInputMode('int'); setInputFocus('whole'); }}
-                    disabled={locked || feedback !== null || answerNumberType !== 'int'}
+                    disabled={locked || feedback !== null || (configuredNumberMode === 'decimal') || (answerNumberType !== 'int' && configuredNumberMode === null)}
                     className={`px-3 py-1 rounded-full border-2 font-black ${inputMode === 'int' ? 'bg-[#B5F8CE] border-[#4FBF7A] text-[#2F2A4A]' : 'bg-white/70 border-white/70 text-[#2F2A4A]/70 hover:bg-white'} disabled:opacity-50 disabled:cursor-not-allowed`}
                   >
                     整數
@@ -509,7 +522,7 @@ export const MathGame: React.FC<{
                   <button
                     type="button"
                     onClick={() => { setInputMode('dec'); setInputFocus('whole'); }}
-                    disabled={locked || feedback !== null || answerNumberType !== 'dec'}
+                    disabled={locked || feedback !== null || (configuredNumberMode === 'fraction') || (answerNumberType !== 'dec' && configuredNumberMode === null)}
                     className={`px-3 py-1 rounded-full border-2 font-black ${inputMode === 'dec' ? 'bg-[#FDEEAD] border-[#D7A600] text-[#2F2A4A]' : 'bg-white/70 border-white/70 text-[#2F2A4A]/70 hover:bg-white'} disabled:opacity-50 disabled:cursor-not-allowed`}
                   >
                     小數
@@ -517,7 +530,7 @@ export const MathGame: React.FC<{
                   <button
                     type="button"
                     onClick={() => { setInputMode('frac'); setInputFocus('num'); }}
-                    disabled={locked || feedback !== null || answerNumberType !== 'frac'}
+                    disabled={locked || feedback !== null || (configuredNumberMode === 'decimal') || (answerNumberType !== 'frac' && configuredNumberMode === null)}
                     className={`px-3 py-1 rounded-full border-2 font-black ${inputMode === 'frac' ? 'bg-[#B5D8F8] border-[#4B9FE6] text-[#2F2A4A]' : 'bg-white/70 border-white/70 text-[#2F2A4A]/70 hover:bg-white'} disabled:opacity-50 disabled:cursor-not-allowed`}
                   >
                     分數
@@ -525,7 +538,7 @@ export const MathGame: React.FC<{
                   <button
                     type="button"
                     onClick={() => { setInputMode('mixed'); setInputFocus('whole'); }}
-                    disabled={locked || feedback !== null || answerNumberType !== 'frac'}
+                    disabled={locked || feedback !== null || (configuredNumberMode === 'decimal') || (answerNumberType !== 'frac' && configuredNumberMode === null)}
                     className={`px-3 py-1 rounded-full border-2 font-black ${inputMode === 'mixed' ? 'bg-[#F8B5E0] border-[#E35DB3] text-[#2F2A4A]' : 'bg-white/70 border-white/70 text-[#2F2A4A]/70 hover:bg-white'} disabled:opacity-50 disabled:cursor-not-allowed`}
                   >
                     帶分數
@@ -677,7 +690,7 @@ export const MathGame: React.FC<{
                       {feedback.ok ? '答對了！' : (
                         <span className="inline-flex items-center gap-2">
                           答錯了，正確答案：
-                          <FractionView value={feedback.correctAnswer} className="text-lg font-black" />
+                          <FractionView value={feedback.correctAnswer} className="text-lg font-black" format={answerFormat} />
                         </span>
                       )}
                     </div>

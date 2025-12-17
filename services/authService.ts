@@ -1123,9 +1123,26 @@ class AuthService {
     allowedOps: Array<'add' | 'sub' | 'mul' | 'div'>;
     allowParentheses: boolean;
     answerMode: 'mcq' | 'input';
+    numberMode?: 'fraction' | 'decimal';
     promptText?: string;
   }): Promise<{ questions: any[]; answerMode: 'mcq' | 'input' }> {
     const response = await fetch(`${this.API_BASE}/ai/math-generate`, {
+      method: 'POST',
+      headers: this.getAuthHeaders(),
+      body: JSON.stringify(payload)
+    });
+    return this.handleResponse(response);
+  }
+
+  async generateMathEquationQuestions(payload: {
+    grade?: '小一' | '小二' | '小三' | '小四' | '小五' | '小六';
+    count: number;
+    allowedOps: Array<'add' | 'sub' | 'mul' | 'div'>;
+    allowParentheses: boolean;
+    numberMode?: 'fraction' | 'decimal';
+    promptText?: string;
+  }): Promise<{ questions: Array<{ equation: string }> }> {
+    const response = await fetch(`${this.API_BASE}/ai/math-equation-generate`, {
       method: 'POST',
       headers: this.getAuthHeaders(),
       body: JSON.stringify(payload)
