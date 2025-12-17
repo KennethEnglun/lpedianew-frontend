@@ -1,5 +1,5 @@
 import React from 'react';
-import type { MathToken, Rational } from '../services/mathGame';
+import type { MathNumDisplay, MathToken, Rational } from '../services/mathGame';
 
 const opLabel = (op: string) => {
   switch (op) {
@@ -37,17 +37,9 @@ const formatDecimalFromRational = (value: Rational) => {
   return `${sign}${intPart}.${fracText}`;
 };
 
-export const FractionView: React.FC<{ value: Rational; className?: string }> = ({ value, className }) => {
-  const isInt = value.d === 1;
-  if (isInt) {
-    return <span className={className}>{formatInt(value.n)}</span>;
-  }
-  const dec = formatDecimalFromRational(value);
-  if (dec) {
-    return <span className={className}>{dec}</span>;
-  }
-  const numerator = formatInt(value.n);
-  const denominator = String(value.d);
+const FractionLayout: React.FC<{ n: number; d: number; className?: string }> = ({ n, d, className }) => {
+  const numerator = formatInt(n);
+  const denominator = String(d);
   return (
     <span className={`inline-flex flex-col items-center leading-none align-middle ${className || ''}`}>
       <span className="px-0.5">{numerator}</span>
@@ -55,6 +47,36 @@ export const FractionView: React.FC<{ value: Rational; className?: string }> = (
       <span className="px-0.5">{denominator}</span>
     </span>
   );
+};
+
+const MixedFractionView: React.FC<{ w: number; n: number; d: number; className?: string }> = ({ w, n, d, className }) => {
+  const wholeText = formatInt(w);
+  return (
+    <span className={`inline-flex items-center gap-1 ${className || ''}`}>
+      <span>{wholeText}</span>
+      <FractionLayout n={n} d={d} />
+    </span>
+  );
+};
+
+const formatDisplay = (display: MathNumDisplay | undefined, fallback: Rational) => {
+  if (!display) return null;
+  if (display.kind === 'dec') return display.raw.replace(/^-/, '−');
+  if (display.kind === 'frac') return <FractionLayout n={display.n} d={display.d} />;
+  if (display.kind === 'mixed') return <MixedFractionView w={display.w} n={display.n} d={display.d} />;
+  return null;
+};
+
+export const FractionView: React.FC<{ value: Rational; className?: string; display?: MathNumDisplay }> = ({ value, className, display }) => {
+  const custom = formatDisplay(display, value);
+  if (typeof custom === 'string') return <span className={className}>{custom}</span>;
+  if (custom) return <span className={className}>{custom}</span>;
+
+  const isInt = value.d === 1;
+  if (isInt) return <span className={className}>{formatInt(value.n)}</span>;
+  const dec = formatDecimalFromRational(value);
+  if (dec) return <span className={className}>{dec}</span>;
+  return <FractionLayout n={value.n} d={value.d} className={className} />;
 };
 
 export const MathExpressionView: React.FC<{
@@ -72,7 +94,7 @@ export const MathExpressionView: React.FC<{
         if (t.t === 'num') {
           const val: Rational = { n: t.n, d: t.d };
           const clickable = typeof onNumberClick === 'function';
-          const inner = <FractionView value={val} />;
+          const inner = <FractionView value={val} display={t.display} />;
           return (
             <span key={`t-${idx}`} className="inline-flex items-center">
               {clickable ? (

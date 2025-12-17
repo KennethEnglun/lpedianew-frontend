@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useRef, useState } from 'react';
 import type { MathOp, MathToken, Rational } from '../services/mathGame';
 import { evaluateTokens, generateMcqChoices, normalizeRational, validateTokens } from '../services/mathGame';
 import { parseMathExpressionToTokens } from '../services/mathExpressionParser';
@@ -22,6 +22,7 @@ export const MathExpressionBuilder: React.FC<{
   const [dialogOpen, setDialogOpen] = useState(false);
   const [rawText, setRawText] = useState('');
   const [dialogError, setDialogError] = useState('');
+  const inputRef = useRef<HTMLInputElement | null>(null);
 
   const validation = useMemo(() => validateTokens(tokens, allowedOps, allowParentheses), [tokens, allowedOps, allowParentheses]);
   const answerPreview = useMemo(() => {
@@ -40,6 +41,62 @@ export const MathExpressionBuilder: React.FC<{
     setDialogError('');
     setRawText('');
     setDialogOpen(true);
+  };
+
+  const insertIntoInput = (text: string) => {
+    const el = inputRef.current;
+    if (!el) {
+      setRawText((s) => s + text);
+      return;
+    }
+    const start = el.selectionStart ?? rawText.length;
+    const end = el.selectionEnd ?? rawText.length;
+    const next = rawText.slice(0, start) + text + rawText.slice(end);
+    const nextPos = start + text.length;
+    setRawText(next);
+    window.setTimeout(() => {
+      el.focus();
+      try {
+        el.setSelectionRange(nextPos, nextPos);
+      } catch {
+        // ignore
+      }
+    }, 0);
+  };
+
+  const backspaceInInput = () => {
+    const el = inputRef.current;
+    if (!el) {
+      setRawText((s) => s.slice(0, -1));
+      return;
+    }
+    const start = el.selectionStart ?? rawText.length;
+    const end = el.selectionEnd ?? rawText.length;
+    if (start !== end) {
+      const next = rawText.slice(0, start) + rawText.slice(end);
+      setRawText(next);
+      window.setTimeout(() => {
+        el.focus();
+        try {
+          el.setSelectionRange(start, start);
+        } catch {
+          // ignore
+        }
+      }, 0);
+      return;
+    }
+    if (start <= 0) return;
+    const next = rawText.slice(0, start - 1) + rawText.slice(end);
+    const nextPos = start - 1;
+    setRawText(next);
+    window.setTimeout(() => {
+      el.focus();
+      try {
+        el.setSelectionRange(nextPos, nextPos);
+      } catch {
+        // ignore
+      }
+    }, 0);
   };
 
   const confirmDialog = () => {
@@ -110,11 +167,50 @@ export const MathExpressionBuilder: React.FC<{
               <div>
                 <label className="block text-sm font-bold text-gray-700 mb-1">算式</label>
                 <input
+                  ref={inputRef}
                   value={rawText}
                   onChange={(e) => { setRawText(e.target.value); setDialogError(''); }}
                   placeholder="例如：(1+3)x3^1/2 或 1.25+2"
                   className="w-full px-4 py-2 rounded-2xl border-2 border-gray-300 focus:outline-none focus:border-[#A1D9AE] font-bold"
                 />
+
+                <div className="mt-2 grid grid-cols-6 gap-2">
+                  {[
+                    { label: '+', v: '+' },
+                    { label: '−', v: '-' },
+                    { label: '×', v: 'x' },
+                    { label: '÷', v: '÷' },
+                    { label: '(', v: '(' },
+                    { label: ')', v: ')' }
+                  ].map((b) => (
+                    <button
+                      key={b.label}
+                      type="button"
+                      onClick={() => insertIntoInput(b.v)}
+                      className="h-10 rounded-2xl bg-white border-2 border-gray-300 font-black text-[#2F2A4A] hover:bg-gray-50"
+                    >
+                      {b.label}
+                    </button>
+                  ))}
+                </div>
+
+                <div className="mt-2 flex items-center justify-between gap-2">
+                  <button
+                    type="button"
+                    onClick={() => { setRawText(''); setDialogError(''); window.setTimeout(() => inputRef.current?.focus(), 0); }}
+                    className="px-3 py-2 rounded-2xl bg-white border-2 border-gray-300 font-bold hover:bg-gray-50"
+                  >
+                    清空
+                  </button>
+                  <button
+                    type="button"
+                    onClick={backspaceInInput}
+                    className="px-3 py-2 rounded-2xl bg-white border-2 border-gray-300 font-bold hover:bg-gray-50"
+                  >
+                    ⌫
+                  </button>
+                </div>
+
                 <div className="text-xs text-gray-600 mt-2 space-y-1">
                   <div>支援：`+ - x * × ÷ / ( )`</div>
                   <div>分數：`2/5`（不要空格，會顯示上下分數）</div>

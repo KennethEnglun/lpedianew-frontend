@@ -1,7 +1,12 @@
 export type MathOp = 'add' | 'sub' | 'mul' | 'div';
 
+export type MathNumDisplay =
+  | { kind: 'frac'; n: number; d: number }
+  | { kind: 'mixed'; w: number; n: number; d: number }
+  | { kind: 'dec'; raw: string };
+
 export type MathToken =
-  | { t: 'num'; n: number; d: number }
+  | { t: 'num'; n: number; d: number; display?: MathNumDisplay }
   | { t: 'op'; v: MathOp }
   | { t: 'paren'; v: '(' | ')' };
 
@@ -249,4 +254,3 @@ export const parseRationalInput = (numeratorRaw: string, denominatorRaw: string)
   if (!Number.isFinite(d) || d === 0) return null;
   return normalizeRational({ n, d });
 };
-

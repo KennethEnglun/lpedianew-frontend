@@ -28,6 +28,12 @@ const decimalToRational = (sign: number, rawText: string) => {
   return { n, d };
 };
 
+const formatSignedDecimalRaw = (sign: number, rawText: string) => {
+  const s = String(rawText || '').trim();
+  if (!s) return '';
+  return sign < 0 ? `-${s}` : s;
+};
+
 const opFromChar = (ch: string): MathOp | null => {
   if (ch === '+') return 'add';
   if (ch === '-') return 'sub';
@@ -114,7 +120,7 @@ export const parseMathExpressionToTokens = (input: string, options: {
           const rat = decimalToRational(sign, `0.${fracText}`);
           if (!rat) return { ok: false, error: '小數格式不正確' };
           pushImplicitMulIfNeeded('num');
-          tokens.push({ t: 'num', n: rat.n, d: rat.d });
+          tokens.push({ t: 'num', n: rat.n, d: rat.d, display: { kind: 'dec', raw: formatSignedDecimalRaw(sign, `0.${fracText}`) } });
           continue;
         }
 
@@ -139,7 +145,7 @@ export const parseMathExpressionToTokens = (input: string, options: {
           if (!Number.isFinite(nPart) || !Number.isFinite(dPart) || dPart === 0) return { ok: false, error: '分母不可為 0' };
           const n0 = sign * (baseInt * dPart + nPart);
           pushImplicitMulIfNeeded('num');
-          tokens.push({ t: 'num', n: n0, d: dPart });
+          tokens.push({ t: 'num', n: n0, d: dPart, display: { kind: 'mixed', w: sign * baseInt, n: nPart, d: dPart } });
           continue;
         }
 
@@ -152,7 +158,7 @@ export const parseMathExpressionToTokens = (input: string, options: {
           const rat = decimalToRational(sign, `${baseInt}.${fracText}`);
           if (!rat) return { ok: false, error: '小數格式不正確' };
           pushImplicitMulIfNeeded('num');
-          tokens.push({ t: 'num', n: rat.n, d: rat.d });
+          tokens.push({ t: 'num', n: rat.n, d: rat.d, display: { kind: 'dec', raw: formatSignedDecimalRaw(sign, `${baseInt}.${fracText}`) } });
           continue;
         }
 
@@ -172,7 +178,7 @@ export const parseMathExpressionToTokens = (input: string, options: {
           const d0 = Number.parseInt(dText, 10);
           if (!Number.isFinite(d0) || d0 === 0) return { ok: false, error: '分母不可為 0' };
           pushImplicitMulIfNeeded('num');
-          tokens.push({ t: 'num', n: n0, d: d0 });
+          tokens.push({ t: 'num', n: n0, d: d0, display: { kind: 'frac', n: n0, d: d0 } });
           continue;
         }
         pushImplicitMulIfNeeded('num');
@@ -210,7 +216,7 @@ export const parseMathExpressionToTokens = (input: string, options: {
         const nPart = Number.parseInt(nText, 10);
         const dPart = Number.parseInt(dText, 10);
         if (!Number.isFinite(nPart) || !Number.isFinite(dPart) || dPart === 0) return { ok: false, error: '分母不可為 0' };
-        tokens.push({ t: 'num', n: n0 * dPart + nPart, d: dPart });
+        tokens.push({ t: 'num', n: n0 * dPart + nPart, d: dPart, display: { kind: 'mixed', w: n0, n: nPart, d: dPart } });
         continue;
       }
 
@@ -222,7 +228,7 @@ export const parseMathExpressionToTokens = (input: string, options: {
         const fracText = raw.slice(fracStart, i);
         const rat = decimalToRational(1, `${n0}.${fracText}`);
         if (!rat) return { ok: false, error: '小數格式不正確' };
-        tokens.push({ t: 'num', n: rat.n, d: rat.d });
+        tokens.push({ t: 'num', n: rat.n, d: rat.d, display: { kind: 'dec', raw: `${n0}.${fracText}` } });
         continue;
       }
 
@@ -234,7 +240,7 @@ export const parseMathExpressionToTokens = (input: string, options: {
         const dText = raw.slice(dStart, i);
         const d0 = Number.parseInt(dText, 10);
         if (!Number.isFinite(d0) || d0 === 0) return { ok: false, error: '分母不可為 0' };
-        tokens.push({ t: 'num', n: n0, d: d0 });
+        tokens.push({ t: 'num', n: n0, d: d0, display: { kind: 'frac', n: n0, d: d0 } });
         continue;
       }
 
@@ -251,7 +257,7 @@ export const parseMathExpressionToTokens = (input: string, options: {
       const fracText = raw.slice(fracStart, i);
       const rat = decimalToRational(1, `0.${fracText}`);
       if (!rat) return { ok: false, error: '小數格式不正確' };
-      tokens.push({ t: 'num', n: rat.n, d: rat.d });
+      tokens.push({ t: 'num', n: rat.n, d: rat.d, display: { kind: 'dec', raw: `0.${fracText}` } });
       continue;
     }
 
