@@ -228,6 +228,10 @@ export const generateMcqChoices = (answer: Rational, options?: { numberMode?: 'a
       for (const delta of [1, 2, 3, -1, -2, -3]) candidates.push({ n: baseN + delta, d: baseD });
       candidates.push({ n: baseN + Math.trunc(baseD / 10 || 1), d: baseD });
       candidates.push({ n: baseN - Math.trunc(baseD / 10 || 1), d: baseD });
+    } else if (numberMode === 'fraction') {
+      for (const delta of [1, 2, 3, -1, -2, -3]) candidates.push({ n: baseN + delta, d: baseD });
+      candidates.push({ n: baseN + baseD, d: baseD });
+      candidates.push({ n: baseN - baseD, d: baseD });
     } else {
       for (const delta of [1, 2, -1, -2]) {
         candidates.push({ n: baseN + delta, d: baseD });
@@ -259,6 +263,9 @@ export const generateMcqChoices = (answer: Rational, options?: { numberMode?: 'a
         ? { n: baseN + (Math.floor(Math.random() * 19) - 9 || 1), d: 1 }
         : (() => {
           if (numberMode === 'decimal' || (numberMode === 'any' && isDecimalDen)) {
+            return { n: baseN + (Math.floor(Math.random() * 13) - 6 || 1), d: baseD };
+          }
+          if (numberMode === 'fraction') {
             return { n: baseN + (Math.floor(Math.random() * 13) - 6 || 1), d: baseD };
           }
           return { n: baseN + (Math.floor(Math.random() * 7) - 3 || 1), d: Math.max(1, baseD + (Math.floor(Math.random() * 5) - 2)) };

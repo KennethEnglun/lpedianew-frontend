@@ -1124,6 +1124,11 @@ class AuthService {
     allowParentheses: boolean;
     answerMode: 'mcq' | 'input';
     numberMode?: 'fraction' | 'decimal';
+    allowNegative?: boolean;
+    minValue?: number;
+    maxValue?: number;
+    maxDen?: number;
+    maxDecimalPlaces?: number;
     promptText?: string;
   }): Promise<{ questions: any[]; answerMode: 'mcq' | 'input' }> {
     const response = await fetch(`${this.API_BASE}/ai/math-generate`, {
@@ -1140,6 +1145,13 @@ class AuthService {
     allowedOps: Array<'add' | 'sub' | 'mul' | 'div'>;
     allowParentheses: boolean;
     numberMode?: 'fraction' | 'decimal';
+    allowNegative?: boolean;
+    minValue?: number;
+    maxValue?: number;
+    maxDen?: number;
+    maxDecimalPlaces?: number;
+    equationSteps?: 1 | 2;
+    equationAnswerType?: 'any' | 'int' | 'properFraction' | 'decimal';
     promptText?: string;
   }): Promise<{ questions: Array<{ equation: string }> }> {
     const response = await fetch(`${this.API_BASE}/ai/math-equation-generate`, {

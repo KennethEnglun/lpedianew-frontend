@@ -20,6 +20,10 @@ import { authService } from '../services/authService';
 import { sanitizeHtml } from '../services/sanitizeHtml';
 import { loadHiddenTaskKeys, makeTaskKey, parseTaskKey, saveHiddenTaskKeys } from '../services/taskVisibility';
 import type { MathOp, MathToken } from '../services/mathGame';
+import { evaluateTokens, validateTokens } from '../services/mathGame';
+import type { MathConstraints } from '../services/mathConstraints';
+import { validateEquationAnswerType, validateEquationSteps, validateRationalAgainstConstraints, validateTokensAgainstConstraints } from '../services/mathConstraints';
+import { parseAndSolveSingleUnknownEquation } from '../services/equationSolver';
 import { Subject, Discussion } from '../types';
 
 type TowerDefenseQuestionDraft =
@@ -192,7 +196,7 @@ const TeacherDashboard: React.FC = () => {
   const [towerDefenseLivesEnabled, setTowerDefenseLivesEnabled] = useState(true);
   const [towerDefenseLivesLimit, setTowerDefenseLivesLimit] = useState(10);
 
-  // 數學遊戲（新）
+  // 數學測驗
   const [mathGameTab, setMathGameTab] = useState<'manual' | 'ai'>('manual');
   const [mathAnswerMode, setMathAnswerMode] = useState<'mcq' | 'input'>('input');
   const [mathQuestionType, setMathQuestionType] = useState<'calc' | 'equation'>('calc');
@@ -212,8 +216,13 @@ const TeacherDashboard: React.FC = () => {
   const [mathTimeEnabled, setMathTimeEnabled] = useState(false);
   const [mathTimeSeconds, setMathTimeSeconds] = useState(60);
   const [mathTimeSecondsText, setMathTimeSecondsText] = useState('60');
-  const [mathLivesEnabled, setMathLivesEnabled] = useState(false);
-  const [mathLivesLimit, setMathLivesLimit] = useState(5);
+  const [mathAllowNegative, setMathAllowNegative] = useState(false);
+  const [mathMinValueText, setMathMinValueText] = useState('0');
+  const [mathMaxValueText, setMathMaxValueText] = useState('50');
+  const [mathMaxDenText, setMathMaxDenText] = useState('20');
+  const [mathMaxDecimalPlacesText, setMathMaxDecimalPlacesText] = useState('2');
+  const [mathEquationSteps, setMathEquationSteps] = useState<1 | 2>(1);
+  const [mathEquationAnswerType, setMathEquationAnswerType] = useState<'any' | 'int' | 'properFraction' | 'decimal'>('int');
   const [mathForm, setMathForm] = useState({
     title: '',
     description: '',
@@ -1331,6 +1340,32 @@ const TeacherDashboard: React.FC = () => {
 	    setShowGameModal(true);
 	  };
 
+	  const openMathQuizCreator = () => {
+	    setGameType('math');
+	    setMathGameTab('manual');
+	    setMathAiError('');
+	    setMathPromptText('');
+	    setMathAnswerMode('input');
+	    setMathQuestionType('calc');
+	    setMathGrade('小一');
+	    setMathOps({ add: true, sub: true, mul: true, div: true, paren: true });
+	    setMathNumberMode('fraction');
+	    setMathAllowNegative(false);
+	    setMathMinValueText('0');
+	    setMathMaxValueText('50');
+	    setMathMaxDenText('20');
+	    setMathMaxDecimalPlacesText('2');
+	    setMathEquationSteps(1);
+	    setMathEquationAnswerType('int');
+	    setMathQuestionCount(10);
+	    setMathTimeEnabled(false);
+	    setMathTimeSeconds(60);
+	    setMathTimeSecondsText('60');
+	    setMathForm({ title: '', description: '', targetClasses: [], targetGroups: [] });
+	    setMathDrafts(Array.from({ length: 10 }, () => ({ kind: 'expr', tokens: [] })));
+	    setShowGameModal(true);
+	  };
+
 	  // 監聽篩選條件變化
 	  useEffect(() => {
 	    if (showAssignmentModal) {
@@ -1379,6 +1414,152 @@ const TeacherDashboard: React.FC = () => {
     if (mathOps.div) ops.push('div');
     return ops;
   }, [mathOps]);
+
+  const mathConstraints: MathConstraints = useMemo(() => {
+    const parseIntOr = (s: string, fallback: number) => {
+      const n = Number.parseInt(String(s || '').trim(), 10);
+      return Number.isFinite(n) ? n : fallback;
+    };
+    const maxValue = Math.max(1, Math.min(999, parseIntOr(mathMaxValueText, 50)));
+    let minValue = Math.max(-999, Math.min(999, parseIntOr(mathMinValueText, 0)));
+    if (!mathAllowNegative) minValue = Math.max(0, minValue);
+    if (minValue > maxValue) minValue = maxValue;
+    const maxDen = Math.max(2, Math.min(999, parseIntOr(mathMaxDenText, 20)));
+    const maxDecimalPlaces = Math.max(0, Math.min(6, parseIntOr(mathMaxDecimalPlacesText, 2)));
+    return {
+      numberMode: mathNumberMode,
+      allowNegative: mathAllowNegative,
+      minValue,
+      maxValue,
+      maxDen,
+      maxDecimalPlaces,
+      equationSteps: mathEquationSteps,
+      equationAnswerType: mathEquationAnswerType
+    };
+  }, [
+    mathAllowNegative,
+    mathMinValueText,
+    mathMaxValueText,
+    mathMaxDenText,
+    mathMaxDecimalPlacesText,
+    mathEquationSteps,
+    mathEquationAnswerType,
+    mathNumberMode
+  ]);
+
+  const mathDraftChecks = useMemo(() => {
+    return mathDrafts.map((d, idx) => {
+      const errors: string[] = [];
+
+      if (d.kind === 'expr') {
+        const tokens = Array.isArray(d.tokens) ? d.tokens : [];
+        const v = validateTokens(tokens, mathAllowedOps, mathOps.paren);
+        if (!v.ok) errors.push(v.error);
+        const tokenErrs = validateTokensAgainstConstraints(tokens, mathConstraints, '數字');
+        errors.push(...tokenErrs);
+        if (v.ok) {
+          try {
+            const answer = evaluateTokens(tokens);
+            errors.push(...validateRationalAgainstConstraints(answer, mathConstraints, '答案'));
+          } catch {
+            errors.push('算式無法計算');
+          }
+        }
+      } else {
+        try {
+          const parsed = parseAndSolveSingleUnknownEquation(d.equation || '', { allowedOps: mathAllowedOps, allowParentheses: mathOps.paren });
+          if (!parsed.ok) {
+            errors.push(parsed.error);
+          } else {
+            errors.push(...validateTokensAgainstConstraints(parsed.value.leftTokens, mathConstraints, '數字'));
+            errors.push(...validateTokensAgainstConstraints(parsed.value.rightTokens, mathConstraints, '數字'));
+            errors.push(...validateRationalAgainstConstraints(parsed.value.answer, mathConstraints, '答案'));
+            const varSideTokens = parsed.value.leftTokens.some((t: any) => t?.t === 'var') ? parsed.value.leftTokens : parsed.value.rightTokens;
+            const stepErr = validateEquationSteps(varSideTokens as any, mathConstraints);
+            if (stepErr) errors.push(stepErr);
+            const at = validateEquationAnswerType(parsed.value.answer, mathConstraints);
+            if (at) errors.push(at);
+          }
+        } catch {
+          errors.push('方程式格式不正確');
+        }
+      }
+
+      return { index: idx, ok: errors.length === 0, errors };
+    });
+  }, [mathDrafts, mathConstraints, mathAllowedOps, mathOps.paren]);
+
+  const invalidMathDraftIndexes = useMemo(
+    () => mathDraftChecks.filter((c) => !c.ok).map((c) => c.index),
+    [mathDraftChecks]
+  );
+
+  const regenerateInvalidMathDrafts = async () => {
+    const invalid = invalidMathDraftIndexes;
+    if (invalid.length === 0) return;
+    try {
+      setMathAiError('');
+      setMathAiLoading(true);
+      if (mathAllowedOps.length === 0) return;
+
+      if (mathQuestionType === 'equation') {
+        const resp = await authService.generateMathEquationQuestions({
+          grade: mathGrade,
+          count: invalid.length,
+          allowedOps: mathAllowedOps,
+          allowParentheses: mathOps.paren,
+          numberMode: mathNumberMode,
+          allowNegative: mathAllowNegative,
+          minValue: mathConstraints.minValue,
+          maxValue: mathConstraints.maxValue,
+          maxDen: mathConstraints.maxDen,
+          maxDecimalPlaces: mathConstraints.maxDecimalPlaces,
+          equationSteps: mathConstraints.equationSteps,
+          equationAnswerType: mathConstraints.equationAnswerType,
+          promptText: mathPromptText
+        });
+        const qs = Array.isArray(resp?.questions) ? resp.questions : [];
+        setMathDrafts((prev) => {
+          const next = [...prev];
+          invalid.forEach((idx, i) => {
+            const q = qs[i];
+            if (!q) return;
+            next[idx] = { kind: 'eq', equation: String(q?.equation || '').trim() };
+          });
+          return next;
+        });
+      } else {
+        const resp = await authService.generateMathQuestions({
+          grade: mathGrade,
+          count: invalid.length,
+          allowedOps: mathAllowedOps,
+          allowParentheses: mathOps.paren,
+          answerMode: mathAnswerMode,
+          numberMode: mathNumberMode,
+          allowNegative: mathAllowNegative,
+          minValue: mathConstraints.minValue,
+          maxValue: mathConstraints.maxValue,
+          maxDen: mathConstraints.maxDen,
+          maxDecimalPlaces: mathConstraints.maxDecimalPlaces,
+          promptText: mathPromptText
+        });
+        const qs = Array.isArray(resp?.questions) ? resp.questions : [];
+        setMathDrafts((prev) => {
+          const next = [...prev];
+          invalid.forEach((idx, i) => {
+            const q = qs[i];
+            if (!q) return;
+            next[idx] = { kind: 'expr', tokens: Array.isArray(q.tokens) ? q.tokens : [] };
+          });
+          return next;
+        });
+      }
+    } catch (e: any) {
+      setMathAiError(e?.message || 'AI 生成失敗');
+    } finally {
+      setMathAiLoading(false);
+    }
+  };
 
   useEffect(() => {
     setMathDrafts((prev) => {
@@ -2189,6 +2370,16 @@ const TeacherDashboard: React.FC = () => {
                 </Button>
                 <Button
                   fullWidth
+                  className="bg-[#DFF6FF] hover:bg-[#CDEFFF] flex items-center justify-center gap-2"
+                  onClick={() => {
+                    openMathQuizCreator();
+                    closeSidebar();
+                  }}
+                >
+                  🧮 創建數學測驗
+                </Button>
+                <Button
+                  fullWidth
                   className="bg-[#E8F5E9] hover:bg-[#C8E6C9] flex items-center justify-center gap-2"
                   onClick={() => {
                     openGameCreator();
@@ -2293,6 +2484,13 @@ const TeacherDashboard: React.FC = () => {
             <HelpCircle className="w-5 h-5" />
             派發小測驗
           </Button>
+          <Button
+            fullWidth
+            className="bg-[#DFF6FF] hover:bg-[#CDEFFF] text-lg flex items-center justify-center gap-2"
+            onClick={openMathQuizCreator}
+          >
+            🧮 創建數學測驗
+          </Button>
 	          <Button
 	            fullWidth
 	            className="bg-[#E8F5E9] hover:bg-[#C8E6C9] text-lg flex items-center justify-center gap-2"
@@ -2364,31 +2562,6 @@ const TeacherDashboard: React.FC = () => {
 	                    <div className="text-4xl mb-3">🏰</div>
 	                    <h3 className="text-xl font-bold text-emerald-800">答題塔防</h3>
 	                    <p className="text-sm text-emerald-700 mt-2">不停答題賺金幣，購買士兵守護基地</p>
-	                  </button>
-	                  <button
-	                    onClick={() => {
-	                      setGameType('math');
-	                      setMathGameTab('manual');
-	                      setMathAiError('');
-	                      setMathPromptText('');
-	                      setMathAnswerMode('input');
-	                      setMathQuestionType('calc');
-	                      setMathGrade('小一');
-	                      setMathOps({ add: true, sub: true, mul: true, div: true, paren: true });
-	                      setMathNumberMode('fraction');
-	                      setMathQuestionCount(10);
-	                      setMathTimeEnabled(false);
-	                      setMathTimeSeconds(60);
-	                      setMathLivesEnabled(false);
-	                      setMathLivesLimit(5);
-	                      setMathForm({ title: '', description: '', targetClasses: [], targetGroups: [] });
-	                      setMathDrafts(Array.from({ length: 10 }, () => ({ kind: 'expr', tokens: [] })));
-	                    }}
-	                    className="p-6 bg-gradient-to-br from-sky-100 to-blue-200 border-4 border-sky-400 rounded-2xl hover:shadow-lg transition-all hover:scale-105"
-	                  >
-	                    <div className="text-4xl mb-3">🧮</div>
-	                    <h3 className="text-xl font-bold text-sky-800">數學遊戲</h3>
-	                    <p className="text-sm text-sky-700 mt-2">支援四選一或輸入答案，分數用上下顯示</p>
 	                  </button>
 	                </div>
 	              </div>
@@ -3351,7 +3524,7 @@ const TeacherDashboard: React.FC = () => {
 	              <div className="flex justify-between items-center">
 	                <div className="flex items-center gap-3">
 	                  <span className="text-3xl">🧮</span>
-	                  <h2 className="text-3xl font-black text-sky-900">創建數學遊戲</h2>
+	                  <h2 className="text-3xl font-black text-sky-900">創建數學測驗</h2>
 	                </div>
 	                <button
 	                  onClick={() => { setShowGameModal(false); setGameType(null); }}
@@ -3371,8 +3544,8 @@ const TeacherDashboard: React.FC = () => {
 
 	              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
 	                <Input
-	                  label="遊戲標題"
-	                  placeholder="輸入遊戲標題..."
+	                  label="測驗標題"
+	                  placeholder="輸入測驗標題..."
 	                  value={mathForm.title}
 	                  onChange={(e) => setMathForm(prev => ({ ...prev, title: e.target.value }))}
 	                />
@@ -3535,6 +3708,111 @@ const TeacherDashboard: React.FC = () => {
 	                )}
 	              </div>
 
+	              <div className="bg-white border-2 border-gray-200 rounded-2xl p-4">
+	                <div className="flex items-center justify-between gap-3 flex-wrap">
+	                  <div>
+	                    <div className="text-sm font-black text-sky-900">數字設定</div>
+	                    <div className="text-xs text-gray-600">此設定會影響手動驗證、AI 生成、學生輸入方式</div>
+	                  </div>
+	                  <button
+	                    type="button"
+	                    onClick={() => {
+	                      setMathAllowNegative((v) => {
+	                        const next = !v;
+	                        if (next) {
+	                          const maxV = Number.parseInt(String(mathMaxValueText || '').trim(), 10);
+	                          if (Number.isFinite(maxV) && maxV > 0 && Number.parseInt(String(mathMinValueText || '0').trim(), 10) >= 0) {
+	                            setMathMinValueText(String(-Math.abs(maxV)));
+	                          }
+	                        } else {
+	                          const minV = Number.parseInt(String(mathMinValueText || '0').trim(), 10);
+	                          if (Number.isFinite(minV) && minV < 0) setMathMinValueText('0');
+	                        }
+	                        return next;
+	                      });
+	                    }}
+	                    className={`px-4 py-2 rounded-2xl border-2 font-black ${mathAllowNegative
+	                      ? 'bg-[#A1D9AE] border-[#5E8B66] text-white'
+	                      : 'bg-white border-gray-300 text-gray-700 hover:bg-gray-50'
+	                      }`}
+	                  >
+	                    {mathAllowNegative ? '允許負數' : '不允許負數'}
+	                  </button>
+	                </div>
+
+	                <div className="mt-3 grid grid-cols-1 md:grid-cols-3 gap-3">
+	                  <div>
+	                    <label className="block text-xs font-bold text-gray-600 mb-1">數值範圍（最小）</label>
+	                    <input
+	                      value={mathMinValueText}
+	                      onChange={(e) => setMathMinValueText(e.target.value)}
+	                      className="w-full px-4 py-2 rounded-2xl border-2 border-gray-300 font-bold"
+	                      inputMode="numeric"
+	                    />
+	                  </div>
+	                  <div>
+	                    <label className="block text-xs font-bold text-gray-600 mb-1">數值範圍（最大）</label>
+	                    <input
+	                      value={mathMaxValueText}
+	                      onChange={(e) => setMathMaxValueText(e.target.value)}
+	                      className="w-full px-4 py-2 rounded-2xl border-2 border-gray-300 font-bold"
+	                      inputMode="numeric"
+	                    />
+	                  </div>
+
+	                  {mathNumberMode === 'fraction' ? (
+	                    <div>
+	                      <label className="block text-xs font-bold text-gray-600 mb-1">最大分母</label>
+	                      <input
+	                        value={mathMaxDenText}
+	                        onChange={(e) => setMathMaxDenText(e.target.value)}
+	                        className="w-full px-4 py-2 rounded-2xl border-2 border-gray-300 font-bold"
+	                        inputMode="numeric"
+	                      />
+	                    </div>
+	                  ) : (
+	                    <div>
+	                      <label className="block text-xs font-bold text-gray-600 mb-1">小數位數（最多）</label>
+	                      <input
+	                        value={mathMaxDecimalPlacesText}
+	                        onChange={(e) => setMathMaxDecimalPlacesText(e.target.value)}
+	                        className="w-full px-4 py-2 rounded-2xl border-2 border-gray-300 font-bold"
+	                        inputMode="numeric"
+	                      />
+	                    </div>
+	                  )}
+	                </div>
+
+	                {mathQuestionType === 'equation' && (
+	                  <div className="mt-3 grid grid-cols-1 md:grid-cols-2 gap-3">
+	                    <div>
+	                      <label className="block text-xs font-bold text-gray-600 mb-1">方程式步數</label>
+	                      <select
+	                        value={String(mathEquationSteps)}
+	                        onChange={(e) => setMathEquationSteps(e.target.value === '2' ? 2 : 1)}
+	                        className="w-full px-4 py-2 rounded-2xl border-2 border-gray-300 font-bold bg-white"
+	                      >
+	                        <option value="1">一步</option>
+	                        <option value="2">兩步</option>
+	                      </select>
+	                    </div>
+	                    <div>
+	                      <label className="block text-xs font-bold text-gray-600 mb-1">答案限制</label>
+	                      <select
+	                        value={mathEquationAnswerType}
+	                        onChange={(e) => setMathEquationAnswerType(e.target.value as any)}
+	                        className="w-full px-4 py-2 rounded-2xl border-2 border-gray-300 font-bold bg-white"
+	                      >
+	                        <option value="any">不限</option>
+	                        <option value="int">只出整數</option>
+	                        <option value="properFraction" disabled={mathNumberMode === 'decimal'}>只出真分數</option>
+	                        <option value="decimal" disabled={mathNumberMode === 'fraction'}>只出小數</option>
+	                      </select>
+	                    </div>
+	                  </div>
+	                )}
+	              </div>
+
 	              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
 	                <div className="bg-white border-2 border-gray-200 rounded-2xl p-4">
 	                  <div className="flex items-center justify-between gap-3">
@@ -3559,39 +3837,6 @@ const TeacherDashboard: React.FC = () => {
 	                        value={mathTimeSecondsText}
 	                        onChange={(e) => setMathTimeSecondsText(e.target.value)}
 	                        onBlur={() => setMathTimeSeconds(clampTowerDefenseTimeSeconds(mathTimeSecondsText, mathTimeSeconds))}
-	                        className="w-full px-4 py-2 rounded-2xl border-2 border-gray-300 font-bold"
-	                        inputMode="numeric"
-	                      />
-	                    </div>
-	                  )}
-	                </div>
-
-	                <div className="bg-white border-2 border-gray-200 rounded-2xl p-4">
-	                  <div className="flex items-center justify-between gap-3">
-	                    <div>
-	                      <div className="text-sm font-black text-sky-900">生命值闖關（可選）</div>
-	                      <div className="text-xs text-gray-600">答錯扣 1 命</div>
-	                    </div>
-	                    <button
-	                      type="button"
-	                      onClick={() => setMathLivesEnabled(v => !v)}
-	                      className={`px-4 py-2 rounded-2xl border-2 font-black ${mathLivesEnabled
-	                        ? 'bg-[#A1D9AE] border-[#5E8B66] text-white'
-	                        : 'bg-white border-gray-300 text-gray-700 hover:bg-gray-50'
-	                        }`}
-	                    >
-	                      {mathLivesEnabled ? '已啟用' : '未啟用'}
-	                    </button>
-	                  </div>
-	                  {mathLivesEnabled && (
-	                    <div className="mt-3">
-	                      <input
-	                        value={String(mathLivesLimit)}
-	                        onChange={(e) => {
-	                          const n = Number.parseInt(String(e.target.value || '').trim(), 10);
-	                          if (!Number.isFinite(n)) return;
-	                          setMathLivesLimit(Math.max(1, Math.min(99, n)));
-	                        }}
 	                        className="w-full px-4 py-2 rounded-2xl border-2 border-gray-300 font-bold"
 	                        inputMode="numeric"
 	                      />
@@ -3723,6 +3968,13 @@ const TeacherDashboard: React.FC = () => {
 	                              allowedOps: mathAllowedOps,
 	                              allowParentheses: mathOps.paren,
 	                              numberMode: mathNumberMode,
+	                              allowNegative: mathAllowNegative,
+	                              minValue: mathConstraints.minValue,
+	                              maxValue: mathConstraints.maxValue,
+	                              maxDen: mathConstraints.maxDen,
+	                              maxDecimalPlaces: mathConstraints.maxDecimalPlaces,
+	                              equationSteps: mathConstraints.equationSteps,
+	                              equationAnswerType: mathConstraints.equationAnswerType,
 	                              promptText: mathPromptText
 	                            });
 	                            const qs = Array.isArray(resp?.questions) ? resp.questions : [];
@@ -3735,6 +3987,11 @@ const TeacherDashboard: React.FC = () => {
 	                              allowParentheses: mathOps.paren,
 	                              answerMode: mathAnswerMode,
 	                              numberMode: mathNumberMode,
+	                              allowNegative: mathAllowNegative,
+	                              minValue: mathConstraints.minValue,
+	                              maxValue: mathConstraints.maxValue,
+	                              maxDen: mathConstraints.maxDen,
+	                              maxDecimalPlaces: mathConstraints.maxDecimalPlaces,
 	                              promptText: mathPromptText
 	                            });
 	                            const qs = Array.isArray(resp?.questions) ? resp.questions : [];
@@ -3752,9 +4009,21 @@ const TeacherDashboard: React.FC = () => {
 	                      <Bot className="w-5 h-5" />
 	                      {mathAiLoading ? '生成中...' : 'AI 生成題目'}
 	                    </button>
-	                    <div className="text-xs text-gray-600">
-	                      生成後可於下方逐題調整
+	                    <div className="text-xs text-gray-600">生成後可於下方逐題調整</div>
+	                  </div>
+
+	                  <div className="bg-white/70 border-2 border-sky-200 rounded-2xl p-3 flex items-center justify-between gap-3 flex-wrap">
+	                    <div className="text-sm font-black text-sky-900">
+	                      快速檢查：{invalidMathDraftIndexes.length === 0 ? '全部符合設定 ✅' : `有 ${invalidMathDraftIndexes.length} 題不合格`}
 	                    </div>
+	                    <button
+	                      type="button"
+	                      onClick={regenerateInvalidMathDrafts}
+	                      disabled={mathAiLoading || invalidMathDraftIndexes.length === 0}
+	                      className="px-4 py-2 rounded-2xl bg-white border-2 border-sky-300 text-sky-900 font-black hover:bg-sky-50 disabled:opacity-50 disabled:cursor-not-allowed"
+	                    >
+	                      重新生成不合格題目
+	                    </button>
 	                  </div>
 	                </div>
 	              )}
@@ -3796,7 +4065,7 @@ const TeacherDashboard: React.FC = () => {
 	                            onChange={(next) => setMathDrafts(prev => prev.map((row, i) => i === idx ? ({ kind: 'eq', equation: next } as any) : row))}
 	                            allowedOps={mathAllowedOps}
 	                            allowParentheses={mathOps.paren}
-	                            numberMode={mathNumberMode}
+	                            constraints={mathConstraints}
 	                          />
 	                        ) : (
 	                          <MathExpressionBuilder
@@ -3804,7 +4073,7 @@ const TeacherDashboard: React.FC = () => {
 	                            onChange={(next) => setMathDrafts(prev => prev.map((row, i) => i === idx ? ({ kind: 'expr', tokens: next } as any) : row))}
 	                            allowedOps={mathAllowedOps}
 	                            allowParentheses={mathOps.paren}
-	                            numberMode={mathNumberMode}
+	                            constraints={mathConstraints}
 	                          />
 	                        )}
 	                      </div>
@@ -3850,14 +4119,14 @@ const TeacherDashboard: React.FC = () => {
 	                            if (d.kind !== 'eq') throw new Error('題目類型不一致，請重新切換題目類型');
 	                            return { equation: d.equation || '' };
 	                          }),
-	                          { answerMode: mathAnswerMode, allowedOps: mathAllowedOps, allowParentheses: mathOps.paren, numberMode: mathNumberMode }
+	                          { answerMode: mathAnswerMode, allowedOps: mathAllowedOps, allowParentheses: mathOps.paren, constraints: mathConstraints }
 	                        )
 	                        : finalizeMathQuestions(
 	                          mathDrafts.map((d) => {
 	                            if (d.kind !== 'expr') throw new Error('題目類型不一致，請重新切換題目類型');
 	                            return { tokens: d.tokens || [] };
 	                          }),
-	                          { answerMode: mathAnswerMode, allowedOps: mathAllowedOps, allowParentheses: mathOps.paren, numberMode: mathNumberMode }
+	                          { answerMode: mathAnswerMode, allowedOps: mathAllowedOps, allowParentheses: mathOps.paren, constraints: mathConstraints }
 	                        );
 
 	                      await authService.createGame({
@@ -3870,18 +4139,24 @@ const TeacherDashboard: React.FC = () => {
 	                        questions,
 	                        difficulty: 'medium',
 	                        timeLimitSeconds: mathTimeEnabled ? clampTowerDefenseTimeSeconds(mathTimeSecondsText, mathTimeSeconds) : undefined,
-	                        livesLimit: mathLivesEnabled ? mathLivesLimit : null,
+	                        livesLimit: null,
 	                        math: {
 	                          answerMode: mathAnswerMode,
 	                          questionType: mathQuestionType,
 	                          numberMode: mathNumberMode,
 	                          allowedOps: mathAllowedOps,
 	                          allowParentheses: mathOps.paren,
+	                          allowNegative: mathAllowNegative,
+	                          range: { min: mathConstraints.minValue, max: mathConstraints.maxValue },
+	                          maxDen: mathConstraints.maxDen,
+	                          maxDecimalPlaces: mathConstraints.maxDecimalPlaces,
+	                          equationSteps: mathConstraints.equationSteps,
+	                          equationAnswerType: mathConstraints.equationAnswerType,
 	                          grade: mathGrade
 	                        }
 	                      });
 
-	                      alert('數學遊戲創建成功！');
+	                      alert('數學測驗創建成功！');
 	                      setShowGameModal(false);
 	                      setGameType(null);
 	                    } catch (e: any) {
@@ -4397,7 +4672,7 @@ const TeacherDashboard: React.FC = () => {
 	                                              : assignment.gameType === 'matching'
 	                                                ? '翻牌記憶'
 	                                                : assignment.gameType === 'math'
-	                                                  ? '數學遊戲'
+	                                                  ? '數學測驗'
 	                                                : assignment.gameType === 'tower-defense'
 	                                                  ? '答題塔防'
 	                                                  : '小遊戲')
@@ -4536,7 +4811,7 @@ const TeacherDashboard: React.FC = () => {
                                                     : assignment.gameType === 'matching'
                                                       ? '翻牌記憶'
                                                       : assignment.gameType === 'math'
-                                                        ? '數學遊戲'
+                                                        ? '數學測驗'
                                                       : assignment.gameType === 'tower-defense'
                                                         ? '答題塔防'
                                                         : '小遊戲')
@@ -5697,7 +5972,7 @@ const TeacherDashboard: React.FC = () => {
                   {previewGame.gameType === 'matching'
                     ? '記憶配對'
                     : previewGame.gameType === 'math'
-                      ? '數學遊戲'
+                      ? '數學測驗'
                       : previewGame.gameType === 'maze'
                         ? '知識迷宮'
                         : '答題塔防'} • {previewGame.subject}
@@ -5930,7 +6205,7 @@ const TeacherDashboard: React.FC = () => {
                       </div>
                     ) : (
                       <div className="bg-yellow-50 border-2 border-yellow-200 rounded-2xl p-4 text-sm text-yellow-900 font-bold">
-                        此遊戲暫未提供逐題作答記錄回放（只有數學遊戲會記錄學生每題答案）。
+                        此遊戲暫未提供逐題作答記錄回放（只有數學測驗會記錄學生每題答案）。
                       </div>
                     )}
                   </div>

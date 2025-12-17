@@ -1,35 +1,20 @@
 import React, { useMemo, useRef, useState } from 'react';
 import type { MathOp, MathToken, Rational } from '../services/mathGame';
-import { evaluateTokens, generateMcqChoices, isPowerOfTen, normalizeRational, validateTokens } from '../services/mathGame';
+import { evaluateTokens, generateMcqChoices, normalizeRational, validateTokens } from '../services/mathGame';
+import type { MathConstraints } from '../services/mathConstraints';
+import { validateRationalAgainstConstraints, validateTokensAgainstConstraints } from '../services/mathConstraints';
 import { parseMathExpressionToTokens } from '../services/mathExpressionParser';
 import { FractionView, MathExpressionView } from './MathExpressionView';
-
-const validateTokensNumberMode = (tokens: MathToken[], numberMode?: 'fraction' | 'decimal') => {
-  if (!numberMode) return null;
-  if (numberMode === 'decimal') {
-    for (const t of tokens) {
-      if (t.t !== 'num') continue;
-      if (t.display?.kind === 'frac' || t.display?.kind === 'mixed') return '小數模式不接受分數（請用小數，例如 1.25）';
-      if (t.d !== 1 && !isPowerOfTen(Number(t.d))) return '小數模式只接受小數（分母需為 10/100/1000...）';
-    }
-  } else {
-    for (const t of tokens) {
-      if (t.t !== 'num') continue;
-      if (t.display?.kind === 'dec') return '分數模式不接受小數（請用分數，例如 2/5 或 3^1/2）';
-    }
-  }
-  return null;
-};
 
 export const MathExpressionBuilder: React.FC<{
   tokens: MathToken[];
   onChange: (next: MathToken[]) => void;
   allowedOps: MathOp[];
   allowParentheses: boolean;
-  numberMode?: 'fraction' | 'decimal';
+  constraints?: MathConstraints;
   showAnswerPreview?: boolean;
   className?: string;
-}> = ({ tokens, onChange, allowedOps, allowParentheses, numberMode, showAnswerPreview = true, className }) => {
+}> = ({ tokens, onChange, allowedOps, allowParentheses, constraints, showAnswerPreview = true, className }) => {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [rawText, setRawText] = useState('');
   const [dialogError, setDialogError] = useState('');
@@ -116,10 +101,12 @@ export const MathExpressionBuilder: React.FC<{
       setDialogError(result.error);
       return;
     }
-    const modeErr = validateTokensNumberMode(result.tokens, numberMode);
-    if (modeErr) {
-      setDialogError(modeErr);
-      return;
+    if (constraints) {
+      const errs = validateTokensAgainstConstraints(result.tokens, constraints);
+      if (errs.length > 0) {
+        setDialogError(errs[0]);
+        return;
+      }
     }
     onChange(result.tokens);
     setDialogOpen(false);
@@ -140,7 +127,7 @@ export const MathExpressionBuilder: React.FC<{
             {validation.ok && answerPreview && (
               <div className="mt-2 text-sm text-gray-700">
                 <span className="font-bold">答案：</span>
-                <FractionView value={answerPreview as Rational} className="font-black" format={numberMode === 'decimal' ? 'decimal' : numberMode === 'fraction' ? 'fraction' : 'auto'} />
+                <FractionView value={answerPreview as Rational} className="font-black" format={constraints?.numberMode === 'decimal' ? 'decimal' : constraints?.numberMode === 'fraction' ? 'fraction' : 'auto'} />
               </div>
             )}
           </div>
@@ -247,9 +234,9 @@ export const MathExpressionBuilder: React.FC<{
                   if (!parsed.ok) {
                     return <div className="text-gray-500 text-sm">（輸入後會顯示）</div>;
                   }
-                  const modeErr = validateTokensNumberMode(parsed.tokens, numberMode);
-                  if (modeErr) {
-                    return <div className="text-red-600 text-sm font-bold">{modeErr}</div>;
+                  if (constraints) {
+                    const errs = validateTokensAgainstConstraints(parsed.tokens, constraints);
+                    if (errs.length > 0) return <div className="text-red-600 text-sm font-bold">{errs[0]}</div>;
                   }
                   return (
                     <div className="text-lg font-black text-gray-900">
@@ -287,20 +274,23 @@ export const finalizeMathQuestions = (drafts: Array<{ tokens: MathToken[] }>, co
   answerMode: 'mcq' | 'input';
   allowedOps: MathOp[];
   allowParentheses: boolean;
-  numberMode?: 'decimal' | 'fraction';
+  constraints?: MathConstraints;
 }) => {
   return drafts.map((d, idx) => {
     const tokens = Array.isArray(d.tokens) ? d.tokens : [];
     const v = validateTokens(tokens, config.allowedOps, config.allowParentheses);
     if (!v.ok) throw new Error(`第 ${idx + 1} 題：${v.error}`);
-    const modeErr = validateTokensNumberMode(tokens, config.numberMode);
-    if (modeErr) throw new Error(`第 ${idx + 1} 題：${modeErr}`);
+    if (config.constraints) {
+      const errs = validateTokensAgainstConstraints(tokens, config.constraints);
+      if (errs.length > 0) throw new Error(`第 ${idx + 1} 題：${errs[0]}`);
+    }
     const answer = evaluateTokens(tokens);
-    if (config.numberMode === 'decimal' && answer.d !== 1 && !isPowerOfTen(Number(answer.d))) {
-      throw new Error(`第 ${idx + 1} 題：小數模式的答案必須是小數（分母需為 10/100/1000...）`);
+    if (config.constraints) {
+      const errs = validateRationalAgainstConstraints(answer, config.constraints, '答案');
+      if (errs.length > 0) throw new Error(`第 ${idx + 1} 題：${errs[0]}`);
     }
     if (config.answerMode === 'mcq') {
-      const { choices, correctIndex } = generateMcqChoices(answer, { numberMode: config.numberMode || 'any' });
+      const { choices, correctIndex } = generateMcqChoices(answer, { numberMode: config.constraints?.numberMode === 'decimal' ? 'decimal' : config.constraints?.numberMode === 'fraction' ? 'fraction' : 'any' });
       return { tokens, answer, choices, correctIndex };
     }
     return { tokens, answer };

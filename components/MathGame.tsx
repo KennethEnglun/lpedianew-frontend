@@ -133,10 +133,11 @@ export const MathGame: React.FC<{
 }> = ({ game, gameId, onExit, onStart, onComplete }) => {
   const answerMode: 'mcq' | 'input' = String(game?.math?.answerMode || game?.answerMode || 'mcq') === 'input' ? 'input' : 'mcq';
   const questions = useMemo(() => (Array.isArray(game?.questions) ? game.questions : []), [game?.id]);
+  const allowNegative = Boolean(game?.math?.allowNegative);
 
   const totalQuestions = questions.length;
   const timeLimitSeconds: number | null = game?.timeLimitSeconds ?? null;
-  const livesLimit: number | null = game?.livesLimit ?? null;
+  const livesLimit: number | null = null;
 
   const [gameState, setGameState] = useState<'leaderboard' | 'ready' | 'playing' | 'complete'>('leaderboard');
   const [index, setIndex] = useState(0);
@@ -369,6 +370,7 @@ export const MathGame: React.FC<{
       return;
     }
     if (key === '±') {
+      if (!allowNegative) return;
       setInputSign((s) => (s === 1 ? -1 : 1));
       return;
     }
@@ -548,9 +550,11 @@ export const MathGame: React.FC<{
 
               <div className="mt-2 flex items-center justify-between gap-3 flex-wrap">
                 <div className="flex items-center gap-3">
-                  <div className="h-10 px-3 rounded-2xl bg-white/80 border-2 border-white/80 text-[#2F2A4A] font-black flex items-center">
-                    符號：{inputSign === 1 ? '+' : '−'}
-                  </div>
+                  {allowNegative && (
+                    <div className="h-10 px-3 rounded-2xl bg-white/80 border-2 border-white/80 text-[#2F2A4A] font-black flex items-center">
+                      符號：{inputSign === 1 ? '+' : '−'}
+                    </div>
+                  )}
 
                   {/* Answer display */}
                   <div className="flex items-center gap-3">
@@ -663,7 +667,7 @@ export const MathGame: React.FC<{
               <div className="mt-3 grid grid-cols-3 gap-2">
                 {(inputMode === 'dec'
                   ? ['7', '8', '9', '4', '5', '6', '1', '2', '3', '.', '0', '⌫']
-                  : ['7', '8', '9', '4', '5', '6', '1', '2', '3', '±', '0', '⌫']
+                  : ['7', '8', '9', '4', '5', '6', '1', '2', '3', ...(allowNegative ? ['±'] : ['清除']), '0', '⌫']
                 ).map((k) => {
                   const colorClass = (() => {
                     if (k === '⌫') return 'bg-[#FFE8F0] text-[#7A1F1F]';

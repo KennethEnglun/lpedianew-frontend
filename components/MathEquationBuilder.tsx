@@ -1,35 +1,18 @@
 import React, { useMemo, useRef, useState } from 'react';
 import type { MathOp, Rational } from '../services/mathGame';
-import { generateMcqChoices, isPowerOfTen, normalizeRational } from '../services/mathGame';
+import { generateMcqChoices, normalizeRational } from '../services/mathGame';
+import type { MathConstraints } from '../services/mathConstraints';
+import { validateEquationAnswerType, validateEquationSteps, validateRationalAgainstConstraints, validateTokensAgainstConstraints } from '../services/mathConstraints';
 import { parseAndSolveSingleUnknownEquation } from '../services/equationSolver';
 import { FractionView, MathExpressionView } from './MathExpressionView';
 
 export type MathEquationDraft = { equation: string };
 
-const validateEquationNumberMode = (tokensLeft: any[], tokensRight: any[], answer: Rational, numberMode?: 'fraction' | 'decimal') => {
-  if (!numberMode) return null;
-  const tokens = [...(tokensLeft || []), ...(tokensRight || [])];
-  if (numberMode === 'decimal') {
-    for (const t of tokens) {
-      if (t?.t !== 'num') continue;
-      if (t.display?.kind === 'frac' || t.display?.kind === 'mixed') return '小數模式不接受分數（請用小數，例如 1.25）';
-      if (t.d !== 1 && !isPowerOfTen(Number(t.d))) return '小數模式只接受小數（分母需為 10/100/1000...）';
-    }
-    if (answer.d !== 1 && !isPowerOfTen(Number(answer.d))) return '小數模式的答案必須是小數（分母需為 10/100/1000...）';
-  } else {
-    for (const t of tokens) {
-      if (t?.t !== 'num') continue;
-      if (t.display?.kind === 'dec') return '分數模式不接受小數（請用分數，例如 2/5 或 3^1/2）';
-    }
-  }
-  return null;
-};
-
 export const finalizeMathEquationQuestions = (drafts: MathEquationDraft[], config: {
   answerMode: 'mcq' | 'input';
   allowedOps: MathOp[];
   allowParentheses: boolean;
-  numberMode?: 'decimal' | 'fraction';
+  constraints?: MathConstraints;
 }) => {
   return drafts.map((d, idx) => {
     const parsed = parseAndSolveSingleUnknownEquation(d.equation, {
@@ -38,10 +21,22 @@ export const finalizeMathEquationQuestions = (drafts: MathEquationDraft[], confi
     });
     if (!parsed.ok) throw new Error(`第 ${idx + 1} 題：${parsed.error}`);
     const { leftTokens, rightTokens, answer } = parsed.value;
-    const modeErr = validateEquationNumberMode(leftTokens, rightTokens, answer, config.numberMode);
-    if (modeErr) throw new Error(`第 ${idx + 1} 題：${modeErr}`);
+    if (config.constraints) {
+      const tokenErrs = [
+        ...validateTokensAgainstConstraints(leftTokens, config.constraints, '數字'),
+        ...validateTokensAgainstConstraints(rightTokens, config.constraints, '數字')
+      ];
+      if (tokenErrs.length > 0) throw new Error(`第 ${idx + 1} 題：${tokenErrs[0]}`);
+      const ansErrs = validateRationalAgainstConstraints(answer, config.constraints, '答案');
+      if (ansErrs.length > 0) throw new Error(`第 ${idx + 1} 題：${ansErrs[0]}`);
+      const varSideTokens = leftTokens.some((t: any) => t?.t === 'var') ? leftTokens : rightTokens;
+      const stepErr = validateEquationSteps(varSideTokens as any, config.constraints);
+      if (stepErr) throw new Error(`第 ${idx + 1} 題：${stepErr}`);
+      const at = validateEquationAnswerType(answer, config.constraints);
+      if (at) throw new Error(`第 ${idx + 1} 題：${at}`);
+    }
     if (config.answerMode === 'mcq') {
-      const { choices, correctIndex } = generateMcqChoices(answer, { numberMode: config.numberMode || 'any' });
+      const { choices, correctIndex } = generateMcqChoices(answer, { numberMode: config.constraints?.numberMode === 'decimal' ? 'decimal' : config.constraints?.numberMode === 'fraction' ? 'fraction' : 'any' });
       return { equation: { leftTokens, rightTokens }, answer, choices, correctIndex };
     }
     return { equation: { leftTokens, rightTokens }, answer };
@@ -53,10 +48,10 @@ export const MathEquationBuilder: React.FC<{
   onChange: (next: string) => void;
   allowedOps: MathOp[];
   allowParentheses: boolean;
-  numberMode?: 'fraction' | 'decimal';
+  constraints?: MathConstraints;
   showAnswerPreview?: boolean;
   className?: string;
-}> = ({ equation, onChange, allowedOps, allowParentheses, numberMode, showAnswerPreview = true, className }) => {
+}> = ({ equation, onChange, allowedOps, allowParentheses, constraints, showAnswerPreview = true, className }) => {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [rawText, setRawText] = useState('');
   const [dialogError, setDialogError] = useState('');
@@ -136,10 +131,31 @@ export const MathEquationBuilder: React.FC<{
       setDialogError(result.error);
       return;
     }
-    const modeErr = validateEquationNumberMode(result.value.leftTokens, result.value.rightTokens, result.value.answer, numberMode);
-    if (modeErr) {
-      setDialogError(modeErr);
-      return;
+    if (constraints) {
+      const tokenErrs = [
+        ...validateTokensAgainstConstraints(result.value.leftTokens, constraints, '數字'),
+        ...validateTokensAgainstConstraints(result.value.rightTokens, constraints, '數字')
+      ];
+      if (tokenErrs.length > 0) {
+        setDialogError(tokenErrs[0]);
+        return;
+      }
+      const ansErrs = validateRationalAgainstConstraints(result.value.answer, constraints, '答案');
+      if (ansErrs.length > 0) {
+        setDialogError(ansErrs[0]);
+        return;
+      }
+      const varSideTokens = result.value.leftTokens.some((t: any) => t?.t === 'var') ? result.value.leftTokens : result.value.rightTokens;
+      const stepErr = validateEquationSteps(varSideTokens as any, constraints);
+      if (stepErr) {
+        setDialogError(stepErr);
+        return;
+      }
+      const at = validateEquationAnswerType(result.value.answer, constraints);
+      if (at) {
+        setDialogError(at);
+        return;
+      }
     }
     onChange(rawText);
     setDialogOpen(false);
@@ -172,7 +188,7 @@ export const MathEquationBuilder: React.FC<{
             {answerPreview && (
               <div className="mt-2 text-sm text-gray-700">
                 <span className="font-bold">答案：</span>
-                <FractionView value={answerPreview} className="font-black" format={numberMode === 'decimal' ? 'decimal' : numberMode === 'fraction' ? 'fraction' : 'auto'} />
+                <FractionView value={answerPreview} className="font-black" format={constraints?.numberMode === 'decimal' ? 'decimal' : constraints?.numberMode === 'fraction' ? 'fraction' : 'auto'} />
               </div>
             )}
           </div>
@@ -279,8 +295,20 @@ export const MathEquationBuilder: React.FC<{
                 {(() => {
                   const result = parseAndSolveSingleUnknownEquation(rawText, { allowedOps, allowParentheses });
                   if (!result.ok) return <div className="text-gray-500 text-sm">（輸入後會顯示）</div>;
-                  const modeErr = validateEquationNumberMode(result.value.leftTokens, result.value.rightTokens, result.value.answer, numberMode);
-                  if (modeErr) return <div className="text-red-600 text-sm font-bold">{modeErr}</div>;
+                  if (constraints) {
+                    const tokenErrs = [
+                      ...validateTokensAgainstConstraints(result.value.leftTokens, constraints, '數字'),
+                      ...validateTokensAgainstConstraints(result.value.rightTokens, constraints, '數字')
+                    ];
+                    if (tokenErrs.length > 0) return <div className="text-red-600 text-sm font-bold">{tokenErrs[0]}</div>;
+                    const ansErrs = validateRationalAgainstConstraints(result.value.answer, constraints, '答案');
+                    if (ansErrs.length > 0) return <div className="text-red-600 text-sm font-bold">{ansErrs[0]}</div>;
+                    const varSideTokens = result.value.leftTokens.some((t: any) => t?.t === 'var') ? result.value.leftTokens : result.value.rightTokens;
+                    const stepErr = validateEquationSteps(varSideTokens as any, constraints);
+                    if (stepErr) return <div className="text-red-600 text-sm font-bold">{stepErr}</div>;
+                    const at = validateEquationAnswerType(result.value.answer, constraints);
+                    if (at) return <div className="text-red-600 text-sm font-bold">{at}</div>;
+                  }
                   return (
                     <div className="text-lg font-black text-gray-900 flex flex-wrap items-center gap-x-2 gap-y-1">
                       <MathExpressionView tokens={result.value.leftTokens} />
