@@ -943,12 +943,13 @@ const TeacherDashboard: React.FC = () => {
     try {
       const teacherHidden = loadHiddenTaskKeys(user.id, 'teacher');
 
+      // 獲取該學生的所有任務（不使用進度篩選器限制）
       const [assignmentData, quizData, gameData, botTaskData, contestData] = await Promise.all([
-        authService.getTeacherAssignments(progressFilterSubject || undefined, progressFilterClass || undefined, progressFilterGroup || undefined),
-        authService.getTeacherQuizzes(progressFilterSubject || undefined, progressFilterClass || undefined, progressFilterGroup || undefined),
-        authService.getTeacherGames(progressFilterSubject || undefined, progressFilterClass || undefined, progressFilterGroup || undefined),
-        authService.getTeacherBotTasks(progressFilterSubject || undefined, progressFilterClass || undefined, progressFilterGroup || undefined),
-        authService.getTeacherContests(progressFilterSubject || undefined, progressFilterClass || undefined, progressFilterGroup || undefined)
+        authService.getTeacherAssignments(),
+        authService.getTeacherQuizzes(),
+        authService.getTeacherGames(),
+        authService.getTeacherBotTasks(),
+        authService.getTeacherContests()
       ]);
 
       const allTasks = [
@@ -963,31 +964,79 @@ const TeacherDashboard: React.FC = () => {
         ? allTasks
         : allTasks.filter((t: any) => !isAutoHidden(t.createdAt) && !teacherHidden.has(makeTaskKey(t.type, t.id)));
 
+      // 只顯示分派給該學生的任務
+      const studentTasks = filteredTasks.filter(task => isStudentTargeted(student, task));
+
       // 檢查每個任務的完成狀態
       const tasksWithStatus = await Promise.all(
-        filteredTasks.filter(task => isStudentTargeted(student, task)).map(async (task: any) => {
+        studentTasks.map(async (task: any) => {
           let completed = false;
+          let completionDetails: any = null;
+
           try {
             if (task.type === 'quiz') {
               const data = await authService.getQuizResults(task.id);
               const results = data.results || [];
-              completed = results.some((r: any) => String(r.studentId) === String(student.id));
+              const studentResult = results.find((r: any) => String(r.studentId) === String(student.id));
+              completed = !!studentResult;
+              if (studentResult) {
+                completionDetails = {
+                  score: studentResult.score || 0,
+                  totalQuestions: studentResult.totalQuestions || 0,
+                  completedAt: studentResult.completedAt
+                };
+              }
             } else if (task.type === 'game') {
               const data = await authService.getGameResults(task.id);
               const scores = data.scores || [];
-              completed = scores.some((s: any) => String(s.studentId) === String(student.id));
+              const studentScores = scores.filter((s: any) => String(s.studentId) === String(student.id));
+              completed = studentScores.length > 0;
+              if (studentScores.length > 0) {
+                const bestScore = Math.max(...studentScores.map((s: any) => s.score || 0));
+                completionDetails = {
+                  bestScore,
+                  attempts: studentScores.length,
+                  lastPlayedAt: studentScores[studentScores.length - 1]?.completedAt
+                };
+              }
             } else if (task.type === 'ai-bot') {
               const data = await authService.getBotTaskThreads(task.id);
               const threads = data.threads || [];
-              completed = threads.some((t: any) => String(t.studentId) === String(student.id) && t.completed);
+              const studentThread = threads.find((t: any) => String(t.studentId) === String(student.id));
+              completed = studentThread?.completed || false;
+              if (studentThread) {
+                completionDetails = {
+                  threadId: studentThread.id,
+                  messageCount: studentThread.messages?.length || 0,
+                  lastMessageAt: studentThread.updatedAt
+                };
+              }
             } else if (task.type === 'contest') {
               const data = await authService.getContestResults(task.id);
               const attempts = data.attempts || [];
-              completed = attempts.some((a: any) => String(a.studentId) === String(student.id));
+              const studentAttempts = attempts.filter((a: any) => String(a.studentId) === String(student.id));
+              completed = studentAttempts.length > 0;
+              if (studentAttempts.length > 0) {
+                const bestAttempt = studentAttempts.reduce((best: any, current: any) =>
+                  (current.score || 0) > (best.score || 0) ? current : best
+                );
+                completionDetails = {
+                  bestScore: bestAttempt.score || 0,
+                  attempts: studentAttempts.length,
+                  completedAt: bestAttempt.completedAt
+                };
+              }
             } else {
               const data = await authService.getAssignmentResponses(task.id);
               const responses = data.responses || [];
-              completed = responses.some((r: any) => String(r.studentId) === String(student.id));
+              const studentResponse = responses.find((r: any) => String(r.studentId) === String(student.id));
+              completed = !!studentResponse;
+              if (studentResponse) {
+                completionDetails = {
+                  submittedAt: studentResponse.submittedAt,
+                  responseLength: studentResponse.response?.length || 0
+                };
+              }
             }
           } catch (error) {
             console.error('檢查任務完成狀態失敗:', task.type, task.id, error);
@@ -996,6 +1045,7 @@ const TeacherDashboard: React.FC = () => {
           return {
             ...task,
             completed,
+            completionDetails,
             createdAtFormatted: new Date(task.createdAt).toLocaleString()
           };
         })
@@ -1870,7 +1920,64 @@ const TeacherDashboard: React.FC = () => {
                               <span className="font-medium ml-2">類型：</span>
                               {isQuiz ? '小測驗' : isGame ? '遊戲' : isBot ? 'Pedia任務' : isContest ? '問答比賽' : '討論串'}
                             </div>
-                            <div className="text-sm text-gray-500">
+                            {task.description && (
+                              <div className="text-sm text-gray-600 mb-2">
+                                <span className="font-medium">描述：</span>{task.description}
+                              </div>
+                            )}
+
+                            {/* 完成詳情 */}
+                            {task.completed && task.completionDetails && (
+                              <div className="mt-3 p-3 bg-white rounded-lg border border-green-300">
+                                <div className="text-sm font-bold text-green-800 mb-2">完成詳情</div>
+                                <div className="text-sm space-y-1">
+                                  {isQuiz && (
+                                    <>
+                                      <div><span className="font-medium">分數：</span>{task.completionDetails.score}/{task.completionDetails.totalQuestions}</div>
+                                      <div><span className="font-medium">完成時間：</span>{new Date(task.completionDetails.completedAt).toLocaleString()}</div>
+                                    </>
+                                  )}
+                                  {isGame && (
+                                    <>
+                                      <div><span className="font-medium">最佳分數：</span>{task.completionDetails.bestScore}</div>
+                                      <div><span className="font-medium">遊玩次數：</span>{task.completionDetails.attempts}</div>
+                                      {task.completionDetails.lastPlayedAt && (
+                                        <div><span className="font-medium">最後遊玩：</span>{new Date(task.completionDetails.lastPlayedAt).toLocaleString()}</div>
+                                      )}
+                                    </>
+                                  )}
+                                  {isBot && (
+                                    <>
+                                      <div><span className="font-medium">對話訊息數：</span>{task.completionDetails.messageCount}</div>
+                                      {task.completionDetails.lastMessageAt && (
+                                        <div><span className="font-medium">最後互動：</span>{new Date(task.completionDetails.lastMessageAt).toLocaleString()}</div>
+                                      )}
+                                    </>
+                                  )}
+                                  {isContest && (
+                                    <>
+                                      <div><span className="font-medium">最佳分數：</span>{task.completionDetails.bestScore}</div>
+                                      <div><span className="font-medium">參與次數：</span>{task.completionDetails.attempts}</div>
+                                      {task.completionDetails.completedAt && (
+                                        <div><span className="font-medium">完成時間：</span>{new Date(task.completionDetails.completedAt).toLocaleString()}</div>
+                                      )}
+                                    </>
+                                  )}
+                                  {(!isQuiz && !isGame && !isBot && !isContest) && (
+                                    <>
+                                      {task.completionDetails.responseLength && (
+                                        <div><span className="font-medium">回應長度：</span>{task.completionDetails.responseLength} 字元</div>
+                                      )}
+                                      {task.completionDetails.submittedAt && (
+                                        <div><span className="font-medium">提交時間：</span>{new Date(task.completionDetails.submittedAt).toLocaleString()}</div>
+                                      )}
+                                    </>
+                                  )}
+                                </div>
+                              </div>
+                            )}
+
+                            <div className="text-sm text-gray-500 mt-2">
                               <span className="font-medium">創建時間：</span>{task.createdAtFormatted}
                             </div>
                           </div>
