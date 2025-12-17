@@ -934,8 +934,50 @@ const TeacherDashboard: React.FC = () => {
   };
 
   // 查看學生詳細任務
-  const viewStudentTasks = async (student: any) => {
-    setSelectedStudent(student);
+  const viewStudentTasks = async (studentRow: any) => {
+    console.log('viewStudentTasks called for student row:', studentRow);
+
+    // 需要找到原始的學生對象，因為 studentRow 是進度表中的簡化對象
+    // 重新獲取學生數據以獲取完整的 profile 信息
+    let actualStudent = null;
+    try {
+      const studentsData = await authService.getStudentRoster({ limit: 2000 });
+      const students = (studentsData.users || []).filter((u: any) => u?.role === 'student');
+      actualStudent = students.find((s: any) => s.id === studentRow.id);
+
+      if (!actualStudent) {
+        // 如果找不到，創建一個兼容的學生對象
+        actualStudent = {
+          id: studentRow.id,
+          username: studentRow.username,
+          profile: {
+            name: studentRow.name,
+            class: studentRow.className,
+            // 預設為空的分組信息，之後可以從學生數據中獲取
+            chineseGroup: '',
+            englishGroup: '',
+            mathGroup: ''
+          }
+        };
+      }
+    } catch (error) {
+      console.error('Failed to get student data:', error);
+      // 創建兼容的學生對象
+      actualStudent = {
+        id: studentRow.id,
+        username: studentRow.username,
+        profile: {
+          name: studentRow.name,
+          class: studentRow.className,
+          chineseGroup: '',
+          englishGroup: '',
+          mathGroup: ''
+        }
+      };
+    }
+
+    console.log('Actual student object:', actualStudent);
+    setSelectedStudent(actualStudent);
     setShowStudentTaskModal(true);
     setStudentTasksLoading(true);
     setStudentTasks([]);
@@ -944,6 +986,7 @@ const TeacherDashboard: React.FC = () => {
       const teacherHidden = loadHiddenTaskKeys(user.id, 'teacher');
 
       // 獲取該學生的所有任務（不使用進度篩選器限制）
+      console.log('Loading all tasks for student...');
       const [assignmentData, quizData, gameData, botTaskData, contestData] = await Promise.all([
         authService.getTeacherAssignments(),
         authService.getTeacherQuizzes(),
@@ -951,6 +994,14 @@ const TeacherDashboard: React.FC = () => {
         authService.getTeacherBotTasks(),
         authService.getTeacherContests()
       ]);
+
+      console.log('Raw task data loaded:', {
+        assignments: assignmentData.assignments?.length || 0,
+        quizzes: quizData.quizzes?.length || 0,
+        games: gameData.games?.length || 0,
+        botTasks: botTaskData.tasks?.length || 0,
+        contests: contestData.contests?.length || 0
+      });
 
       const allTasks = [
         ...(assignmentData.assignments || []).map((item: any) => ({ ...item, type: 'assignment' as const })),
@@ -960,12 +1011,34 @@ const TeacherDashboard: React.FC = () => {
         ...(contestData.contests || []).map((item: any) => ({ ...item, type: 'contest' as const }))
       ];
 
+      console.log('All tasks combined:', allTasks.length);
+
       const filteredTasks = progressIncludeHidden
         ? allTasks
         : allTasks.filter((t: any) => !isAutoHidden(t.createdAt) && !teacherHidden.has(makeTaskKey(t.type, t.id)));
 
+      console.log('Filtered tasks after hidden check:', filteredTasks.length);
+
       // 只顯示分派給該學生的任務
-      const studentTasks = filteredTasks.filter(task => isStudentTargeted(student, task));
+      const studentTasks = filteredTasks.filter(task => {
+        const isTargeted = isStudentTargeted(actualStudent, task);
+        console.log(`Task "${task.title}" (${task.type}) targeted to student:`, isTargeted, {
+          task: {
+            targetClasses: task.targetClasses,
+            targetGroups: task.targetGroups,
+            subject: task.subject
+          },
+          student: {
+            class: actualStudent?.profile?.class,
+            chineseGroup: actualStudent?.profile?.chineseGroup,
+            englishGroup: actualStudent?.profile?.englishGroup,
+            mathGroup: actualStudent?.profile?.mathGroup
+          }
+        });
+        return isTargeted;
+      });
+
+      console.log('Final student tasks:', studentTasks.length);
 
       // 檢查每個任務的完成狀態
       const tasksWithStatus = await Promise.all(
@@ -977,7 +1050,7 @@ const TeacherDashboard: React.FC = () => {
             if (task.type === 'quiz') {
               const data = await authService.getQuizResults(task.id);
               const results = data.results || [];
-              const studentResult = results.find((r: any) => String(r.studentId) === String(student.id));
+              const studentResult = results.find((r: any) => String(r.studentId) === String(actualStudent.id));
               completed = !!studentResult;
               if (studentResult) {
                 completionDetails = {
@@ -989,7 +1062,7 @@ const TeacherDashboard: React.FC = () => {
             } else if (task.type === 'game') {
               const data = await authService.getGameResults(task.id);
               const scores = data.scores || [];
-              const studentScores = scores.filter((s: any) => String(s.studentId) === String(student.id));
+              const studentScores = scores.filter((s: any) => String(s.studentId) === String(actualStudent.id));
               completed = studentScores.length > 0;
               if (studentScores.length > 0) {
                 const bestScore = Math.max(...studentScores.map((s: any) => s.score || 0));
@@ -1002,7 +1075,7 @@ const TeacherDashboard: React.FC = () => {
             } else if (task.type === 'ai-bot') {
               const data = await authService.getBotTaskThreads(task.id);
               const threads = data.threads || [];
-              const studentThread = threads.find((t: any) => String(t.studentId) === String(student.id));
+              const studentThread = threads.find((t: any) => String(t.studentId) === String(actualStudent.id));
               completed = studentThread?.completed || false;
               if (studentThread) {
                 completionDetails = {
@@ -1014,7 +1087,7 @@ const TeacherDashboard: React.FC = () => {
             } else if (task.type === 'contest') {
               const data = await authService.getContestResults(task.id);
               const attempts = data.attempts || [];
-              const studentAttempts = attempts.filter((a: any) => String(a.studentId) === String(student.id));
+              const studentAttempts = attempts.filter((a: any) => String(a.studentId) === String(actualStudent.id));
               completed = studentAttempts.length > 0;
               if (studentAttempts.length > 0) {
                 const bestAttempt = studentAttempts.reduce((best: any, current: any) =>
@@ -1029,7 +1102,7 @@ const TeacherDashboard: React.FC = () => {
             } else {
               const data = await authService.getAssignmentResponses(task.id);
               const responses = data.responses || [];
-              const studentResponse = responses.find((r: any) => String(r.studentId) === String(student.id));
+              const studentResponse = responses.find((r: any) => String(r.studentId) === String(actualStudent.id));
               completed = !!studentResponse;
               if (studentResponse) {
                 completionDetails = {
