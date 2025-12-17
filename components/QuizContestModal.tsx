@@ -335,7 +335,7 @@ export function QuizContestModal(props: {
 
               <div className="bg-white border-4 border-brand-brown rounded-3xl p-6 shadow-comic">
                 <div className="text-sm font-black text-gray-600 mb-2">請選出正確答案：</div>
-                <div className="text-2xl font-black text-brand-brown leading-snug">{current?.question || '—'}</div>
+                <div className="text-2xl font-black text-brand-brown leading-snug whitespace-pre-wrap">{current?.question || '—'}</div>
 
                 <div className="mt-5 grid grid-cols-1 md:grid-cols-2 gap-3">
                   {(current?.options || []).map((opt, i) => {

@@ -243,7 +243,7 @@ export const AiQuestionGeneratorModal: React.FC<Props> = ({ open, mode, subject,
               <div className="space-y-4">
                 {previewMcq.map((q, idx) => (
                   <div key={idx} className="bg-white border-2 border-gray-200 rounded-2xl p-4">
-                    <div className="font-black text-brand-brown mb-2">題目 {idx + 1}：{q.question}</div>
+                    <div className="font-black text-brand-brown mb-2">題目 {idx + 1}：<span className="whitespace-pre-wrap">{q.question}</span></div>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
                       {q.options.map((opt, oi) => (
                         <div key={oi} className={`px-3 py-2 rounded-xl border ${q.correctIndex === oi ? 'bg-emerald-50 border-emerald-300 font-bold' : 'bg-gray-50 border-gray-200'}`}>
@@ -264,7 +264,7 @@ export const AiQuestionGeneratorModal: React.FC<Props> = ({ open, mode, subject,
                 {previewPairs.map((p, idx) => (
                   <div key={idx} className="bg-white border-2 border-gray-200 rounded-2xl p-4">
                     <div className="text-sm font-black text-brand-brown mb-2">配對 {idx + 1}</div>
-                    <div className="rounded-xl border border-gray-200 bg-gray-50 px-3 py-2 font-bold text-gray-800 mb-2">
+                    <div className="rounded-xl border border-gray-200 bg-gray-50 px-3 py-2 font-bold text-gray-800 mb-2 whitespace-pre-wrap">
                       {p.question}
                     </div>
                     <div className="rounded-xl border border-gray-200 bg-gray-50 px-3 py-2 font-bold text-gray-800">

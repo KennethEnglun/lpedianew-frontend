@@ -2018,7 +2018,7 @@ const StudentDashboard: React.FC = () => {
                     <div key={questionIndex} className="bg-gray-50 border-4 border-gray-200 rounded-3xl p-6">
                       <div className="mb-4">
                         <h3 className="text-lg font-bold text-brand-brown mb-3">
-                          問題 {questionIndex + 1}: {question.question}
+                          問題 {questionIndex + 1}: <span className="whitespace-pre-wrap">{question.question}</span>
                         </h3>
                         {question.image && (
                           <div className="mb-4">

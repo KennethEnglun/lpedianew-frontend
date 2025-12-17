@@ -4388,7 +4388,7 @@ const TeacherDashboard: React.FC = () => {
                                 {selectedAssignment.questions.map((question: any, index: number) => (
                                   <div key={index} className="bg-yellow-50 p-3 rounded-lg border border-yellow-200">
                                     <p className="font-medium text-sm">
-                                      <span className="text-brand-brown">Q{index + 1}:</span> {question.question}
+                                      <span className="text-brand-brown">Q{index + 1}:</span> <span className="whitespace-pre-wrap">{question.question}</span>
                                     </p>
                                     {question.image && (
                                       <div className="mt-2 mb-2">
@@ -5536,7 +5536,7 @@ const TeacherDashboard: React.FC = () => {
                           {index + 1}
                         </div>
                         <div className="flex-1">
-                          <h4 className="font-bold text-lg text-brand-brown mb-2">{question.question}</h4>
+                          <h4 className="font-bold text-lg text-brand-brown mb-2 whitespace-pre-wrap">{question.question}</h4>
                           {question.image && (
                             <img
                               src={question.image}
