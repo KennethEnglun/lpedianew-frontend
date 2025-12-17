@@ -4,6 +4,13 @@ import { evaluateTokens, generateMcqChoices, normalizeRational, validateTokens }
 import { parseMathExpressionToTokens } from '../services/mathExpressionParser';
 import { FractionView, MathExpressionView } from './MathExpressionView';
 
+const isPowerOfTen = (n: number) => {
+  if (!Number.isInteger(n) || n <= 0) return false;
+  let x = n;
+  while (x % 10 === 0) x = Math.trunc(x / 10);
+  return x === 1;
+};
+
 export const MathExpressionBuilder: React.FC<{
   tokens: MathToken[];
   onChange: (next: MathToken[]) => void;
@@ -105,12 +112,14 @@ export const MathExpressionBuilder: React.FC<{
                 <input
                   value={rawText}
                   onChange={(e) => { setRawText(e.target.value); setDialogError(''); }}
-                  placeholder="例如：(1+3)x2/5"
+                  placeholder="例如：(1+3)x3^1/2 或 1.25+2"
                   className="w-full px-4 py-2 rounded-2xl border-2 border-gray-300 focus:outline-none focus:border-[#A1D9AE] font-bold"
                 />
                 <div className="text-xs text-gray-600 mt-2 space-y-1">
                   <div>支援：`+ - x * × ÷ / ( )`</div>
                   <div>分數：`2/5`（不要空格，會顯示上下分數）</div>
+                  <div>帶分數：`3^1/2`（整數 ^ 分子/分母）</div>
+                  <div>小數：`1.25`</div>
                   <div>除法：`2 / 5`（有空格）或用 `÷`</div>
                 </div>
               </div>
@@ -163,7 +172,7 @@ export const finalizeMathQuestions = (drafts: Array<{ tokens: MathToken[] }>, co
   allowedOps: MathOp[];
   allowParentheses: boolean;
 }) => {
-  return drafts.map((d, idx) => {
+  const computed = drafts.map((d, idx) => {
     const tokens = Array.isArray(d.tokens) ? d.tokens : [];
     const v = validateTokens(tokens, config.allowedOps, config.allowParentheses);
     if (!v.ok) throw new Error(`第 ${idx + 1} 題：${v.error}`);
@@ -174,4 +183,12 @@ export const finalizeMathQuestions = (drafts: Array<{ tokens: MathToken[] }>, co
     }
     return { tokens, answer };
   });
+
+  const hasDecimal = computed.some((q: any) => q?.answer?.d !== 1 && isPowerOfTen(Number(q?.answer?.d)));
+  const hasFraction = computed.some((q: any) => q?.answer?.d !== 1 && !isPowerOfTen(Number(q?.answer?.d)));
+  if (hasDecimal && hasFraction) {
+    throw new Error('小數題與分數題不可同時出題，請改成全小數或全分數');
+  }
+
+  return computed;
 };

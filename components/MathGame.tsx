@@ -7,10 +7,19 @@ import GameLeaderboardModal from './GameLeaderboardModal';
 type MathQuestionMcq = { tokens: MathToken[]; answer: Rational; choices: Rational[]; correctIndex: number };
 type MathQuestionInput = { tokens: MathToken[]; answer: Rational };
 
-type InputMode = 'int' | 'frac' | 'mixed';
+type InputMode = 'int' | 'frac' | 'mixed' | 'dec';
 type InputFocus = 'whole' | 'num' | 'den';
 
 const clampDigits = (s: string, maxLen = 6) => String(s || '').replace(/[^\d]/g, '').slice(0, maxLen);
+
+const clampDecimal = (s: string, maxLen = 10) => {
+  const raw = String(s || '').replace(/[^\d.]/g, '');
+  const parts = raw.split('.');
+  const intPart = parts[0] || '';
+  const fracPart = (parts[1] || '').replace(/\./g, '');
+  const merged = fracPart.length > 0 ? `${intPart}.${fracPart}` : intPart;
+  return merged.slice(0, maxLen);
+};
 
 const parseSafeInt = (s: string) => {
   const v = Number.parseInt(String(s || '').trim(), 10);
@@ -38,6 +47,28 @@ const buildRationalFromUi = (state: {
   if (mode === 'int') {
     const w = parseSafeInt(state.whole);
     if (w === null) return { ok: false, error: '請輸入整數答案' };
+    return { ok: true, value: normalizeRational({ n: sign * Math.abs(w), d: 1 }) };
+  }
+
+  if (mode === 'dec') {
+    const raw = String(state.whole || '').trim();
+    if (!raw) return { ok: false, error: '請輸入小數答案' };
+    if (raw.includes('.')) {
+      const m = raw.match(/^(\d*)\.(\d*)$/);
+      if (!m) return { ok: false, error: '小數格式不正確' };
+      const intText = m[1] || '0';
+      const fracText = m[2] || '';
+      if (!intText && !fracText) return { ok: false, error: '小數格式不正確' };
+      const k = fracText.length;
+      const d = k === 0 ? 1 : 10 ** k;
+      const nInt = Number.parseInt(intText || '0', 10);
+      const nFrac = fracText ? Number.parseInt(fracText, 10) : 0;
+      if (!Number.isFinite(nInt) || !Number.isFinite(nFrac)) return { ok: false, error: '小數格式不正確' };
+      const n = (nInt * d + nFrac) * sign;
+      return { ok: true, value: normalizeRational({ n, d }) };
+    }
+    const w = parseSafeInt(raw);
+    if (w === null) return { ok: false, error: '小數格式不正確' };
     return { ok: true, value: normalizeRational({ n: sign * Math.abs(w), d: 1 }) };
   }
 
@@ -163,11 +194,31 @@ export const MathGame: React.FC<{
 
   const current = questions[index] as any;
   const answer: Rational | null = current?.answer ? normalizeRational(current.answer) : null;
+  const answerNumberType: 'int' | 'frac' | 'dec' = (() => {
+    if (!answer) return 'int';
+    if (answer.d === 1) return 'int';
+    const d = Number(answer.d);
+    if (Number.isInteger(d) && d > 0 && String(d).match(/^10+$/)) return 'dec';
+    return 'frac';
+  })();
   const effectiveMode: 'mcq' | 'input' = (() => {
     if (answerMode === 'input') return 'input';
     if (Array.isArray(current?.choices) && current.choices.length > 0) return 'mcq';
     return 'input';
   })();
+
+  useEffect(() => {
+    if (effectiveMode !== 'input') return;
+    if (!answer) return;
+    if (locked || feedback) return;
+    const nextMode: InputMode = answerNumberType === 'dec' ? 'dec' : (answerNumberType === 'frac' ? 'frac' : 'int');
+    setInputMode(nextMode);
+    setInputFocus(nextMode === 'frac' ? 'num' : 'whole');
+    setInputSign(1);
+    setInputWhole('');
+    setInputNum('');
+    setInputDen('');
+  }, [index, effectiveMode, answerNumberType, locked, feedback, answer?.n, answer?.d]);
 
   const clearAllInput = () => {
     setInputWhole('');
@@ -274,11 +325,21 @@ export const MathGame: React.FC<{
 
   const applyKey = (key: string) => {
     if (locked || feedback) return;
-    const setTarget = (setter: (v: string) => void, currentValue: string) => {
+    const setTargetInt = (setter: (v: string) => void, currentValue: string) => {
       if (key === '⌫' || key === '<') return setter(currentValue.slice(0, -1));
       if (key === '清除') return setter('');
       if (isNaN(Number(key))) return;
       setter(clampDigits(currentValue + key));
+    };
+    const setTargetDec = (setter: (v: string) => void, currentValue: string) => {
+      if (key === '⌫' || key === '<') return setter(currentValue.slice(0, -1));
+      if (key === '清除') return setter('');
+      if (key === '.' || key === '．') {
+        if (currentValue.includes('.')) return;
+        return setter(clampDecimal(currentValue + '.', 10));
+      }
+      if (isNaN(Number(key))) return;
+      setter(clampDecimal(currentValue + key, 10));
     };
 
     if (key === '+') {
@@ -295,21 +356,26 @@ export const MathGame: React.FC<{
     }
 
     if (inputMode === 'int') {
-      setTarget(setInputWhole, inputWhole);
+      setTargetInt(setInputWhole, inputWhole);
+      return;
+    }
+
+    if (inputMode === 'dec') {
+      setTargetDec(setInputWhole, inputWhole);
       return;
     }
 
     if (inputMode === 'frac') {
       const focus: InputFocus = inputFocus === 'whole' ? 'num' : inputFocus;
-      if (focus === 'num') setTarget(setInputNum, inputNum);
-      if (focus === 'den') setTarget(setInputDen, inputDen);
+      if (focus === 'num') setTargetInt(setInputNum, inputNum);
+      if (focus === 'den') setTargetInt(setInputDen, inputDen);
       return;
     }
 
     // mixed
-    if (inputFocus === 'whole') setTarget(setInputWhole, inputWhole);
-    if (inputFocus === 'num') setTarget(setInputNum, inputNum);
-    if (inputFocus === 'den') setTarget(setInputDen, inputDen);
+    if (inputFocus === 'whole') setTargetInt(setInputWhole, inputWhole);
+    if (inputFocus === 'num') setTargetInt(setInputNum, inputNum);
+    if (inputFocus === 'den') setTargetInt(setInputDen, inputDen);
   };
 
   const handleStartGame = () => {
@@ -422,15 +488,23 @@ export const MathGame: React.FC<{
                   <button
                     type="button"
                     onClick={() => { setInputMode('int'); setInputFocus('whole'); }}
-                    disabled={locked || feedback !== null}
+                    disabled={locked || feedback !== null || answerNumberType !== 'int'}
                     className={`px-3 py-1 rounded-full border-2 font-black ${inputMode === 'int' ? 'bg-[#B5F8CE] border-[#4FBF7A] text-[#2F2A4A]' : 'bg-white/70 border-white/70 text-[#2F2A4A]/70 hover:bg-white'} disabled:opacity-50 disabled:cursor-not-allowed`}
                   >
                     整數
                   </button>
                   <button
                     type="button"
+                    onClick={() => { setInputMode('dec'); setInputFocus('whole'); }}
+                    disabled={locked || feedback !== null || answerNumberType !== 'dec'}
+                    className={`px-3 py-1 rounded-full border-2 font-black ${inputMode === 'dec' ? 'bg-[#FDEEAD] border-[#D7A600] text-[#2F2A4A]' : 'bg-white/70 border-white/70 text-[#2F2A4A]/70 hover:bg-white'} disabled:opacity-50 disabled:cursor-not-allowed`}
+                  >
+                    小數
+                  </button>
+                  <button
+                    type="button"
                     onClick={() => { setInputMode('frac'); setInputFocus('num'); }}
-                    disabled={locked || feedback !== null}
+                    disabled={locked || feedback !== null || answerNumberType !== 'frac'}
                     className={`px-3 py-1 rounded-full border-2 font-black ${inputMode === 'frac' ? 'bg-[#B5D8F8] border-[#4B9FE6] text-[#2F2A4A]' : 'bg-white/70 border-white/70 text-[#2F2A4A]/70 hover:bg-white'} disabled:opacity-50 disabled:cursor-not-allowed`}
                   >
                     分數
@@ -438,7 +512,7 @@ export const MathGame: React.FC<{
                   <button
                     type="button"
                     onClick={() => { setInputMode('mixed'); setInputFocus('whole'); }}
-                    disabled={locked || feedback !== null}
+                    disabled={locked || feedback !== null || answerNumberType !== 'frac'}
                     className={`px-3 py-1 rounded-full border-2 font-black ${inputMode === 'mixed' ? 'bg-[#F8B5E0] border-[#E35DB3] text-[#2F2A4A]' : 'bg-white/70 border-white/70 text-[#2F2A4A]/70 hover:bg-white'} disabled:opacity-50 disabled:cursor-not-allowed`}
                   >
                     帶分數
@@ -462,6 +536,17 @@ export const MathGame: React.FC<{
                         className={`min-w-[140px] h-10 px-4 rounded-2xl border-2 text-left font-black text-[#2F2A4A] bg-white/80 ${inputFocus === 'whole' ? 'border-[#4B9FE6]' : 'border-white/80'} disabled:opacity-50 disabled:cursor-not-allowed`}
                       >
                         {inputWhole ? inputWhole : '輸入整數'}
+                      </button>
+                    )}
+
+                    {inputMode === 'dec' && (
+                      <button
+                        type="button"
+                        onClick={() => setInputFocus('whole')}
+                        disabled={locked || feedback !== null}
+                        className={`min-w-[180px] h-10 px-4 rounded-2xl border-2 text-left font-black text-[#2F2A4A] bg-white/80 ${inputFocus === 'whole' ? 'border-[#D7A600]' : 'border-white/80'} disabled:opacity-50 disabled:cursor-not-allowed`}
+                      >
+                        {inputWhole ? inputWhole : '輸入小數'}
                       </button>
                     )}
 
@@ -550,10 +635,14 @@ export const MathGame: React.FC<{
 
               {/* On-screen keypad */}
               <div className="mt-3 grid grid-cols-3 gap-2">
-                {['7', '8', '9', '4', '5', '6', '1', '2', '3', '±', '0', '⌫'].map((k) => {
+                {(inputMode === 'dec'
+                  ? ['7', '8', '9', '4', '5', '6', '1', '2', '3', '.', '0', '⌫']
+                  : ['7', '8', '9', '4', '5', '6', '1', '2', '3', '±', '0', '⌫']
+                ).map((k) => {
                   const colorClass = (() => {
                     if (k === '⌫') return 'bg-[#FFE8F0] text-[#7A1F1F]';
                     if (k === '±') return 'bg-[#E8FFF0] text-[#2F5E3A]';
+                    if (k === '.') return 'bg-[#FDEEAD] text-[#2F2A4A]';
                     return 'bg-white/80';
                   })();
                   return (

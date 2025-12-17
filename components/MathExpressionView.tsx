@@ -13,10 +13,38 @@ const opLabel = (op: string) => {
 
 const formatInt = (n: number) => String(n).replace(/^-/, '−');
 
+const isPowerOfTen = (n: number) => {
+  if (!Number.isInteger(n) || n <= 0) return false;
+  let x = n;
+  while (x % 10 === 0) x = Math.trunc(x / 10);
+  return x === 1;
+};
+
+const formatDecimalFromRational = (value: Rational) => {
+  const d = Number(value.d);
+  const n = Number(value.n);
+  if (!Number.isInteger(d) || d <= 0) return null;
+  if (!Number.isInteger(n)) return null;
+  if (!isPowerOfTen(d)) return null;
+  const sign = n < 0 ? '−' : '';
+  const absN = Math.abs(n);
+  const k = String(d).length - 1;
+  const intPart = Math.trunc(absN / d);
+  const fracPart = absN % d;
+  const fracTextRaw = String(fracPart).padStart(k, '0');
+  const fracText = fracTextRaw.replace(/0+$/, '');
+  if (!fracText) return `${sign}${intPart}`;
+  return `${sign}${intPart}.${fracText}`;
+};
+
 export const FractionView: React.FC<{ value: Rational; className?: string }> = ({ value, className }) => {
   const isInt = value.d === 1;
   if (isInt) {
     return <span className={className}>{formatInt(value.n)}</span>;
+  }
+  const dec = formatDecimalFromRational(value);
+  if (dec) {
+    return <span className={className}>{dec}</span>;
   }
   const numerator = formatInt(value.n);
   const denominator = String(value.d);
@@ -80,4 +108,3 @@ export const MathExpressionView: React.FC<{
     </span>
   );
 };
-
