@@ -21,11 +21,14 @@ const GameLeaderboardModal: React.FC<Props> = ({ gameId, onClose, onStartGame })
     try {
       setLoading(true);
       setError(null);
+      console.log('正在載入遊戲排行榜, gameId:', gameId);
       const data = await authService.getGameLeaderboard(gameId);
+      console.log('排行榜數據:', data);
       setLeaderboard(data);
     } catch (err) {
       console.error('載入排行榜失敗:', err);
-      setError('載入排行榜失敗');
+      const errorMessage = err instanceof Error ? err.message : '載入排行榜失敗';
+      setError(`載入排行榜失敗: ${errorMessage}`);
     } finally {
       setLoading(false);
     }

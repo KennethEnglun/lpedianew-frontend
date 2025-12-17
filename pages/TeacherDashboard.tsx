@@ -2348,6 +2348,8 @@ const TeacherDashboard: React.FC = () => {
                       <Input
                         label="問題"
                         placeholder="輸入問題..."
+                        multiline={true}
+                        rows={3}
                         value={q.question}
                         onChange={(e) => {
                           const newQuestions = [...gameForm.questions];
@@ -3007,6 +3009,8 @@ const TeacherDashboard: React.FC = () => {
 		                              <Input
 		                                label="問題內容"
 		                                placeholder="輸入問題..."
+		                                multiline={true}
+		                                rows={3}
 		                                value={q.prompt}
 		                                onChange={(e) => updateTowerDefensePrompt(questionIndex, e.target.value)}
 		                              />
@@ -3014,6 +3018,8 @@ const TeacherDashboard: React.FC = () => {
 		                              <Input
 		                                label="左邊（題幹）"
 		                                placeholder="例如：光合作用 / 2+3 / apple..."
+		                                multiline={true}
+		                                rows={3}
 		                                value={q.left}
 		                                onChange={(e) => updateTowerDefenseLeft(questionIndex, e.target.value)}
 		                              />
@@ -5133,6 +5139,8 @@ const TeacherDashboard: React.FC = () => {
                             <Input
                               label="問題內容"
                               placeholder="輸入問題..."
+                              multiline={true}
+                              rows={3}
                               value={question.question}
                               onChange={(e) => updateQuestion(questionIndex, 'question', e.target.value)}
                             />
