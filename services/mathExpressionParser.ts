@@ -46,6 +46,7 @@ const opFromChar = (ch: string): MathOp | null => {
 export const parseMathExpressionToTokens = (input: string, options: {
   allowedOps: MathOp[];
   allowParentheses: boolean;
+  allowVariableX?: boolean;
 }): ParseResult => {
   const raw = String(input || '').trim();
   if (!raw) return { ok: false, error: '請輸入算式' };
@@ -57,6 +58,7 @@ export const parseMathExpressionToTokens = (input: string, options: {
     const last = tokens[tokens.length - 1];
     if (!last) return null;
     if (last.t === 'num') return 'num';
+    if (last.t === 'var') return 'num';
     if (last.t === 'op') return 'op';
     if (last.t === 'paren') return last.v;
     return null;
@@ -96,6 +98,18 @@ export const parseMathExpressionToTokens = (input: string, options: {
 
       if (isUnary && next === '(' && ch === '-') {
         // -(...) => 0 - (...)
+        tokens.push({ t: 'num', n: 0, d: 1 });
+        tokens.push({ t: 'op', v: 'sub' });
+        i += 1;
+        continue;
+      }
+
+      if (isUnary && options.allowVariableX && next === '□') {
+        if (ch === '+') {
+          i += 1;
+          continue;
+        }
+        // -□ => 0 - □
         tokens.push({ t: 'num', n: 0, d: 1 });
         tokens.push({ t: 'op', v: 'sub' });
         i += 1;
@@ -245,6 +259,13 @@ export const parseMathExpressionToTokens = (input: string, options: {
       }
 
       tokens.push({ t: 'num', n: n0, d: 1 });
+      continue;
+    }
+
+    if (options.allowVariableX && ch === '□') {
+      pushImplicitMulIfNeeded('num');
+      tokens.push({ t: 'var', name: 'x' });
+      i += 1;
       continue;
     }
 

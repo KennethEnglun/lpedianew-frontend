@@ -111,6 +111,29 @@ export const MathExpressionView: React.FC<{
             </span>
           );
         }
+        if (t.t === 'var') {
+          const clickable = typeof onNumberClick === 'function';
+          const inner = (
+            <span className="px-0.5 font-black text-[#2F2A4A]">
+              {t.name}
+            </span>
+          );
+          return (
+            <span key={`t-${idx}`} className="inline-flex items-center">
+              {clickable ? (
+                <button
+                  type="button"
+                  onClick={() => onNumberClick(idx)}
+                  className="px-1 py-0.5 rounded hover:bg-black/5 focus:outline-none focus:ring-2 focus:ring-[#A1D9AE]"
+                >
+                  {inner}
+                </button>
+              ) : (
+                inner
+              )}
+            </span>
+          );
+        }
         if (t.t === 'op') {
           return (
             <span key={`t-${idx}`} className="px-0.5 font-black">

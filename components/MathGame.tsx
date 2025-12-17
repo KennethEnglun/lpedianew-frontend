@@ -6,6 +6,8 @@ import GameLeaderboardModal from './GameLeaderboardModal';
 
 type MathQuestionMcq = { tokens: MathToken[]; answer: Rational; choices: Rational[]; correctIndex: number };
 type MathQuestionInput = { tokens: MathToken[]; answer: Rational };
+type MathEquationQuestionMcq = { equation: { leftTokens: MathToken[]; rightTokens: MathToken[] }; answer: Rational; choices: Rational[]; correctIndex: number };
+type MathEquationQuestionInput = { equation: { leftTokens: MathToken[]; rightTokens: MathToken[] }; answer: Rational };
 
 type InputMode = 'int' | 'frac' | 'mixed' | 'dec';
 type InputFocus = 'whole' | 'num' | 'den';
@@ -194,6 +196,9 @@ export const MathGame: React.FC<{
 
   const current = questions[index] as any;
   const answer: Rational | null = current?.answer ? normalizeRational(current.answer) : null;
+  const equationLeft: MathToken[] | null = Array.isArray(current?.equation?.leftTokens) ? current.equation.leftTokens : null;
+  const equationRight: MathToken[] | null = Array.isArray(current?.equation?.rightTokens) ? current.equation.rightTokens : null;
+  const isEquation = Boolean(equationLeft && equationRight);
   const answerNumberType: 'int' | 'frac' | 'dec' = (() => {
     if (!answer) return 'int';
     if (answer.d === 1) return 'int';
@@ -395,7 +400,7 @@ export const MathGame: React.FC<{
     );
   }
 
-  if (!current || !Array.isArray(current.tokens)) {
+  if (!current || (!Array.isArray(current.tokens) && !isEquation)) {
     return (
       <div className="text-white">
         <div className="text-2xl font-black mb-2">題目資料不完整</div>
@@ -435,9 +440,17 @@ export const MathGame: React.FC<{
         </div>
 
         <div className="mt-3 bg-white rounded-3xl border-4 border-white/80 p-4 shadow-sm">
-          <div className="text-sm font-black text-[#2F2A4A]/70 mb-1">請計算：</div>
+          <div className="text-sm font-black text-[#2F2A4A]/70 mb-1">{isEquation ? '請解方程式：' : '請計算：'}</div>
           <div className="text-3xl font-black text-[#2F2A4A]">
-            <MathExpressionView tokens={current.tokens} />
+            {isEquation ? (
+              <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                <MathExpressionView tokens={equationLeft as any} />
+                <span className="px-0.5 font-black">=</span>
+                <MathExpressionView tokens={equationRight as any} />
+              </div>
+            ) : (
+              <MathExpressionView tokens={current.tokens} />
+            )}
           </div>
         </div>
 

@@ -8,6 +8,7 @@ import UiSettingsModal from '../components/UiSettingsModal';
 import AiChatModal from '../components/AiChatModal';
 import AppStudioModal from '../components/AppStudioModal';
 import { MathExpressionBuilder, finalizeMathQuestions } from '../components/MathExpressionBuilder';
+import { MathEquationBuilder, finalizeMathEquationQuestions } from '../components/MathEquationBuilder';
 import { MathExpressionView, FractionView } from '../components/MathExpressionView';
 import { MathGame } from '../components/MathGame';
 import { MazeGame } from '../components/MazeGame';
@@ -24,6 +25,10 @@ import { Subject, Discussion } from '../types';
 type TowerDefenseQuestionDraft =
   | { type: 'mcq'; prompt: string; options: string[]; correctIndex: number }
   | { type: 'match'; left: string; options: string[]; correctIndex: number };
+
+type MathDraft =
+  | { kind: 'expr'; tokens: MathToken[] }
+  | { kind: 'eq'; equation: string };
 
 const TeacherDashboard: React.FC = () => {
   const navigate = useNavigate();
@@ -190,6 +195,7 @@ const TeacherDashboard: React.FC = () => {
   // 數學遊戲（新）
   const [mathGameTab, setMathGameTab] = useState<'manual' | 'ai'>('manual');
   const [mathAnswerMode, setMathAnswerMode] = useState<'mcq' | 'input'>('mcq');
+  const [mathQuestionType, setMathQuestionType] = useState<'calc' | 'equation'>('calc');
   const [mathGrade, setMathGrade] = useState<'小一' | '小二' | '小三' | '小四' | '小五' | '小六'>('小一');
   const [mathOps, setMathOps] = useState<{ add: boolean; sub: boolean; mul: boolean; div: boolean; paren: boolean }>({
     add: true,
@@ -213,7 +219,7 @@ const TeacherDashboard: React.FC = () => {
     targetClasses: [] as string[],
     targetGroups: [] as string[]
   });
-  const [mathDrafts, setMathDrafts] = useState<Array<{ tokens: MathToken[] }>>([]);
+  const [mathDrafts, setMathDrafts] = useState<MathDraft[]>([]);
 
   useEffect(() => {
     setTowerDefenseTimeSecondsText(String(towerDefenseTimeSeconds));
@@ -1378,13 +1384,15 @@ const TeacherDashboard: React.FC = () => {
       const next = [...(prev || [])];
       if (mathQuestionCount > next.length) {
         const addCount = mathQuestionCount - next.length;
-        for (let i = 0; i < addCount; i++) next.push({ tokens: [] });
+        for (let i = 0; i < addCount; i++) {
+          next.push(mathQuestionType === 'equation' ? { kind: 'eq', equation: '' } : { kind: 'expr', tokens: [] });
+        }
       } else if (mathQuestionCount < next.length) {
         next.length = Math.max(0, mathQuestionCount);
       }
       return next;
     });
-  }, [mathQuestionCount]);
+  }, [mathQuestionCount, mathQuestionType]);
 
   // === 小測驗功能 ===
 
@@ -2363,6 +2371,7 @@ const TeacherDashboard: React.FC = () => {
 	                      setMathAiError('');
 	                      setMathPromptText('');
 	                      setMathAnswerMode('mcq');
+	                      setMathQuestionType('calc');
 	                      setMathGrade('小一');
 	                      setMathOps({ add: true, sub: true, mul: false, div: false, paren: false });
 	                      setMathQuestionCount(10);
@@ -2371,7 +2380,7 @@ const TeacherDashboard: React.FC = () => {
 	                      setMathLivesEnabled(false);
 	                      setMathLivesLimit(5);
 	                      setMathForm({ title: '', description: '', targetClasses: [], targetGroups: [] });
-	                      setMathDrafts(Array.from({ length: 10 }, () => ({ tokens: [] })));
+	                      setMathDrafts(Array.from({ length: 10 }, () => ({ kind: 'expr', tokens: [] })));
 	                    }}
 	                    className="p-6 bg-gradient-to-br from-sky-100 to-blue-200 border-4 border-sky-400 rounded-2xl hover:shadow-lg transition-all hover:scale-105"
 	                  >
@@ -3354,7 +3363,7 @@ const TeacherDashboard: React.FC = () => {
 	            <div className="p-6 space-y-6">
 	              <div className="bg-sky-50 p-4 rounded-xl border-2 border-sky-200">
 	                <p className="text-sky-900 text-sm">
-	                  🧮 <strong>重點：</strong>算式必須顯示正確數學符號（＋ − × ÷），分數以「上下」顯示，不使用斜線。
+	                  🧮 <strong>重點：</strong>算式必須顯示正確數學符號（＋ − × ÷），分數以「上下」顯示；方程式未知數用「□」。
 	                </p>
 	              </div>
 
@@ -3380,7 +3389,7 @@ const TeacherDashboard: React.FC = () => {
 	                </div>
 	              </div>
 
-	              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+	              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
 	                <div>
 	                  <label className="block text-sm font-bold text-sky-900 mb-2">模式</label>
 	                  <div className="flex flex-wrap gap-2">
@@ -3406,7 +3415,44 @@ const TeacherDashboard: React.FC = () => {
 	                    </button>
 	                  </div>
 	                  <p className="text-xs text-gray-600 mt-1">
-	                    四選一會自動產生 4 個選項；輸入答案支援整數/分數（上下輸入）。
+	                    四選一會自動產生 4 個選項；輸入答案支援整數/分數/帶分數/小數。
+	                  </p>
+	                </div>
+
+	                <div>
+	                  <label className="block text-sm font-bold text-sky-900 mb-2">題目類型</label>
+	                  <div className="flex flex-wrap gap-2">
+	                    <button
+	                      type="button"
+	                      onClick={() => {
+	                        setMathQuestionType('calc');
+	                        setMathGameTab('manual');
+	                        setMathDrafts(Array.from({ length: mathQuestionCount }, () => ({ kind: 'expr', tokens: [] })));
+	                      }}
+	                      className={`px-4 py-2 rounded-2xl border-2 font-black ${mathQuestionType === 'calc'
+	                        ? 'bg-[#A1D9AE] border-[#5E8B66] text-white'
+	                        : 'bg-white border-gray-300 text-gray-700 hover:bg-gray-50'
+	                        }`}
+	                    >
+	                      計算
+	                    </button>
+	                    <button
+	                      type="button"
+	                      onClick={() => {
+	                        setMathQuestionType('equation');
+	                        setMathGameTab('manual');
+	                        setMathDrafts(Array.from({ length: mathQuestionCount }, () => ({ kind: 'eq', equation: '' })));
+	                      }}
+	                      className={`px-4 py-2 rounded-2xl border-2 font-black ${mathQuestionType === 'equation'
+	                        ? 'bg-[#A1D9AE] border-[#5E8B66] text-white'
+	                        : 'bg-white border-gray-300 text-gray-700 hover:bg-gray-50'
+	                        }`}
+	                    >
+	                      方程式（□）
+	                    </button>
+	                  </div>
+	                  <p className="text-xs text-gray-600 mt-1">
+	                    方程式模式只支援一個未知數 `□`，學生輸入 `□` 的值。
 	                  </p>
 	                </div>
 
@@ -3419,7 +3465,11 @@ const TeacherDashboard: React.FC = () => {
 	                      if (!Number.isFinite(n)) return;
 	                      const next = Math.max(1, Math.min(50, n));
 	                      if (next < mathQuestionCount) {
-	                        const willDrop = mathDrafts.slice(next).some(d => (d.tokens || []).length > 0);
+	                        const willDrop = mathDrafts.slice(next).some((d) => (
+	                          d.kind === 'expr'
+	                            ? (d.tokens || []).length > 0
+	                            : Boolean(String(d.equation || '').trim())
+	                        ));
 	                        if (willDrop && !confirm('減少題目數量會刪除後面的題目內容，確定要繼續嗎？')) return;
 	                      }
 	                      setMathQuestionCount(next);
@@ -3603,7 +3653,11 @@ const TeacherDashboard: React.FC = () => {
 	                    </button>
 	                    <button
 	                      type="button"
-	                      onClick={() => setMathGameTab('ai')}
+	                      onClick={() => {
+	                        if (mathQuestionType === 'equation') return;
+	                        setMathGameTab('ai');
+	                      }}
+	                      disabled={mathQuestionType === 'equation'}
 	                      className={`px-4 py-2 rounded-2xl border-2 font-black ${mathGameTab === 'ai'
 	                        ? 'bg-[#FDEEAD] border-brand-brown text-brand-brown'
 	                        : 'bg-white border-gray-300 text-gray-700 hover:bg-gray-50'
@@ -3614,12 +3668,15 @@ const TeacherDashboard: React.FC = () => {
 	                  </div>
 
 	                  <div className="text-xs text-gray-600">
-	                    {mathGameTab === 'manual' ? '用按鈕建立算式（支援分數/括號）' : '按設定自動生成，之後仍可手動微調'}
+	                    {mathQuestionType === 'equation'
+	                      ? '方程式暫不支援 AI 生成（可手動輸入）'
+	                      : (mathGameTab === 'manual' ? '用按鈕建立算式（支援分數/括號）' : '按設定自動生成，之後仍可手動微調')
+	                    }
 	                  </div>
 	                </div>
 	              </div>
 
-	              {mathGameTab === 'ai' && (
+	              {mathGameTab === 'ai' && mathQuestionType !== 'equation' && (
 	                <div className="bg-sky-50 border-2 border-sky-200 rounded-2xl p-4 space-y-3">
 	                  <div>
 	                    <label className="block text-sm font-bold text-sky-900 mb-2">AI 額外要求（可選）</label>
@@ -3650,7 +3707,7 @@ const TeacherDashboard: React.FC = () => {
 	                            promptText: mathPromptText
 	                          });
 	                          const qs = Array.isArray(resp?.questions) ? resp.questions : [];
-	                          setMathDrafts(qs.map((q: any) => ({ tokens: Array.isArray(q.tokens) ? q.tokens : [] })));
+	                          setMathDrafts(qs.map((q: any) => ({ kind: 'expr', tokens: Array.isArray(q.tokens) ? q.tokens : [] })));
 	                        } catch (e: any) {
 	                          setMathAiError(e?.message || 'AI 生成失敗');
 	                        } finally {
@@ -3687,7 +3744,9 @@ const TeacherDashboard: React.FC = () => {
 	                              if (!confirm('確定刪除此題嗎？')) return;
 	                              setMathDrafts(prev => {
 	                                const next = prev.filter((_, i) => i !== idx);
-	                                const ensured = next.length > 0 ? next : [{ tokens: [] }];
+	                                const ensured = next.length > 0
+	                                  ? next
+	                                  : [mathQuestionType === 'equation' ? { kind: 'eq', equation: '' } : { kind: 'expr', tokens: [] }];
 	                                setMathQuestionCount(Math.max(1, ensured.length));
 	                                return ensured;
 	                              });
@@ -3699,12 +3758,21 @@ const TeacherDashboard: React.FC = () => {
 	                          </button>
 	                        </div>
 
-	                        <MathExpressionBuilder
-	                          tokens={q.tokens || []}
-	                          onChange={(next) => setMathDrafts(prev => prev.map((row, i) => i === idx ? ({ ...row, tokens: next }) : row))}
-	                          allowedOps={mathAllowedOps}
-	                          allowParentheses={mathOps.paren}
-	                        />
+	                        {q.kind === 'eq' ? (
+	                          <MathEquationBuilder
+	                            equation={q.equation || ''}
+	                            onChange={(next) => setMathDrafts(prev => prev.map((row, i) => i === idx ? ({ kind: 'eq', equation: next } as any) : row))}
+	                            allowedOps={mathAllowedOps}
+	                            allowParentheses={mathOps.paren}
+	                          />
+	                        ) : (
+	                          <MathExpressionBuilder
+	                            tokens={q.tokens || []}
+	                            onChange={(next) => setMathDrafts(prev => prev.map((row, i) => i === idx ? ({ kind: 'expr', tokens: next } as any) : row))}
+	                            allowedOps={mathAllowedOps}
+	                            allowParentheses={mathOps.paren}
+	                          />
+	                        )}
 	                      </div>
 	                    ))}
 	                  </div>
@@ -3738,15 +3806,25 @@ const TeacherDashboard: React.FC = () => {
 	                  onClick={async () => {
 	                    try {
 	                      if (!mathForm.title.trim()) return alert('請輸入遊戲標題');
-	                      if (mathAllowedOps.length === 0) return alert('請至少選擇一種運算（加/減/乘/除）');
+	                      if (mathAllowedOps.length === 0 && mathQuestionType === 'calc') return alert('請至少選擇一種運算（加/減/乘/除）');
 	                      if (!mathForm.targetClasses?.length && !mathForm.targetGroups?.length) return alert('請選擇至少一個目標班級或分組');
 	                      if (!mathDrafts.length) return alert('請新增至少一題');
 
-	                      const questions = finalizeMathQuestions(mathDrafts, {
-	                        answerMode: mathAnswerMode,
-	                        allowedOps: mathAllowedOps,
-	                        allowParentheses: mathOps.paren
-	                      });
+	                      const questions = mathQuestionType === 'equation'
+	                        ? finalizeMathEquationQuestions(
+	                          mathDrafts.map((d) => {
+	                            if (d.kind !== 'eq') throw new Error('題目類型不一致，請重新切換題目類型');
+	                            return { equation: d.equation || '' };
+	                          }),
+	                          { answerMode: mathAnswerMode, allowedOps: mathAllowedOps, allowParentheses: mathOps.paren }
+	                        )
+	                        : finalizeMathQuestions(
+	                          mathDrafts.map((d) => {
+	                            if (d.kind !== 'expr') throw new Error('題目類型不一致，請重新切換題目類型');
+	                            return { tokens: d.tokens || [] };
+	                          }),
+	                          { answerMode: mathAnswerMode, allowedOps: mathAllowedOps, allowParentheses: mathOps.paren }
+	                        );
 
 	                      await authService.createGame({
 	                        title: mathForm.title,
@@ -3761,6 +3839,7 @@ const TeacherDashboard: React.FC = () => {
 	                        livesLimit: mathLivesEnabled ? mathLivesLimit : null,
 	                        math: {
 	                          answerMode: mathAnswerMode,
+	                          questionType: mathQuestionType,
 	                          allowedOps: mathAllowedOps,
 	                          allowParentheses: mathOps.paren,
 	                          grade: mathGrade
@@ -5786,7 +5865,17 @@ const TeacherDashboard: React.FC = () => {
                                 <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 text-white font-bold ${row.ok ? 'bg-green-500' : 'bg-red-500'}`}>{row.index + 1}</div>
                                 <div className="flex-1">
                                   <div className="font-bold text-brand-brown mb-2">
-                                    {q?.tokens ? <MathExpressionView tokens={q.tokens} /> : '（題目缺失）'}
+                                    {Array.isArray(q?.tokens) ? (
+                                      <MathExpressionView tokens={q.tokens} />
+                                    ) : (Array.isArray(q?.equation?.leftTokens) && Array.isArray(q?.equation?.rightTokens)) ? (
+                                      <span className="inline-flex flex-wrap items-center gap-x-2 gap-y-1">
+                                        <MathExpressionView tokens={q.equation.leftTokens} />
+                                        <span className="px-0.5 font-black">=</span>
+                                        <MathExpressionView tokens={q.equation.rightTokens} />
+                                      </span>
+                                    ) : (
+                                      '（題目缺失）'
+                                    )}
                                   </div>
                                   <div className="flex items-center gap-6 flex-wrap text-sm">
                                     <div className="inline-flex items-center gap-2">

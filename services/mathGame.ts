@@ -7,6 +7,7 @@ export type MathNumDisplay =
 
 export type MathToken =
   | { t: 'num'; n: number; d: number; display?: MathNumDisplay }
+  | { t: 'var'; name: 'x' }
   | { t: 'op'; v: MathOp }
   | { t: 'paren'; v: '(' | ')' };
 
@@ -85,6 +86,12 @@ export const validateTokens = (tokens: MathToken[], allowedOps: MathOp[], allowP
       prev = 'num';
       continue;
     }
+    if (t.t === 'var') {
+      if (t.name !== 'x') return { ok: false as const, error: `第 ${i + 1} 個未知數不支援` };
+      if (prev === 'num' || prev === ')') return { ok: false as const, error: `第 ${i + 1} 個位置缺少運算符` };
+      prev = 'num';
+      continue;
+    }
     if (t.t === 'op') {
       if (!opsAllowed.has(t.v)) return { ok: false as const, error: `使用了未允許的運算：${t.v}` };
       if (prev !== 'num' && prev !== ')') return { ok: false as const, error: `第 ${i + 1} 個運算符位置不正確` };
@@ -121,6 +128,9 @@ export const evaluateTokens = (tokens: MathToken[]): Rational => {
     if (t.t === 'num') {
       output.push({ t: 'num', r: normalizeRational({ n: t.n, d: t.d }) });
       continue;
+    }
+    if (t.t === 'var') {
+      throw new Error('Expression contains variable');
     }
     if (t.t === 'op') {
       const p = OP_PRECEDENCE[t.v];

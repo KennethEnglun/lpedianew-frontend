@@ -1,40 +1,48 @@
 import React, { useMemo, useRef, useState } from 'react';
-import type { MathOp, MathToken, Rational } from '../services/mathGame';
-import { evaluateTokens, generateMcqChoices, normalizeRational, validateTokens } from '../services/mathGame';
-import { parseMathExpressionToTokens } from '../services/mathExpressionParser';
+import type { MathOp, Rational } from '../services/mathGame';
+import { generateMcqChoices, normalizeRational } from '../services/mathGame';
+import { parseAndSolveSingleUnknownEquation } from '../services/equationSolver';
 import { FractionView, MathExpressionView } from './MathExpressionView';
 
-export const MathExpressionBuilder: React.FC<{
-  tokens: MathToken[];
-  onChange: (next: MathToken[]) => void;
+export type MathEquationDraft = { equation: string };
+
+export const finalizeMathEquationQuestions = (drafts: MathEquationDraft[], config: {
+  answerMode: 'mcq' | 'input';
+  allowedOps: MathOp[];
+  allowParentheses: boolean;
+}) => {
+  return drafts.map((d, idx) => {
+    const parsed = parseAndSolveSingleUnknownEquation(d.equation, {
+      allowedOps: config.allowedOps,
+      allowParentheses: config.allowParentheses
+    });
+    if (!parsed.ok) throw new Error(`第 ${idx + 1} 題：${parsed.error}`);
+    const { leftTokens, rightTokens, answer } = parsed.value;
+    if (config.answerMode === 'mcq') {
+      const { choices, correctIndex } = generateMcqChoices(answer);
+      return { equation: { leftTokens, rightTokens }, answer, choices, correctIndex };
+    }
+    return { equation: { leftTokens, rightTokens }, answer };
+  });
+};
+
+export const MathEquationBuilder: React.FC<{
+  equation: string;
+  onChange: (next: string) => void;
   allowedOps: MathOp[];
   allowParentheses: boolean;
   showAnswerPreview?: boolean;
   className?: string;
-}> = ({ tokens, onChange, allowedOps, allowParentheses, showAnswerPreview = true, className }) => {
+}> = ({ equation, onChange, allowedOps, allowParentheses, showAnswerPreview = true, className }) => {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [rawText, setRawText] = useState('');
   const [dialogError, setDialogError] = useState('');
   const inputRef = useRef<HTMLInputElement | null>(null);
 
-  const validation = useMemo(() => validateTokens(tokens, allowedOps, allowParentheses), [tokens, allowedOps, allowParentheses]);
-  const answerPreview = useMemo(() => {
-    if (!showAnswerPreview) return null;
-    if (!validation.ok) return null;
-    try {
-      return normalizeRational(evaluateTokens(tokens));
-    } catch {
-      return null;
-    }
-  }, [tokens, validation.ok, showAnswerPreview]);
-
-  const clearTokens = () => onChange([]);
-
-  const openDialog = () => {
-    setDialogError('');
-    setRawText('');
-    setDialogOpen(true);
-  };
+  const parsed = useMemo(() => {
+    if (!equation) return null;
+    return parseAndSolveSingleUnknownEquation(equation, { allowedOps, allowParentheses });
+  }, [equation, allowedOps, allowParentheses]);
 
   const insertIntoInput = (text: string) => {
     const el = inputRef.current;
@@ -92,32 +100,51 @@ export const MathExpressionBuilder: React.FC<{
     }, 0);
   };
 
+  const openDialog = () => {
+    setDialogError('');
+    setRawText(equation || '');
+    setDialogOpen(true);
+    window.setTimeout(() => inputRef.current?.focus(), 0);
+  };
+
   const confirmDialog = () => {
-    const result = parseMathExpressionToTokens(rawText, { allowedOps, allowParentheses });
+    const result = parseAndSolveSingleUnknownEquation(rawText, { allowedOps, allowParentheses });
     if (!result.ok) {
       setDialogError(result.error);
       return;
     }
-    onChange(result.tokens);
+    onChange(rawText);
     setDialogOpen(false);
   };
+
+  const answerPreview: Rational | null = (() => {
+    if (!showAnswerPreview) return null;
+    if (!parsed?.ok) return null;
+    return normalizeRational(parsed.value.answer);
+  })();
 
   return (
     <div className={className}>
       <div className="bg-white border-2 border-gray-300 rounded-2xl p-3">
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
-            <div className="text-xs font-bold text-gray-500 mb-2">算式預覽</div>
-            <div className="text-xl font-black text-gray-900 break-words">
-              <MathExpressionView tokens={tokens} />
-            </div>
-            {!validation.ok && (
-              <div className="mt-2 text-xs font-bold text-red-600">{validation.error}</div>
+            <div className="text-xs font-bold text-gray-500 mb-2">方程式預覽</div>
+            {parsed?.ok ? (
+              <div className="text-xl font-black text-gray-900 break-words flex flex-wrap items-center gap-x-2 gap-y-1">
+                <MathExpressionView tokens={parsed.value.leftTokens} />
+                <span className="px-0.5 font-black">=</span>
+                <MathExpressionView tokens={parsed.value.rightTokens} />
+              </div>
+            ) : (
+              <div className="text-xl font-black text-gray-400 break-words">（未設定）</div>
             )}
-            {validation.ok && answerPreview && (
+            {equation && parsed && !parsed.ok && (
+              <div className="mt-2 text-xs font-bold text-red-600">{parsed.error}</div>
+            )}
+            {answerPreview && (
               <div className="mt-2 text-sm text-gray-700">
                 <span className="font-bold">答案：</span>
-                <FractionView value={answerPreview as Rational} className="font-black" />
+                <FractionView value={answerPreview} className="font-black" />
               </div>
             )}
           </div>
@@ -128,13 +155,13 @@ export const MathExpressionBuilder: React.FC<{
               onClick={openDialog}
               className="px-3 py-2 rounded-xl bg-[#E8F5E9] border-2 border-[#5E8B66] text-[#2F5E3A] font-black hover:bg-[#D7F0DD]"
             >
-              輸入算式
+              輸入方程式
             </button>
             <button
               type="button"
-              onClick={clearTokens}
+              onClick={() => onChange('')}
               className="px-3 py-2 rounded-xl bg-white border-2 border-gray-300 font-bold hover:bg-gray-50"
-              disabled={!tokens || tokens.length === 0}
+              disabled={!equation}
             >
               清空
             </button>
@@ -146,7 +173,7 @@ export const MathExpressionBuilder: React.FC<{
         <div className="fixed inset-0 bg-black/40 z-[60] flex items-center justify-center p-4">
           <div className="w-full max-w-md bg-white rounded-3xl border-4 border-brand-brown shadow-comic p-5">
             <div className="flex items-center justify-between mb-4">
-              <div className="text-xl font-black text-brand-brown">輸入整條算式</div>
+              <div className="text-xl font-black text-brand-brown">輸入方程式（只有一個未知數）</div>
               <button
                 type="button"
                 onClick={() => setDialogOpen(false)}
@@ -158,12 +185,12 @@ export const MathExpressionBuilder: React.FC<{
 
             <div className="space-y-3">
               <div>
-                <label className="block text-sm font-bold text-gray-700 mb-1">算式</label>
+                <label className="block text-sm font-bold text-gray-700 mb-1">方程式</label>
                 <input
                   ref={inputRef}
                   value={rawText}
                   onChange={(e) => { setRawText(e.target.value); setDialogError(''); }}
-                  placeholder="例如：(1+3)x3^1/2 或 1.25+2"
+                  placeholder="例如：□+3=5 或 (□−1)×2=10"
                   className="w-full px-4 py-2 rounded-2xl border-2 border-gray-300 focus:outline-none focus:border-[#A1D9AE] font-bold"
                 />
 
@@ -174,10 +201,12 @@ export const MathExpressionBuilder: React.FC<{
                     { label: '×', v: '×' },
                     { label: '÷', v: '÷' },
                     { label: '(', v: '(' },
-                    { label: ')', v: ')' }
+                    { label: ')', v: ')' },
+                    { label: '□', v: '□' },
+                    { label: '=', v: '=' }
                   ].map((b) => (
                     <button
-                      key={b.label}
+                      key={`${b.label}-${b.v}`}
                       type="button"
                       onClick={() => insertIntoInput(b.v)}
                       className="h-10 rounded-2xl bg-white border-2 border-gray-300 font-black text-[#2F2A4A] hover:bg-gray-50"
@@ -205,11 +234,11 @@ export const MathExpressionBuilder: React.FC<{
                 </div>
 
                 <div className="text-xs text-gray-600 mt-2 space-y-1">
-                  <div>支援：`+ - x * × ÷ / ( )`</div>
-                  <div>分數：`2/5`（不要空格，會顯示上下分數）</div>
-                  <div>帶分數：`3^1/2`（整數 ^ 分子/分母）</div>
+                  <div>未知數請用 `□`（只可出現一次）</div>
+                  <div>可用：`+ - × ÷ ( ) =`</div>
+                  <div>分數：`2/5`（不要空格）</div>
+                  <div>帶分數：`3^1/2`</div>
                   <div>小數：`1.25`</div>
-                  <div>除法：`2 / 5`（有空格）或用 `÷`</div>
                 </div>
               </div>
 
@@ -220,13 +249,13 @@ export const MathExpressionBuilder: React.FC<{
               <div className="bg-gray-50 border-2 border-gray-200 rounded-2xl p-3">
                 <div className="text-xs font-bold text-gray-500 mb-1">預覽</div>
                 {(() => {
-                  const parsed = parseMathExpressionToTokens(rawText, { allowedOps, allowParentheses });
-                  if (!parsed.ok) {
-                    return <div className="text-gray-500 text-sm">（輸入後會顯示）</div>;
-                  }
+                  const result = parseAndSolveSingleUnknownEquation(rawText, { allowedOps, allowParentheses });
+                  if (!result.ok) return <div className="text-gray-500 text-sm">（輸入後會顯示）</div>;
                   return (
-                    <div className="text-lg font-black text-gray-900">
-                      <MathExpressionView tokens={parsed.tokens} />
+                    <div className="text-lg font-black text-gray-900 flex flex-wrap items-center gap-x-2 gap-y-1">
+                      <MathExpressionView tokens={result.value.leftTokens} />
+                      <span className="px-0.5 font-black">=</span>
+                      <MathExpressionView tokens={result.value.rightTokens} />
                     </div>
                   );
                 })()}
@@ -256,20 +285,3 @@ export const MathExpressionBuilder: React.FC<{
   );
 };
 
-export const finalizeMathQuestions = (drafts: Array<{ tokens: MathToken[] }>, config: {
-  answerMode: 'mcq' | 'input';
-  allowedOps: MathOp[];
-  allowParentheses: boolean;
-}) => {
-  return drafts.map((d, idx) => {
-    const tokens = Array.isArray(d.tokens) ? d.tokens : [];
-    const v = validateTokens(tokens, config.allowedOps, config.allowParentheses);
-    if (!v.ok) throw new Error(`第 ${idx + 1} 題：${v.error}`);
-    const answer = evaluateTokens(tokens);
-    if (config.answerMode === 'mcq') {
-      const { choices, correctIndex } = generateMcqChoices(answer);
-      return { tokens, answer, choices, correctIndex };
-    }
-    return { tokens, answer };
-  });
-};
