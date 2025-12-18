@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Canvas } from '@react-three/fiber';
+import { Canvas, useFrame } from '@react-three/fiber';
 import type { MathToken, Rational } from '../services/mathGame';
 import { isPowerOfTen, normalizeRational, rationalKey } from '../services/mathGame';
 import { authService } from '../services/authService';
@@ -11,6 +11,25 @@ type StageQuestion =
 
 type InputMode = 'int' | 'frac' | 'mixed' | 'dec';
 type InputFocus = 'whole' | 'num' | 'den';
+
+type UnitSide = 'player' | 'enemy';
+type UnitType = 'knight' | 'archer' | 'slime';
+
+type UnitState = {
+  id: string;
+  side: UnitSide;
+  type: UnitType;
+  x: number;
+  z: number;
+  hp: number;
+  maxHp: number;
+  speed: number;
+  range: number;
+  atk: number;
+  atkCd: number;
+  cdLeft: number;
+  hitFlash: number;
+};
 
 const clampDigits = (s: string, maxLen = 6) => String(s || '').replace(/[^\d]/g, '').slice(0, maxLen);
 
@@ -120,11 +139,134 @@ const KeypadButton: React.FC<{
   </button>
 );
 
+const clamp01 = (x: number) => Math.max(0, Math.min(1, x));
+
+const nowId = () => `${Date.now().toString(36)}-${Math.random().toString(16).slice(2)}`;
+
+const unitPreset = (type: UnitType, side: UnitSide, stageIndex: number, skillLevel: number) => {
+  const stageMul = 1 + Math.min(2, stageIndex * 0.08);
+  const skillMul = 1 + Math.min(2, (skillLevel - 1) * 0.08);
+  if (type === 'archer') {
+    return {
+      maxHp: Math.round(8 * stageMul),
+      speed: 2.4,
+      range: 3.2,
+      atk: Math.round((side === 'player' ? 2.0 * skillMul : 1.8) * stageMul),
+      atkCd: 0.9
+    };
+  }
+  if (type === 'slime') {
+    return {
+      maxHp: Math.round(10 * stageMul),
+      speed: 2.1,
+      range: 1.1,
+      atk: Math.round(2.0 * stageMul),
+      atkCd: 0.95
+    };
+  }
+  // knight
+  return {
+    maxHp: Math.round(14 * stageMul),
+    speed: 2.0,
+    range: 1.2,
+    atk: Math.round((side === 'player' ? 3.0 * skillMul : 2.5) * stageMul),
+    atkCd: 1.05
+  };
+};
+
+const UnitMesh: React.FC<{ u: UnitState }> = ({ u }) => {
+  const ref = useRef<any>(null);
+  useFrame((_s, dt) => {
+    if (!ref.current) return;
+    // tiny idle bounce + hit flash squash
+    const t = Date.now() / 1000;
+    const bounce = 0.03 * Math.sin(t * 6 + (u.id.length % 10));
+    const hit = clamp01(u.hitFlash);
+    ref.current.position.set(u.x, 0.05 + bounce, u.z);
+    ref.current.scale.set(1 + hit * 0.08, 1 - hit * 0.05, 1 + hit * 0.08);
+  });
+
+  const isPlayer = u.side === 'player';
+  const isSlime = u.type === 'slime';
+  const bodyColor = isPlayer ? '#A1D9AE' : '#FFB5B5';
+  const accent = isPlayer ? '#2F5E3A' : '#7A1F1F';
+  const slimeColor = isPlayer ? '#B5F8CE' : '#F8B5E0';
+
+  const hpPct = u.maxHp > 0 ? clamp01(u.hp / u.maxHp) : 0;
+  const hpColor = hpPct > 0.66 ? '#B5F8CE' : hpPct > 0.33 ? '#FDEEAD' : '#FF9BB8';
+
+  return (
+    <group ref={ref}>
+      {isSlime ? (
+        <>
+          <mesh castShadow>
+            <sphereGeometry args={[0.55, 20, 20]} />
+            <meshPhysicalMaterial
+              color={slimeColor}
+              roughness={0.25}
+              metalness={0}
+              transmission={0.7}
+              thickness={0.6}
+              ior={1.25}
+              clearcoat={0.3}
+            />
+          </mesh>
+          <mesh position={[0, 0.1, 0]} castShadow>
+            <sphereGeometry args={[0.18, 16, 16]} />
+            <meshStandardMaterial color={accent} emissive={accent} emissiveIntensity={0.4} />
+          </mesh>
+        </>
+      ) : (
+        <>
+          <mesh castShadow>
+            <capsuleGeometry args={[0.33, 0.7, 8, 16]} />
+            <meshStandardMaterial color={bodyColor} roughness={0.8} metalness={0.05} />
+          </mesh>
+          <mesh position={[0, 0.55, 0]} castShadow>
+            <sphereGeometry args={[0.28, 16, 16]} />
+            <meshStandardMaterial color="#FFE6F1" roughness={0.7} metalness={0.02} />
+          </mesh>
+          {/* simple helmet/hat */}
+          <mesh position={[0, 0.62, 0]} castShadow>
+            <coneGeometry args={[0.3, 0.35, 10]} />
+            <meshStandardMaterial color={accent} roughness={0.4} metalness={0.2} emissive={accent} emissiveIntensity={u.type === 'knight' ? 0.25 : 0.08} />
+          </mesh>
+          {/* weapon hint */}
+          {u.type === 'archer' ? (
+            <mesh position={[0.35, 0.15, 0]} rotation={[0, 0, Math.PI / 6]} castShadow>
+              <boxGeometry args={[0.06, 0.6, 0.06]} />
+              <meshStandardMaterial color="#B98B4F" roughness={0.85} />
+            </mesh>
+          ) : (
+            <mesh position={[0.4, 0.15, 0]} rotation={[0, 0, Math.PI / 5]} castShadow>
+              <boxGeometry args={[0.08, 0.5, 0.08]} />
+              <meshStandardMaterial color="#777" roughness={0.35} metalness={0.4} />
+            </mesh>
+          )}
+        </>
+      )}
+
+      {/* hp bar */}
+      <group position={[0, 1.05, 0]}>
+        <mesh>
+          <planeGeometry args={[0.9, 0.12]} />
+          <meshBasicMaterial color="#000000" opacity={0.35} transparent />
+        </mesh>
+        <mesh position={[-0.45 + 0.45 * hpPct, 0, 0.001]}>
+          <planeGeometry args={[0.9 * hpPct, 0.08]} />
+          <meshBasicMaterial color={hpColor} />
+        </mesh>
+      </group>
+    </group>
+  );
+};
+
 const Battlefield: React.FC<{
   playerHp: number;
   enemyHp: number;
   intensity: number;
-}> = ({ playerHp, enemyHp, intensity }) => {
+  units: UnitState[];
+}> = ({ playerHp, enemyHp, intensity, units }) => {
   const t = Math.max(0, Math.min(1, intensity));
   const glow = 0.15 + t * 0.6;
   return (
@@ -148,6 +290,11 @@ const Battlefield: React.FC<{
         <boxGeometry args={[2, 2 + Math.max(0, Math.min(1, enemyHp / 20)) * 0.6, 2]} />
         <meshStandardMaterial color="#FFB5B5" emissive="#FFB5B5" emissiveIntensity={glow} />
       </mesh>
+
+      {/* units */}
+      {units.map((u) => (
+        <UnitMesh key={u.id} u={u} />
+      ))}
     </Canvas>
   );
 };
@@ -176,6 +323,13 @@ export const RangerTdGame: React.FC<{
   const [playerHp, setPlayerHp] = useState(towerHpMax);
   const [enemyHp, setEnemyHp] = useState(30);
   const [skillLevel, setSkillLevel] = useState(1);
+  const [units, setUnits] = useState<UnitState[]>([]);
+  const unitsRef = useRef<UnitState[]>([]);
+  const playerHpRef = useRef(playerHp);
+  const enemyHpRef = useRef(enemyHp);
+  const stageIndexRef = useRef(stageIndex);
+  const skillLevelRef = useRef(skillLevel);
+  const enemySpawnAccRef = useRef(0);
 
   const [remaining, setRemaining] = useState<number | null>(timeLimitSeconds);
   const startedRef = useRef(false);
@@ -212,15 +366,177 @@ export const RangerTdGame: React.FC<{
     setInputDen('');
   };
 
+  useEffect(() => { playerHpRef.current = playerHp; }, [playerHp]);
+  useEffect(() => { enemyHpRef.current = enemyHp; }, [enemyHp]);
+  useEffect(() => { stageIndexRef.current = stageIndex; }, [stageIndex]);
+  useEffect(() => { skillLevelRef.current = skillLevel; }, [skillLevel]);
+
+  const setUnitsBoth = (next: UnitState[]) => {
+    unitsRef.current = next;
+    setUnits(next);
+  };
+
+  const spawnUnit = (side: UnitSide, type: UnitType | null = null) => {
+    if (completedRef.current) return;
+    const stage = stageIndexRef.current;
+    const skill = skillLevelRef.current;
+    const laneZ = (Math.random() < 0.5 ? -1 : 1) * (0.35 + Math.random() * 0.35);
+    const spawnX = side === 'player' ? -14.2 : 14.2;
+    const unitType: UnitType = type || (side === 'enemy'
+      ? (Math.random() < 0.85 ? 'slime' : 'knight')
+      : (Math.random() < 0.6 ? 'knight' : 'archer'));
+    const p = unitPreset(unitType, side, stage, skill);
+    const u: UnitState = {
+      id: nowId(),
+      side,
+      type: unitType,
+      x: spawnX,
+      z: laneZ,
+      hp: p.maxHp,
+      maxHp: p.maxHp,
+      speed: p.speed,
+      range: p.range,
+      atk: p.atk,
+      atkCd: p.atkCd,
+      cdLeft: Math.random() * p.atkCd,
+      hitFlash: 0
+    };
+    const next = [...unitsRef.current, u];
+    // cap units to avoid runaway
+    const cap = 36;
+    if (next.length > cap) next.splice(0, next.length - cap);
+    setUnitsBoth(next);
+  };
+
+  const enemySpawnIntervalSeconds = (stage: number) => Math.max(1.2, 3.2 - stage * 0.12);
+
+  const simulateStep = (dt: number) => {
+    if (completedRef.current) return;
+    let nextPlayerHp = playerHpRef.current;
+    let nextEnemyHp = enemyHpRef.current;
+    const list = unitsRef.current.map((u) => ({
+      ...u,
+      cdLeft: Math.max(0, u.cdLeft - dt),
+      hitFlash: Math.max(0, u.hitFlash - dt * 4)
+    }));
+
+    const players = list.filter((u) => u.side === 'player');
+    const enemies = list.filter((u) => u.side === 'enemy');
+
+    const findTarget = (u: UnitState) => {
+      const candidates = u.side === 'player' ? enemies : players;
+      if (candidates.length === 0) return null;
+      // nearest in front direction
+      let best: UnitState | null = null;
+      let bestDist = Infinity;
+      for (const e of candidates) {
+        const dx = e.x - u.x;
+        const inFront = u.side === 'player' ? dx >= -0.1 : dx <= 0.1;
+        if (!inFront) continue;
+        const dist = Math.abs(dx);
+        if (dist < bestDist) {
+          best = e;
+          bestDist = dist;
+        }
+      }
+      return best ? { id: best.id, dist: bestDist } : null;
+    };
+
+    const damageUnit = (id: string, amount: number) => {
+      const idx = list.findIndex((x) => x.id === id);
+      if (idx < 0) return;
+      const tgt = list[idx];
+      list[idx] = { ...tgt, hp: Math.max(0, tgt.hp - amount), hitFlash: 1 };
+    };
+
+    const canAttackTower = (u: UnitState) => {
+      if (u.side === 'player') return u.x >= 15.0;
+      return u.x <= -15.0;
+    };
+
+    // movement + attacks
+    for (let i = 0; i < list.length; i++) {
+      const u = list[i];
+      if (u.hp <= 0) continue;
+      const target = findTarget(u);
+      const engaged = target && target.dist <= u.range;
+
+      if (engaged) {
+        if (u.cdLeft <= 0) {
+          damageUnit(target!.id, u.atk);
+          list[i] = { ...u, cdLeft: u.atkCd };
+        }
+        continue;
+      }
+
+      if (canAttackTower(u)) {
+        if (u.cdLeft <= 0) {
+          if (u.side === 'player') nextEnemyHp = Math.max(0, nextEnemyHp - u.atk);
+          else nextPlayerHp = Math.max(0, nextPlayerHp - u.atk);
+          list[i] = { ...u, cdLeft: u.atkCd };
+        }
+        continue;
+      }
+
+      const dir = u.side === 'player' ? 1 : -1;
+      const move = u.speed * dt * dir;
+      // simple collision: don't overlap with closest opposing unit
+      if (target && target.dist < 0.95) continue;
+      list[i] = { ...u, x: u.x + move };
+    }
+
+    const filtered = list.filter((u) => u.hp > 0 && u.x > -20 && u.x < 20);
+
+    // enemy auto spawn
+    enemySpawnAccRef.current += dt;
+    const interval = enemySpawnIntervalSeconds(stageIndexRef.current);
+    if (enemySpawnAccRef.current >= interval) {
+      enemySpawnAccRef.current = enemySpawnAccRef.current % interval;
+      // apply HP changes first
+      unitsRef.current = filtered;
+      setUnits(filtered);
+      if (nextPlayerHp !== playerHpRef.current) {
+        playerHpRef.current = nextPlayerHp;
+        setPlayerHp(nextPlayerHp);
+      }
+      if (nextEnemyHp !== enemyHpRef.current) {
+        enemyHpRef.current = nextEnemyHp;
+        setEnemyHp(nextEnemyHp);
+      }
+      spawnUnit('enemy', Math.random() < 0.9 ? 'slime' : 'knight');
+      return;
+    }
+
+    unitsRef.current = filtered;
+    setUnits(filtered);
+    if (nextPlayerHp !== playerHpRef.current) {
+      playerHpRef.current = nextPlayerHp;
+      setPlayerHp(nextPlayerHp);
+    }
+    if (nextEnemyHp !== enemyHpRef.current) {
+      enemyHpRef.current = nextEnemyHp;
+      setEnemyHp(nextEnemyHp);
+    }
+  };
+
   const fetchStage = async (nextStageIndex: number) => {
     try {
       setError('');
       setLoading(true);
+      stageIndexRef.current = nextStageIndex;
       const resp = await authService.generateRangerMathStage(gameId, { stageIndex: nextStageIndex });
       const qs = Array.isArray(resp?.questions) ? resp.questions : [];
       setStageQuestions(qs);
       setQIndex(0);
       setEnemyHp(30 + nextStageIndex * 5);
+      enemyHpRef.current = 30 + nextStageIndex * 5;
+      enemySpawnAccRef.current = 0;
+      setUnitsBoth([]);
+      // initial units so battle starts immediately
+      window.setTimeout(() => {
+        spawnUnit('player');
+        spawnUnit('enemy', 'slime');
+      }, 0);
     } catch (e: any) {
       setError(e?.message || '載入關卡失敗');
       setStageQuestions([]);
@@ -237,6 +553,14 @@ export const RangerTdGame: React.FC<{
     onStart();
     fetchStage(0);
   }, [onStart]);
+
+  useEffect(() => {
+    if (loading) return;
+    if (completedRef.current) return;
+    const tickMs = 50;
+    const id = window.setInterval(() => simulateStep(tickMs / 1000), tickMs);
+    return () => window.clearInterval(id);
+  }, [loading]);
 
   useEffect(() => {
     if (remaining === null) return;
@@ -340,8 +664,13 @@ export const RangerTdGame: React.FC<{
     setAnswered((n) => n + 1);
     if (ok) {
       setCorrect((n) => n + 1);
-      setCombo((c) => c + 1);
-      setEnemyHp((hp) => Math.max(0, hp - (2 + skillLevel)));
+      // summon friendly unit; higher combo has chance to summon extra
+      spawnUnit('player');
+      setCombo((c) => {
+        const next = c + 1;
+        if (next % 3 === 0) spawnUnit('player', 'archer');
+        return next;
+      });
     } else {
       setCombo(0);
       setPlayerHp((hp) => Math.max(0, hp - Math.max(1, Math.floor(wrongTowerDamage))));
@@ -400,7 +729,7 @@ export const RangerTdGame: React.FC<{
       </div>
 
       <div className="flex-1 min-h-[320px] rounded-3xl overflow-hidden border-4 border-white/20 bg-black/10">
-        <Battlefield playerHp={playerHp} enemyHp={enemyHp} intensity={skillLevel} />
+        <Battlefield playerHp={playerHp} enemyHp={enemyHp} intensity={skillLevel} units={units} />
       </div>
 
       <div className="bg-white/10 border-4 border-white/15 rounded-3xl p-4 text-white">
