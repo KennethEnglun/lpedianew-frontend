@@ -44,7 +44,8 @@ export enum GameType {
   MATH = 'math',
   TOWER_DEFENSE = 'tower-defense',
   MAZE = 'maze',
-  MATCHING = 'matching'
+  MATCHING = 'matching',
+  RANGER_TD = 'ranger-td'
 }
 
 // 遊戲排行榜條目
@@ -99,5 +100,6 @@ export const GAME_TYPE_CONFIG: Record<GameType, { name: string; icon: string; co
   [GameType.MATH]: { name: '數學遊戲', icon: '🧮', color: '#B5D8F8' },
   [GameType.TOWER_DEFENSE]: { name: '塔防遊戲', icon: '🏰', color: '#FFB5B5' },
   [GameType.MAZE]: { name: '迷宮遊戲', icon: '🌀', color: '#B5F8CE' },
-  [GameType.MATCHING]: { name: '配對遊戲', icon: '🔗', color: '#F8B5E0' }
+  [GameType.MATCHING]: { name: '配對遊戲', icon: '🔗', color: '#F8B5E0' },
+  [GameType.RANGER_TD]: { name: 'Ranger 塔防', icon: '🧸', color: '#FDEEAD' }
 };

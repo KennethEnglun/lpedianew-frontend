@@ -11,11 +11,14 @@
     "start": "serve -s dist -l $PORT"
   },
   "dependencies": {
+    "@react-three/drei": "^10.7.4",
+    "@react-three/fiber": "^9.3.0",
     "react-router-dom": "^7.10.1",
     "react": "^19.2.1",
     "react-dom": "^19.2.1",
     "lucide-react": "^0.556.0",
-    "serve": "^14.2.1"
+    "serve": "^14.2.1",
+    "three": "^0.173.0"
   },
   "devDependencies": {
     "@types/node": "^22.14.0",

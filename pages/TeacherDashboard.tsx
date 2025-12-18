@@ -13,6 +13,7 @@ import { MathExpressionView, FractionView } from '../components/MathExpressionVi
 import { MathGame } from '../components/MathGame';
 import { MazeGame } from '../components/MazeGame';
 import TowerDefenseGame from '../components/TowerDefenseGame';
+import { RangerTdGame } from '../components/RangerTdGame';
 import { MatchingGamePreview } from '../components/MatchingGamePreview';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
@@ -160,7 +161,7 @@ const TeacherDashboard: React.FC = () => {
 
   // 小遊戲相關狀態
   const [showGameModal, setShowGameModal] = useState(false);
-	  const [gameType, setGameType] = useState<'maze' | 'matching' | 'tower-defense' | 'math' | null>(null);
+	  const [gameType, setGameType] = useState<'maze' | 'matching' | 'tower-defense' | 'math' | 'ranger-td' | null>(null);
 
   // 問答比賽相關狀態
   const [showContestModal, setShowContestModal] = useState(false);
@@ -195,6 +196,32 @@ const TeacherDashboard: React.FC = () => {
   const [towerDefenseTimeSecondsText, setTowerDefenseTimeSecondsText] = useState('60');
   const [towerDefenseLivesEnabled, setTowerDefenseLivesEnabled] = useState(true);
   const [towerDefenseLivesLimit, setTowerDefenseLivesLimit] = useState(10);
+
+  // Ranger 塔防（數學驅動）
+  const [rangerForm, setRangerForm] = useState({ title: '', description: '', targetClasses: [] as string[], targetGroups: [] as string[] });
+  const [rangerGrade, setRangerGrade] = useState<'小一' | '小二' | '小三' | '小四' | '小五' | '小六'>('小一');
+  const [rangerStageQuestionCount, setRangerStageQuestionCount] = useState(10);
+  const [rangerEquationPercentText, setRangerEquationPercentText] = useState('30'); // 方程式比例
+  const [rangerDecimalPercentText, setRangerDecimalPercentText] = useState('50'); // 小數比例
+  const [rangerOps, setRangerOps] = useState<{ add: boolean; sub: boolean; mul: boolean; div: boolean; paren: boolean }>({
+    add: true,
+    sub: true,
+    mul: true,
+    div: true,
+    paren: true
+  });
+  const [rangerRunSeconds, setRangerRunSeconds] = useState(300);
+  const [rangerRunSecondsText, setRangerRunSecondsText] = useState('300');
+  const [rangerAllowNegative, setRangerAllowNegative] = useState(false);
+  const [rangerMinValueText, setRangerMinValueText] = useState('0');
+  const [rangerMaxValueText, setRangerMaxValueText] = useState('50');
+  const [rangerMaxDenText, setRangerMaxDenText] = useState('20');
+  const [rangerMaxDecimalPlacesText, setRangerMaxDecimalPlacesText] = useState('2');
+  const [rangerEquationSteps, setRangerEquationSteps] = useState<1 | 2>(2);
+  const [rangerEquationAnswerType, setRangerEquationAnswerType] = useState<'any' | 'int' | 'properFraction' | 'decimal'>('int');
+  const [rangerWrongTowerDamageText, setRangerWrongTowerDamageText] = useState('2');
+  const [rangerTowerHpText, setRangerTowerHpText] = useState('20');
+  const [rangerPromptText, setRangerPromptText] = useState('');
 
   // 數學測驗
   const [mathGameTab, setMathGameTab] = useState<'manual' | 'ai'>('manual');
@@ -1366,6 +1393,29 @@ const TeacherDashboard: React.FC = () => {
 	    setShowGameModal(true);
 	  };
 
+	  const openRangerTdCreator = () => {
+	    setGameType('ranger-td');
+	    setRangerForm({ title: '', description: '', targetClasses: [], targetGroups: [] });
+	    setRangerGrade('小一');
+	    setRangerStageQuestionCount(10);
+	    setRangerEquationPercentText('30');
+	    setRangerDecimalPercentText('50');
+	    setRangerOps({ add: true, sub: true, mul: true, div: true, paren: true });
+	    setRangerRunSeconds(300);
+	    setRangerRunSecondsText('300');
+	    setRangerAllowNegative(false);
+	    setRangerMinValueText('0');
+	    setRangerMaxValueText('50');
+	    setRangerMaxDenText('20');
+	    setRangerMaxDecimalPlacesText('2');
+	    setRangerEquationSteps(2);
+	    setRangerEquationAnswerType('int');
+	    setRangerWrongTowerDamageText('2');
+	    setRangerTowerHpText('20');
+	    setRangerPromptText('');
+	    setShowGameModal(true);
+	  };
+
 	  // 監聽篩選條件變化
 	  useEffect(() => {
 	    if (showAssignmentModal) {
@@ -1390,7 +1440,7 @@ const TeacherDashboard: React.FC = () => {
   // 監聽遊戲模態框開啟
   useEffect(() => {
     if (showGameModal) {
-      if (gameType === 'math') loadClassesAndGroups(Subject.MATH);
+      if (gameType === 'math' || gameType === 'ranger-td') loadClassesAndGroups(Subject.MATH);
       else loadClassesAndGroups(gameForm.subject);
     }
   }, [showGameModal, gameType]);
@@ -1405,6 +1455,43 @@ const TeacherDashboard: React.FC = () => {
   useEffect(() => {
     setMathTimeSecondsText(String(mathTimeSeconds));
   }, [mathTimeSeconds]);
+
+  useEffect(() => {
+    setRangerRunSecondsText(String(rangerRunSeconds));
+  }, [rangerRunSeconds]);
+
+  const rangerAllowedOps = useMemo(() => {
+    const ops: MathOp[] = [];
+    if (rangerOps.add) ops.push('add');
+    if (rangerOps.sub) ops.push('sub');
+    if (rangerOps.mul) ops.push('mul');
+    if (rangerOps.div) ops.push('div');
+    return ops;
+  }, [rangerOps]);
+
+  const rangerConstraints = useMemo(() => {
+    const parseIntOr = (s: string, fallback: number) => {
+      const n = Number.parseInt(String(s || '').trim(), 10);
+      return Number.isFinite(n) ? n : fallback;
+    };
+    const maxValue = Math.max(1, Math.min(999, parseIntOr(rangerMaxValueText, 50)));
+    let minValue = Math.max(-999, Math.min(999, parseIntOr(rangerMinValueText, 0)));
+    if (!rangerAllowNegative) minValue = Math.max(0, minValue);
+    if (minValue > maxValue) minValue = maxValue;
+    const maxDen = Math.max(2, Math.min(999, parseIntOr(rangerMaxDenText, 20)));
+    const maxDecimalPlaces = Math.max(0, Math.min(6, parseIntOr(rangerMaxDecimalPlacesText, 2)));
+    const equationSteps = rangerEquationSteps === 2 ? 2 : 1;
+    const equationAnswerType = rangerEquationAnswerType;
+    return { allowNegative: rangerAllowNegative, minValue, maxValue, maxDen, maxDecimalPlaces, equationSteps, equationAnswerType };
+  }, [
+    rangerAllowNegative,
+    rangerMinValueText,
+    rangerMaxValueText,
+    rangerMaxDenText,
+    rangerMaxDecimalPlacesText,
+    rangerEquationSteps,
+    rangerEquationAnswerType
+  ]);
 
   const mathAllowedOps = useMemo(() => {
     const ops: MathOp[] = [];
@@ -2563,6 +2650,14 @@ const TeacherDashboard: React.FC = () => {
 	                    <h3 className="text-xl font-bold text-emerald-800">答題塔防</h3>
 	                    <p className="text-sm text-emerald-700 mt-2">不停答題賺金幣，購買士兵守護基地</p>
 	                  </button>
+	                  <button
+	                    onClick={openRangerTdCreator}
+	                    className="p-6 bg-gradient-to-br from-amber-100 to-rose-100 border-4 border-amber-400 rounded-2xl hover:shadow-lg transition-all hover:scale-105"
+	                  >
+	                    <div className="text-4xl mb-3">🧸</div>
+	                    <h3 className="text-xl font-bold text-amber-800">Ranger 塔防</h3>
+	                    <p className="text-sm text-amber-700 mt-2">答對題目召喚可愛角色/技能，推倒敵人塔樓</p>
+	                  </button>
 	                </div>
 	              </div>
 	            </div>
@@ -3507,6 +3602,386 @@ const TeacherDashboard: React.FC = () => {
 	                    }
 	                  }}
 	                  className="flex-1 py-3 rounded-2xl border-4 border-emerald-600 bg-emerald-600 text-white font-bold hover:bg-emerald-700"
+	                >
+	                  創建遊戲
+	                </button>
+	              </div>
+	            </div>
+	          </div>
+	        </div>
+	      )}
+
+	      {/* Ranger TD Game Creation Modal */}
+	      {showGameModal && gameType === 'ranger-td' && (
+	        <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
+	          <div className="bg-white border-4 border-amber-400 rounded-3xl w-full max-w-5xl max-h-[90vh] overflow-y-auto shadow-comic">
+	            <div className="p-6 border-b-4 border-amber-400 bg-gradient-to-r from-amber-100 to-rose-100">
+	              <div className="flex justify-between items-center">
+	                <div className="flex items-center gap-3">
+	                  <span className="text-3xl">🧸</span>
+	                  <h2 className="text-3xl font-black text-amber-900">創建 Ranger 塔防（數學）</h2>
+	                </div>
+	                <button
+	                  onClick={() => { setShowGameModal(false); setGameType(null); }}
+	                  className="w-10 h-10 rounded-full bg-white border-2 border-amber-400 hover:bg-amber-50 flex items-center justify-center"
+	                >
+	                  <X className="w-6 h-6 text-amber-800" />
+	                </button>
+	              </div>
+	            </div>
+
+	            <div className="p-6 space-y-6">
+	              <div className="bg-amber-50 p-4 rounded-xl border-2 border-amber-200">
+	                <p className="text-amber-900 text-sm">
+	                  🧸 <strong>玩法：</strong>左邊是你的塔（基地），右邊是敵人的塔。角色自動前進與戰鬥；學生需持續回答數學題目來獲得召喚/技能。每關完成一組題目後（且基地未被摧毀）即可升級技能並進入下一關。
+	                </p>
+	              </div>
+
+	              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+	                <Input
+	                  label="測驗標題"
+	                  placeholder="輸入測驗標題..."
+	                  value={rangerForm.title}
+	                  onChange={(e) => setRangerForm(prev => ({ ...prev, title: e.target.value }))}
+	                />
+
+	                <div>
+	                  <label className="block text-sm font-bold text-amber-900 mb-2">年級（AI 生成難度參考）</label>
+	                  <select
+	                    className="w-full px-4 py-2 border-4 border-amber-300 rounded-2xl bg-white font-bold"
+	                    value={rangerGrade}
+	                    onChange={(e) => setRangerGrade(e.target.value as any)}
+	                  >
+	                    {(['小一', '小二', '小三', '小四', '小五', '小六'] as const).map((g) => (
+	                      <option key={g} value={g}>{g}</option>
+	                    ))}
+	                  </select>
+	                </div>
+	              </div>
+
+	              <Input
+	                label="描述（可選）"
+	                placeholder="簡短說明..."
+	                value={rangerForm.description}
+	                onChange={(e) => setRangerForm(prev => ({ ...prev, description: e.target.value }))}
+	              />
+
+	              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+	                <div>
+	                  <label className="block text-sm font-bold text-amber-900 mb-2">整局時間（秒）</label>
+	                  <input
+	                    value={rangerRunSecondsText}
+	                    onChange={(e) => setRangerRunSecondsText(e.target.value)}
+	                    className="w-full px-4 py-2 border-4 border-amber-300 rounded-2xl bg-white font-bold"
+	                    inputMode="numeric"
+	                  />
+	                  <p className="text-xs text-gray-600 mt-1">建議 120–600 秒</p>
+	                </div>
+	                <div>
+	                  <label className="block text-sm font-bold text-amber-900 mb-2">每關題目數量</label>
+	                  <input
+	                    value={String(rangerStageQuestionCount)}
+	                    onChange={(e) => {
+	                      const n = Number.parseInt(String(e.target.value || '').trim(), 10);
+	                      if (!Number.isFinite(n)) return;
+	                      setRangerStageQuestionCount(Math.max(1, Math.min(50, n)));
+	                    }}
+	                    className="w-full px-4 py-2 border-4 border-amber-300 rounded-2xl bg-white font-bold"
+	                    inputMode="numeric"
+	                  />
+	                  <p className="text-xs text-gray-600 mt-1">範圍 1–50</p>
+	                </div>
+	                <div>
+	                  <label className="block text-sm font-bold text-amber-900 mb-2">答錯扣塔血</label>
+	                  <input
+	                    value={rangerWrongTowerDamageText}
+	                    onChange={(e) => setRangerWrongTowerDamageText(e.target.value)}
+	                    className="w-full px-4 py-2 border-4 border-amber-300 rounded-2xl bg-white font-bold"
+	                    inputMode="numeric"
+	                  />
+	                  <p className="text-xs text-gray-600 mt-1">答錯會扣血 + combo 歸零</p>
+	                </div>
+	              </div>
+
+	              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+	                <div>
+	                  <label className="block text-sm font-bold text-amber-900 mb-2">題型比例（方程式 %）</label>
+	                  <input
+	                    value={rangerEquationPercentText}
+	                    onChange={(e) => setRangerEquationPercentText(e.target.value)}
+	                    className="w-full px-4 py-2 border-4 border-amber-300 rounded-2xl bg-white font-bold"
+	                    inputMode="numeric"
+	                  />
+	                  <p className="text-xs text-gray-600 mt-1">其餘為計算題</p>
+	                </div>
+	                <div>
+	                  <label className="block text-sm font-bold text-amber-900 mb-2">數字比例（小數 %）</label>
+	                  <input
+	                    value={rangerDecimalPercentText}
+	                    onChange={(e) => setRangerDecimalPercentText(e.target.value)}
+	                    className="w-full px-4 py-2 border-4 border-amber-300 rounded-2xl bg-white font-bold"
+	                    inputMode="numeric"
+	                  />
+	                  <p className="text-xs text-gray-600 mt-1">其餘為分數（可混合出題）</p>
+	                </div>
+	              </div>
+
+	              <div>
+	                <label className="block text-sm font-bold text-amber-900 mb-2">運算範疇（可多選）</label>
+	                <div className="flex flex-wrap gap-2">
+	                  {[
+	                    { key: 'add', label: '加' },
+	                    { key: 'sub', label: '減' },
+	                    { key: 'mul', label: '乘' },
+	                    { key: 'div', label: '除' },
+	                    { key: 'paren', label: '加括號' }
+	                  ].map((item) => {
+	                    const active = (rangerOps as any)[item.key] as boolean;
+	                    return (
+	                      <button
+	                        key={item.key}
+	                        type="button"
+	                        onClick={() => setRangerOps(prev => ({ ...prev, [item.key]: !active } as any))}
+	                        className={`px-4 py-2 rounded-2xl border-2 font-black transition-colors ${active
+	                          ? 'bg-amber-200 border-amber-500 text-amber-900'
+	                          : 'bg-white border-gray-300 text-gray-700 hover:bg-gray-50'
+	                          }`}
+	                      >
+	                        {item.label}
+	                      </button>
+	                    );
+	                  })}
+	                </div>
+	                {rangerAllowedOps.length === 0 && (
+	                  <div className="mt-2 text-sm font-bold text-red-600">請至少選擇一種運算（加/減/乘/除）</div>
+	                )}
+	              </div>
+
+	              <div className="bg-white border-2 border-gray-200 rounded-2xl p-4 space-y-4">
+	                <div className="flex items-center justify-between gap-3 flex-wrap">
+	                  <div>
+	                    <div className="text-sm font-black text-amber-900">數字/方程式限制</div>
+	                    <div className="text-xs text-gray-600">此設定會影響 AI 出題與學生輸入方式</div>
+	                  </div>
+	                  <button
+	                    type="button"
+	                    onClick={() => {
+	                      setRangerAllowNegative((v) => {
+	                        const next = !v;
+	                        if (!next) {
+	                          const minV = Number.parseInt(String(rangerMinValueText || '0').trim(), 10);
+	                          if (Number.isFinite(minV) && minV < 0) setRangerMinValueText('0');
+	                        }
+	                        return next;
+	                      });
+	                    }}
+	                    className={`px-4 py-2 rounded-2xl border-2 font-black ${rangerAllowNegative
+	                      ? 'bg-[#A1D9AE] border-[#5E8B66] text-white'
+	                      : 'bg-white border-gray-300 text-gray-700 hover:bg-gray-50'
+	                      }`}
+	                  >
+	                    {rangerAllowNegative ? '允許負數' : '不允許負數'}
+	                  </button>
+	                </div>
+
+	                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+	                  <div>
+	                    <label className="block text-xs font-bold text-gray-600 mb-1">數值範圍（最小）</label>
+	                    <input
+	                      value={rangerMinValueText}
+	                      onChange={(e) => setRangerMinValueText(e.target.value)}
+	                      className="w-full px-4 py-2 rounded-2xl border-2 border-gray-300 font-bold"
+	                      inputMode="numeric"
+	                    />
+	                  </div>
+	                  <div>
+	                    <label className="block text-xs font-bold text-gray-600 mb-1">數值範圍（最大）</label>
+	                    <input
+	                      value={rangerMaxValueText}
+	                      onChange={(e) => setRangerMaxValueText(e.target.value)}
+	                      className="w-full px-4 py-2 rounded-2xl border-2 border-gray-300 font-bold"
+	                      inputMode="numeric"
+	                    />
+	                  </div>
+	                  <div>
+	                    <label className="block text-xs font-bold text-gray-600 mb-1">基地血量（起始）</label>
+	                    <input
+	                      value={rangerTowerHpText}
+	                      onChange={(e) => setRangerTowerHpText(e.target.value)}
+	                      className="w-full px-4 py-2 rounded-2xl border-2 border-gray-300 font-bold"
+	                      inputMode="numeric"
+	                    />
+	                  </div>
+	                </div>
+
+	                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+	                  <div>
+	                    <label className="block text-xs font-bold text-gray-600 mb-1">分母上限（分數題）</label>
+	                    <input
+	                      value={rangerMaxDenText}
+	                      onChange={(e) => setRangerMaxDenText(e.target.value)}
+	                      className="w-full px-4 py-2 rounded-2xl border-2 border-gray-300 font-bold"
+	                      inputMode="numeric"
+	                    />
+	                  </div>
+	                  <div>
+	                    <label className="block text-xs font-bold text-gray-600 mb-1">小數位數上限（小數題）</label>
+	                    <input
+	                      value={rangerMaxDecimalPlacesText}
+	                      onChange={(e) => setRangerMaxDecimalPlacesText(e.target.value)}
+	                      className="w-full px-4 py-2 rounded-2xl border-2 border-gray-300 font-bold"
+	                      inputMode="numeric"
+	                    />
+	                  </div>
+	                  <div>
+	                    <label className="block text-xs font-bold text-gray-600 mb-1">方程式步數（上限）</label>
+	                    <select
+	                      value={String(rangerEquationSteps)}
+	                      onChange={(e) => setRangerEquationSteps(e.target.value === '2' ? 2 : 1)}
+	                      className="w-full px-4 py-2 rounded-2xl border-2 border-gray-300 font-bold"
+	                    >
+	                      <option value="1">一步</option>
+	                      <option value="2">最多兩步</option>
+	                    </select>
+	                  </div>
+	                </div>
+
+	                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+	                  <div>
+	                    <label className="block text-xs font-bold text-gray-600 mb-1">方程式答案類型</label>
+	                    <select
+	                      value={rangerEquationAnswerType}
+	                      onChange={(e) => setRangerEquationAnswerType(e.target.value as any)}
+	                      className="w-full px-4 py-2 rounded-2xl border-2 border-gray-300 font-bold"
+	                    >
+	                      <option value="int">只出整數</option>
+	                      <option value="properFraction">只出真分數</option>
+	                      <option value="decimal">只出小數</option>
+	                      <option value="any">不限</option>
+	                    </select>
+	                  </div>
+	                  <div>
+	                    <label className="block text-xs font-bold text-gray-600 mb-1">AI 額外要求（可選）</label>
+	                    <input
+	                      value={rangerPromptText}
+	                      onChange={(e) => setRangerPromptText(e.target.value)}
+	                      className="w-full px-4 py-2 rounded-2xl border-2 border-gray-300 font-bold"
+	                      placeholder="例如：多用括號；避免除法..."
+	                    />
+	                  </div>
+	                </div>
+	              </div>
+
+	              {/* Target Classes */}
+	              {availableClasses.length > 0 && (
+	                <div>
+	                  <label className="block text-sm font-bold text-amber-900 mb-2">選擇班級（數學）</label>
+	                  <div className="flex flex-wrap gap-2">
+	                    {availableClasses.map(className => (
+	                      <button
+	                        key={className}
+	                        type="button"
+	                        onClick={() => {
+	                          setRangerForm(prev => ({
+	                            ...prev,
+	                            targetClasses: prev.targetClasses.includes(className)
+	                              ? prev.targetClasses.filter(c => c !== className)
+	                              : [...prev.targetClasses, className]
+	                          }));
+	                        }}
+	                        className={`px-4 py-2 rounded-2xl border-2 font-bold transition-colors ${rangerForm.targetClasses.includes(className)
+	                          ? 'bg-amber-200 border-amber-500 text-amber-900'
+	                          : 'bg-white border-gray-300 text-gray-700 hover:border-amber-500'
+	                          }`}
+	                      >
+	                        {className}
+	                      </button>
+	                    ))}
+	                  </div>
+	                </div>
+	              )}
+
+	              {/* Target Groups */}
+	              {availableGroups.length > 0 && (
+	                <div>
+	                  <label className="block text-sm font-bold text-amber-900 mb-2">選擇分組（數學）</label>
+	                  <div className="flex flex-wrap gap-2">
+	                    {availableGroups.map(groupName => (
+	                      <button
+	                        key={groupName}
+	                        type="button"
+	                        onClick={() => {
+	                          setRangerForm(prev => ({
+	                            ...prev,
+	                            targetGroups: prev.targetGroups.includes(groupName)
+	                              ? prev.targetGroups.filter(g => g !== groupName)
+	                              : [...prev.targetGroups, groupName]
+	                          }));
+	                        }}
+	                        className={`px-4 py-2 rounded-2xl border-2 font-bold transition-colors ${rangerForm.targetGroups.includes(groupName)
+	                          ? 'bg-amber-200 border-amber-500 text-amber-900'
+	                          : 'bg-white border-gray-300 text-gray-700 hover:border-amber-500'
+	                          }`}
+	                      >
+	                        {groupName}
+	                      </button>
+	                    ))}
+	                  </div>
+	                </div>
+	              )}
+
+	              <div className="flex justify-end gap-3 pt-4 border-t-2 border-gray-100">
+	                <button
+	                  onClick={() => { setShowGameModal(false); setGameType(null); }}
+	                  className="px-6 py-3 rounded-2xl border-4 border-gray-300 bg-white text-gray-700 font-bold hover:bg-gray-50"
+	                >
+	                  取消
+	                </button>
+	                <button
+	                  onClick={async () => {
+	                    try {
+	                      if (!rangerForm.title.trim()) return alert('請輸入測驗標題');
+	                      if (rangerAllowedOps.length === 0) return alert('請至少選擇一種運算（加/減/乘/除）');
+	                      if (!rangerForm.targetClasses?.length && !rangerForm.targetGroups?.length) return alert('請選擇至少一個目標班級或分組');
+
+	                      const eqPercent = Math.max(0, Math.min(100, Number.parseInt(String(rangerEquationPercentText || '0').trim(), 10) || 0));
+	                      const decPercent = Math.max(0, Math.min(100, Number.parseInt(String(rangerDecimalPercentText || '0').trim(), 10) || 0));
+	                      const wrongTowerDamage = Math.max(1, Math.min(99, Number.parseInt(String(rangerWrongTowerDamageText || '2').trim(), 10) || 2));
+	                      const towerHp = Math.max(5, Math.min(999, Number.parseInt(String(rangerTowerHpText || '20').trim(), 10) || 20));
+
+	                      await authService.createGame({
+	                        title: rangerForm.title,
+	                        description: rangerForm.description,
+	                        gameType: 'ranger-td',
+	                        subject: Subject.MATH,
+	                        targetClasses: rangerForm.targetClasses,
+	                        targetGroups: rangerForm.targetGroups,
+	                        questions: [],
+	                        difficulty: 'medium',
+	                        timeLimitSeconds: clampTowerDefenseTimeSeconds(rangerRunSecondsText, rangerRunSeconds),
+	                        livesLimit: null,
+	                        rangerTd: {
+	                          grade: rangerGrade,
+	                          perStageQuestionCount: rangerStageQuestionCount,
+	                          equationPercent: eqPercent,
+	                          decimalPercent: decPercent,
+	                          allowedOps: rangerAllowedOps,
+	                          allowParentheses: rangerOps.paren,
+	                          constraints: rangerConstraints,
+	                          promptText: rangerPromptText,
+	                          wrongTowerDamage,
+	                          towerHp
+	                        }
+	                      });
+
+	                      alert('Ranger 塔防創建成功！');
+	                      setShowGameModal(false);
+	                      setGameType(null);
+	                    } catch (e: any) {
+	                      alert('創建遊戲失敗：' + (e?.message || '未知錯誤'));
+	                    }
+	                  }}
+	                  className="px-6 py-3 rounded-2xl border-4 border-amber-600 bg-amber-600 text-white font-black hover:bg-amber-700"
 	                >
 	                  創建遊戲
 	                </button>
@@ -4673,6 +5148,8 @@ const TeacherDashboard: React.FC = () => {
 	                                                ? '翻牌記憶'
 	                                                : assignment.gameType === 'math'
 	                                                  ? '數學測驗'
+	                                                : assignment.gameType === 'ranger-td'
+	                                                  ? 'Ranger 塔防'
 	                                                : assignment.gameType === 'tower-defense'
 	                                                  ? '答題塔防'
 	                                                  : '小遊戲')
@@ -4812,6 +5289,8 @@ const TeacherDashboard: React.FC = () => {
                                                       ? '翻牌記憶'
                                                       : assignment.gameType === 'math'
                                                         ? '數學測驗'
+                                                      : assignment.gameType === 'ranger-td'
+                                                        ? 'Ranger 塔防'
                                                       : assignment.gameType === 'tower-defense'
                                                         ? '答題塔防'
                                                         : '小遊戲')
@@ -5973,8 +6452,10 @@ const TeacherDashboard: React.FC = () => {
                     ? '記憶配對'
                     : previewGame.gameType === 'math'
                       ? '數學測驗'
-                      : previewGame.gameType === 'maze'
-                        ? '知識迷宮'
+                    : previewGame.gameType === 'maze'
+                      ? '知識迷宮'
+                      : previewGame.gameType === 'ranger-td'
+                        ? 'Ranger 塔防'
                         : '答題塔防'} • {previewGame.subject}
                 </p>
               </div>
@@ -5992,6 +6473,17 @@ const TeacherDashboard: React.FC = () => {
               {previewGame.gameType === 'math' && (
                 <MathGame
                   game={previewGame}
+                  gameId={previewGame.id}
+                  onExit={() => { setShowGamePreviewModal(false); setPreviewGame(null); setPreviewResult(null); }}
+                  onStart={() => { }}
+                  onComplete={(result) => setPreviewResult(result)}
+                />
+              )}
+
+              {previewGame.gameType === 'ranger-td' && (
+                <RangerTdGame
+                  game={previewGame}
+                  gameId={previewGame.id}
                   onExit={() => { setShowGamePreviewModal(false); setPreviewGame(null); setPreviewResult(null); }}
                   onStart={() => { }}
                   onComplete={(result) => setPreviewResult(result)}

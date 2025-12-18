@@ -8,6 +8,7 @@ import { sanitizeHtml } from '../services/sanitizeHtml';
 import { MazeGame } from '../components/MazeGame';
 import TowerDefenseGame from '../components/TowerDefenseGame';
 import { MathGame } from '../components/MathGame';
+import { RangerTdGame } from '../components/RangerTdGame';
 import { QuizContestModal } from '../components/QuizContestModal';
 import UiSettingsModal from '../components/UiSettingsModal';
 import AiChatModal from '../components/AiChatModal';
@@ -381,7 +382,7 @@ const StudentDashboard: React.FC = () => {
 
       setSelectedGame(game);
       setGameScore(0);
-      setGameStartTime(game.gameType === 'tower-defense' ? null : new Date());
+      setGameStartTime((game.gameType === 'tower-defense' || game.gameType === 'ranger-td') ? null : new Date());
       setGameTimerTick(0);
       setGameStatus('playing');
       setGameCurrentQuestionIndex(0);
@@ -1718,9 +1719,11 @@ const StudentDashboard: React.FC = () => {
 	                  {selectedGame.gameType === 'matching'
 	                    ? '記憶配對'
 	                    : selectedGame.gameType === 'math'
-	                      ? '數學遊戲'
+	                      ? '數學測驗'
 	                    : selectedGame.gameType === 'maze'
 	                      ? '知識迷宮'
+	                      : selectedGame.gameType === 'ranger-td'
+	                        ? 'Ranger 塔防'
 	                      : '答題塔防'} • {selectedGame.subject}
 	                </p>
               </div>
@@ -1880,6 +1883,26 @@ const StudentDashboard: React.FC = () => {
 	                      correctAnswers: result.correctAnswers,
 	                      totalQuestions: result.totalQuestions,
 	                      timeSpent: result.timeSpent
+	                    });
+	                  }}
+	                />
+	              )}
+
+	              {/* Ranger TD (Math) */}
+	              {selectedGame.gameType === 'ranger-td' && (
+	                <RangerTdGame
+	                  game={selectedGame}
+	                  gameId={selectedGame.id}
+	                  onExit={() => setShowGameModal(false)}
+	                  onStart={() => { setGameStartTime(new Date()); setGameTimerTick(0); }}
+	                  onComplete={(result) => {
+	                    setGameScore(result.score);
+	                    handleGameComplete(result.success, {
+	                      score: result.score,
+	                      correctAnswers: result.correctAnswers,
+	                      totalQuestions: result.totalQuestions,
+	                      timeSpent: result.timeSpent,
+	                      ...(result.details ? { details: result.details } : null)
 	                    });
 	                  }}
 	                />

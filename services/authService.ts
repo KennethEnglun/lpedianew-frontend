@@ -840,7 +840,7 @@ class AuthService {
   async createGame(gameData: {
     title: string;
     description?: string;
-    gameType: 'maze' | 'matching' | 'tower-defense' | 'math';
+    gameType: 'maze' | 'matching' | 'tower-defense' | 'math' | 'ranger-td';
     subject: string;
     targetClasses: string[];
     targetGroups?: string[];
@@ -849,6 +849,7 @@ class AuthService {
     timeLimitSeconds?: number;
     livesLimit?: number | null;
     math?: any;
+    rangerTd?: any;
   }): Promise<{ message: string; game: any }> {
     const response = await fetch(`${this.API_BASE}/games`, {
       method: 'POST',
@@ -908,6 +909,19 @@ class AuthService {
   async getGameForStudent(gameId: string): Promise<{ game: any; completed: boolean; bestScore: number | null; attempts: number }> {
     const response = await fetch(`${this.API_BASE}/games/${gameId}/play`, {
       headers: this.getAuthHeaders()
+    });
+
+    return this.handleResponse(response);
+  }
+
+  // Ranger 塔防：生成某一關的數學題（學生/教師皆可用）
+  async generateRangerMathStage(gameId: string, payload: {
+    stageIndex: number;
+  }): Promise<{ stageIndex: number; questions: any[] }> {
+    const response = await fetch(`${this.API_BASE}/games/${gameId}/ranger-math-stage`, {
+      method: 'POST',
+      headers: this.getAuthHeaders(),
+      body: JSON.stringify(payload)
     });
 
     return this.handleResponse(response);
