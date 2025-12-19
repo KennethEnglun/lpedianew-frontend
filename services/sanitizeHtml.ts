@@ -10,7 +10,10 @@ const ALLOWED_TAGS = new Set([
 const ALLOWED_ATTRS: Record<string, Set<string>> = {
   a: new Set(['href', 'target', 'rel', 'title']),
   img: new Set(['src', 'alt', 'title', 'width', 'height']),
-  font: new Set(['size', 'color', 'face'])
+  font: new Set(['size', 'color', 'face']),
+  div: new Set(['data-lpedia-html-preview', 'data-lpedia-html']),
+  pre: new Set(['data-lpedia-html-preview', 'data-lpedia-html']),
+  code: new Set(['data-lpedia-html-preview', 'data-lpedia-html'])
 };
 
 const ALLOWED_STYLE_PROPS = new Set([
@@ -160,4 +163,3 @@ export function sanitizeHtml(html: string): string {
 
   return doc.body.innerHTML;
 }
-

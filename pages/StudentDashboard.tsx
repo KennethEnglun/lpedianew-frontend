@@ -15,6 +15,8 @@ import AiChatModal from '../components/AiChatModal';
 import BotTaskChatModal from '../components/BotTaskChatModal';
 import AppStudioModal from '../components/AppStudioModal';
 import { loadHiddenTaskKeys, makeTaskKey, saveHiddenTaskKeys } from '../services/taskVisibility';
+import RichHtmlContent from '../components/RichHtmlContent';
+import { buildHtmlPreviewPlaceholder, looksLikeExecutableHtml, MAX_LPEDIA_HTML_PREVIEW_CHARS } from '../services/htmlPreview';
 
 interface Discussion {
   id: string;
@@ -998,10 +1000,9 @@ const StudentDashboard: React.FC = () => {
           </div>
         )}
         {block.type === 'html' && (
-          <div
-            className="p-3 bg-gray-50 border-2 border-gray-200 rounded-xl"
-            dangerouslySetInnerHTML={{ __html: sanitizeHtml(block.value) }}
-          />
+          <div className="p-3 bg-gray-50 border-2 border-gray-200 rounded-xl">
+            <RichHtmlContent html={block.value} />
+          </div>
         )}
       </div>
     ));
@@ -1588,8 +1589,9 @@ const StudentDashboard: React.FC = () => {
                             </div>
                             <div
                               className="bg-white border border-gray-200 rounded-lg p-4 min-h-16"
-                              dangerouslySetInnerHTML={{ __html: sanitizeHtml(response.content || '載入中...') }}
-                            />
+                            >
+                              <RichHtmlContent html={response.content || '載入中...'} />
+                            </div>
                           </div>
                         );
                       })}
@@ -1680,6 +1682,22 @@ const StudentDashboard: React.FC = () => {
                   <div
                     contentEditable
                     onInput={(e) => setResponseContent(e.currentTarget.innerHTML)}
+                    onPaste={(e) => {
+                      const plain = e.clipboardData?.getData('text/plain') || '';
+                      const html = e.clipboardData?.getData('text/html') || '';
+                      const candidate = plain || html;
+                      if (!looksLikeExecutableHtml(candidate)) return;
+                      if (candidate.length > MAX_LPEDIA_HTML_PREVIEW_CHARS) {
+                        const ok = confirm('HTML 內容過大，可能導致討論串載入變慢。仍要插入可執行預覽嗎？');
+                        if (!ok) return;
+                      }
+                      e.preventDefault();
+                      try {
+                        document.execCommand('insertHTML', false, buildHtmlPreviewPlaceholder(candidate));
+                      } catch {
+                        document.execCommand('insertText', false, candidate);
+                      }
+                    }}
                     className="min-h-32 p-4 border-2 border-gray-300 rounded-b-xl bg-white focus:outline-none focus:border-[#A1D9AE] resize-none"
                     placeholder="輸入你的回應..."
                     style={{

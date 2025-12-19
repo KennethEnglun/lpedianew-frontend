@@ -19,6 +19,8 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { authService } from '../services/authService';
 import { sanitizeHtml } from '../services/sanitizeHtml';
+import RichHtmlContent from '../components/RichHtmlContent';
+import { buildHtmlPreviewPlaceholder, looksLikeExecutableHtml, MAX_LPEDIA_HTML_PREVIEW_CHARS } from '../services/htmlPreview';
 import { loadHiddenTaskKeys, makeTaskKey, parseTaskKey, saveHiddenTaskKeys } from '../services/taskVisibility';
 import type { MathOp, MathToken } from '../services/mathGame';
 import { evaluateTokens, validateTokens } from '../services/mathGame';
@@ -5086,6 +5088,28 @@ const TeacherDashboard: React.FC = () => {
                     contentEditable
                     className="w-full min-h-[300px] px-4 py-3 border-2 border-t-0 border-gray-300 rounded-b-xl bg-white font-sans text-sm leading-relaxed focus:outline-none"
                     style={{ fontSize: currentFontSize + 'px', color: currentTextColor }}
+                    onPaste={(e) => {
+                      const plain = e.clipboardData?.getData('text/plain') || '';
+                      const html = e.clipboardData?.getData('text/html') || '';
+                      const candidate = plain || html;
+                      if (!looksLikeExecutableHtml(candidate)) return;
+                      if (candidate.length > MAX_LPEDIA_HTML_PREVIEW_CHARS) {
+                        const ok = confirm('HTML 內容過大，可能導致學生端載入變慢。仍要插入可執行預覽嗎？');
+                        if (!ok) return;
+                      }
+                      e.preventDefault();
+                      try {
+                        document.execCommand('insertHTML', false, buildHtmlPreviewPlaceholder(candidate));
+                      } catch {
+                        document.execCommand('insertText', false, candidate);
+                      }
+                      if (editorRef) {
+                        setDiscussionForm(prev => ({
+                          ...prev,
+                          content: editorRef.innerHTML
+                        }));
+                      }
+                    }}
                     onInput={(e) => {
                       const target = e.target as HTMLDivElement;
                       setDiscussionForm(prev => ({
@@ -5778,7 +5802,7 @@ const TeacherDashboard: React.FC = () => {
                           </div>
 	                        ) : (
 	                          <div className="bg-white p-4 rounded-xl border-2 border-yellow-300">
-	                            <div dangerouslySetInnerHTML={{ __html: sanitizeHtml(getDisplayContent(selectedAssignment.content)) }} />
+	                            <RichHtmlContent html={getDisplayContent(selectedAssignment.content)} />
 	                          </div>
 	                        )
 	                      )}
@@ -6021,7 +6045,7 @@ const TeacherDashboard: React.FC = () => {
 	                                      </>
 	                                    ) : (
 	                                      <div className="bg-white p-3 rounded-xl border border-gray-200">
-	                                        <div dangerouslySetInnerHTML={{ __html: sanitizeHtml(response.content || response.message || '無內容') }} />
+	                                        <RichHtmlContent html={response.content || response.message || '無內容'} />
 	                                      </div>
 	                                    )}
 	
