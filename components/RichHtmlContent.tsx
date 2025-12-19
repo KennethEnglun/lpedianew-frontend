@@ -2,13 +2,50 @@ import React, { useEffect, useMemo, useRef } from 'react';
 import { createRoot, Root } from 'react-dom/client';
 import { sanitizeHtml } from '../services/sanitizeHtml';
 import ExecutableHtmlPreview from './ExecutableHtmlPreview';
-import { LPEDIA_HTML_PREVIEW_ATTR, LPEDIA_HTML_PREVIEW_CODE_PREFIX, LPEDIA_HTML_PREVIEW_HTML_ATTR } from '../services/htmlPreview';
+import { LPEDIA_HTML_PREVIEW_ATTR, LPEDIA_HTML_PREVIEW_CHUNK_ATTR, LPEDIA_HTML_PREVIEW_CODE_PREFIX, LPEDIA_HTML_PREVIEW_HTML_ATTR } from '../services/htmlPreview';
 
 const rootsByMount = new WeakMap<Element, Root>();
+
+function extractEncodedHtmlFromChunks(placeholder: Element): string | null {
+  const inputs = Array.from(placeholder.querySelectorAll(`input[${LPEDIA_HTML_PREVIEW_CHUNK_ATTR}]`));
+  if (inputs.length === 0) return null;
+
+  const chunks: { index: number; total: number; value: string }[] = [];
+  for (const input of inputs) {
+    const spec = (input.getAttribute(LPEDIA_HTML_PREVIEW_CHUNK_ATTR) || '').trim();
+    const value = input.getAttribute('value') || '';
+    const m = spec.match(/^(\d+)\s*\/\s*(\d+)$/);
+    if (!m) continue;
+    const index = Number(m[1]);
+    const total = Number(m[2]);
+    if (!Number.isFinite(index) || !Number.isFinite(total) || total <= 0 || index <= 0 || index > total) continue;
+    chunks.push({ index, total, value });
+  }
+
+  if (chunks.length === 0) return null;
+  const total = Math.max(...chunks.map((c) => c.total));
+  const byIndex = new Map<number, string>();
+  for (const c of chunks) {
+    if (c.total !== total) continue;
+    byIndex.set(c.index, c.value);
+  }
+
+  if (byIndex.size !== total) return null;
+  const ordered = [];
+  for (let i = 1; i <= total; i++) {
+    const v = byIndex.get(i);
+    if (!v) return null;
+    ordered.push(v);
+  }
+  return ordered.join('');
+}
 
 function extractEncodedHtml(placeholder: Element): string | null {
   const fromAttr = placeholder.getAttribute(LPEDIA_HTML_PREVIEW_HTML_ATTR);
   if (fromAttr) return fromAttr;
+
+  const fromChunks = extractEncodedHtmlFromChunks(placeholder);
+  if (fromChunks) return fromChunks;
 
   const code = placeholder.querySelector('code');
   const text = (code?.textContent || '').trim();
@@ -46,7 +83,15 @@ export default function RichHtmlContent({ html }: { html: string }) {
       })
       .filter(Boolean) as Element[];
 
+    // Fallback: payload stored in hidden <input> chunks.
+    const chunkPlaceholders = Array.from(container.querySelectorAll(`input[${LPEDIA_HTML_PREVIEW_CHUNK_ATTR}]`))
+      .map((input) => input.closest('div'))
+      .filter(Boolean) as Element[];
+
     for (const el of fallbackPlaceholders) {
+      if (!placeholders.includes(el)) placeholders.push(el);
+    }
+    for (const el of chunkPlaceholders) {
       if (!placeholders.includes(el)) placeholders.push(el);
     }
 

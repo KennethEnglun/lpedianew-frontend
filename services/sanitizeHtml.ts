@@ -4,7 +4,8 @@ const ALLOWED_TAGS = new Set([
   'ul', 'ol', 'li',
   'h1', 'h2', 'h3', 'h4', 'h5', 'h6',
   'blockquote', 'pre', 'code',
-  'a', 'img', 'font'
+  'a', 'img', 'font',
+  'input'
 ]);
 
 const ALLOWED_ATTRS: Record<string, Set<string>> = {
@@ -13,7 +14,8 @@ const ALLOWED_ATTRS: Record<string, Set<string>> = {
   font: new Set(['size', 'color', 'face']),
   div: new Set(['data-lpedia-html-preview', 'data-lpedia-html']),
   pre: new Set(['data-lpedia-html-preview', 'data-lpedia-html']),
-  code: new Set(['data-lpedia-html-preview', 'data-lpedia-html'])
+  code: new Set(['data-lpedia-html-preview', 'data-lpedia-html']),
+  input: new Set(['type', 'value', 'data-lpedia-html-preview-chunk'])
 };
 
 const ALLOWED_STYLE_PROPS = new Set([
@@ -151,6 +153,24 @@ export function sanitizeHtml(html: string): string {
       if (!allowedAttrs.has(name)) {
         el.removeAttribute(attr.name);
       }
+    }
+
+    if (tag === 'input') {
+      // Only allow hidden inputs (used to store executable HTML preview payload chunks).
+      const type = (el.getAttribute('type') || '').toLowerCase();
+      if (type !== 'hidden') {
+        el.setAttribute('type', 'hidden');
+      }
+      // Remove potentially interactive attributes if any slipped through.
+      el.removeAttribute('name');
+      el.removeAttribute('id');
+      el.removeAttribute('class');
+      el.removeAttribute('autocomplete');
+      el.removeAttribute('placeholder');
+      el.removeAttribute('checked');
+      el.removeAttribute('disabled');
+      el.removeAttribute('readonly');
+      el.removeAttribute('required');
     }
 
     if (tag === 'a') {

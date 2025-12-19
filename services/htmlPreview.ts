@@ -2,6 +2,10 @@ export const LPEDIA_HTML_PREVIEW_ATTR = 'data-lpedia-html-preview';
 export const LPEDIA_HTML_PREVIEW_HTML_ATTR = 'data-lpedia-html';
 export const MAX_LPEDIA_HTML_PREVIEW_CHARS = 300_000;
 export const LPEDIA_HTML_PREVIEW_CODE_PREFIX = 'LPEDIA_HTML_BASE64:';
+export const LPEDIA_HTML_PREVIEW_CHUNK_ATTR = 'data-lpedia-html-preview-chunk';
+
+const MAX_INLINE_ATTR_LEN = 8192;
+const BASE64_CHUNK_SIZE = 7000;
 
 export function looksLikeExecutableHtml(input: string): boolean {
   const text = (input || '').trim().toLowerCase();
@@ -48,12 +52,17 @@ export function buildHtmlPreviewPlaceholder(rawHtml: string): string {
     throw new Error('HTML too large for preview');
   }
   const encoded = encodeUtf8ToBase64(rawHtml);
-  const includeAttr = encoded.length <= 8192;
+  const includeAttr = encoded.length <= MAX_INLINE_ATTR_LEN;
+  const chunks = splitIntoChunks(encoded, BASE64_CHUNK_SIZE);
   return [
     `<div ${LPEDIA_HTML_PREVIEW_ATTR}="1"${includeAttr ? ` ${LPEDIA_HTML_PREVIEW_HTML_ATTR}="${encoded}"` : ''}`,
     'style="border: 2px dashed #94a3b8; padding: 12px; border-radius: 12px; background-color: #f8fafc;">',
     '<div style="font-weight: 800; margin-bottom: 4px;">HTML 可執行預覽</div>',
     '<div style="font-size: 12px; color: #64748b;">此區塊會在討論串中以 iframe 方式執行（允許外部資源與網路連線）。</div>',
+    // Store payload in multiple hidden inputs to avoid attribute length limits and survive contentEditable sanitization.
+    ...chunks.map((chunk, idx) =>
+      `<input type="hidden" ${LPEDIA_HTML_PREVIEW_CHUNK_ATTR}="${idx + 1}/${chunks.length}" value="${escapeHtmlAttribute(chunk)}">`
+    ),
     `<pre style="display: none;"><code>${LPEDIA_HTML_PREVIEW_CODE_PREFIX}${encoded}</code></pre>`,
     '</div>',
     '<div><br></div>'
@@ -66,6 +75,16 @@ function escapeHtmlAttribute(value: string): string {
     .replace(/"/g, '&quot;')
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;');
+}
+
+function splitIntoChunks(value: string, chunkSize: number): string[] {
+  if (!value) return [''];
+  if (value.length <= chunkSize) return [value];
+  const out: string[] = [];
+  for (let i = 0; i < value.length; i += chunkSize) {
+    out.push(value.slice(i, i + chunkSize));
+  }
+  return out;
 }
 
 export function injectCspIntoHtml(rawHtml: string, csp: string): string {
