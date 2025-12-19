@@ -6,6 +6,13 @@ import { validateRationalAgainstConstraints, validateTokensAgainstConstraints } 
 import { parseMathExpressionToTokens } from '../services/mathExpressionParser';
 import { FractionView, MathExpressionView } from './MathExpressionView';
 
+const isPowerOfTen = (n: number) => {
+  if (!Number.isInteger(n) || n <= 0) return false;
+  let x = n;
+  while (x % 10 === 0) x = Math.trunc(x / 10);
+  return x === 1;
+};
+
 export const MathExpressionBuilder: React.FC<{
   tokens: MathToken[];
   onChange: (next: MathToken[]) => void;
@@ -276,7 +283,7 @@ export const finalizeMathQuestions = (drafts: Array<{ tokens: MathToken[] }>, co
   allowParentheses: boolean;
   constraints?: MathConstraints;
 }) => {
-  return drafts.map((d, idx) => {
+  const computed = drafts.map((d, idx) => {
     const tokens = Array.isArray(d.tokens) ? d.tokens : [];
     const v = validateTokens(tokens, config.allowedOps, config.allowParentheses);
     if (!v.ok) throw new Error(`第 ${idx + 1} 題：${v.error}`);
@@ -295,4 +302,12 @@ export const finalizeMathQuestions = (drafts: Array<{ tokens: MathToken[] }>, co
     }
     return { tokens, answer };
   });
+
+  const hasDecimal = computed.some((q: any) => q?.answer?.d !== 1 && isPowerOfTen(Number(q?.answer?.d)));
+  const hasFraction = computed.some((q: any) => q?.answer?.d !== 1 && !isPowerOfTen(Number(q?.answer?.d)));
+  if (hasDecimal && hasFraction) {
+    throw new Error('小數題與分數題不可同時出題，請改成全小數或全分數');
+  }
+
+  return computed;
 };
