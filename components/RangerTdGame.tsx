@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Canvas, useFrame } from '@react-three/fiber';
 import type { MathToken, Rational } from '../services/mathGame';
-import { isPowerOfTen, normalizeRational, rationalKey } from '../services/mathGame';
+import { generateMcqChoices, isPowerOfTen, normalizeRational, rationalKey } from '../services/mathGame';
 import { authService } from '../services/authService';
 import { MathExpressionView } from './MathExpressionView';
 
@@ -308,6 +308,7 @@ export const RangerTdGame: React.FC<{
 }> = ({ game, gameId, onExit, onStart, onComplete }) => {
   const cfg = (game?.rangerTd && typeof game.rangerTd === 'object') ? game.rangerTd : {};
   const allowNegative = Boolean(cfg?.constraints?.allowNegative);
+  const answerMode: 'mcq' | 'input' = String(cfg?.answerMode || 'mcq').trim() === 'input' ? 'input' : 'mcq';
   const wrongTowerDamage = Number(cfg?.wrongTowerDamage) || 2;
   const towerHpMax = Number(cfg?.towerHp) || 20;
   const timeLimitSeconds: number | null = typeof game?.timeLimitSeconds === 'number' ? game.timeLimitSeconds : 300;
@@ -343,6 +344,10 @@ export const RangerTdGame: React.FC<{
   const [inputDen, setInputDen] = useState('');
   const [inputFocus, setInputFocus] = useState<InputFocus>('whole');
 
+  const mcqCacheRef = useRef(new Map<string, { choices: Rational[]; correctIndex: number }>());
+  const [mcqLocked, setMcqLocked] = useState(false);
+  const [mcqFeedback, setMcqFeedback] = useState<null | { ok: boolean; correctIndex: number; pickedIndex: number }>(null);
+
   const current: StageQuestion | null = stageQuestions[qIndex] || null;
   const answer: Rational | null = current?.answer ? normalizeRational(current.answer) : null;
   const configuredNumberMode: 'fraction' | 'decimal' | null = current?.numberMode || null;
@@ -365,6 +370,11 @@ export const RangerTdGame: React.FC<{
     setInputNum('');
     setInputDen('');
   };
+
+  useEffect(() => {
+    setMcqLocked(false);
+    setMcqFeedback(null);
+  }, [stageIndex, qIndex]);
 
   useEffect(() => { playerHpRef.current = playerHp; }, [playerHp]);
   useEffect(() => { enemyHpRef.current = enemyHp; }, [enemyHp]);
@@ -532,6 +542,8 @@ export const RangerTdGame: React.FC<{
       enemyHpRef.current = 30 + nextStageIndex * 5;
       enemySpawnAccRef.current = 0;
       setUnitsBoth([]);
+      setMcqLocked(false);
+      setMcqFeedback(null);
       // initial units so battle starts immediately
       window.setTimeout(() => {
         spawnUnit('player');
@@ -606,9 +618,22 @@ export const RangerTdGame: React.FC<{
   useEffect(() => {
     if (!answer) return;
     if (loading) return;
+    if (answerMode !== 'input') return;
     const nextMode: InputMode = answerNumberType === 'dec' ? 'dec' : (answerNumberType === 'frac' ? 'frac' : 'int');
     resetInput(nextMode);
-  }, [qIndex, answerNumberType, loading, answer?.n, answer?.d]);
+  }, [qIndex, answerMode, answerNumberType, loading, answer?.n, answer?.d]);
+
+  const mcqPack = useMemo(() => {
+    if (answerMode !== 'mcq') return null;
+    if (!answer) return null;
+    const mode = configuredNumberMode === 'decimal' ? 'decimal' : 'fraction';
+    const key = `${stageIndex}:${qIndex}:${mode}:${rationalKey(answer)}`;
+    const hit = mcqCacheRef.current.get(key);
+    if (hit) return hit;
+    const pack = generateMcqChoices(answer, { numberMode: mode });
+    mcqCacheRef.current.set(key, pack);
+    return pack;
+  }, [answerMode, configuredNumberMode, stageIndex, qIndex, answer?.n, answer?.d]);
 
   const applyKey = (key: string) => {
     const setTargetInt = (setter: (v: string) => void, currentValue: string) => {
@@ -655,30 +680,25 @@ export const RangerTdGame: React.FC<{
     if (inputFocus === 'den') setTargetInt(setInputDen, inputDen);
   };
 
-  const submit = () => {
-    if (!answer) return;
-    const built = buildRationalFromUi({ sign: inputSign, mode: inputMode, whole: inputWhole, num: inputNum, den: inputDen });
-    if (!built.ok) return alert(built.error);
-
-    const ok = rationalKey(built.value) === rationalKey(answer);
+  const applyAnswerEffects = (ok: boolean) => {
     setAnswered((n) => n + 1);
     if (ok) {
       setCorrect((n) => n + 1);
-      // summon friendly unit; higher combo has chance to summon extra
       spawnUnit('player');
       setCombo((c) => {
         const next = c + 1;
         if (next % 3 === 0) spawnUnit('player', 'archer');
         return next;
       });
-    } else {
-      setCombo(0);
-      setPlayerHp((hp) => Math.max(0, hp - Math.max(1, Math.floor(wrongTowerDamage))));
+      return;
     }
+    setCombo(0);
+    setPlayerHp((hp) => Math.max(0, hp - Math.max(1, Math.floor(wrongTowerDamage))));
+  };
 
+  const advanceAfterAnswer = () => {
     const next = qIndex + 1;
     if (next >= stageQuestions.length) {
-      // stage clear -> simple skill upgrade
       setSkillLevel((lv) => lv + 1);
       setStageIndex((s) => {
         const ns = s + 1;
@@ -688,6 +708,32 @@ export const RangerTdGame: React.FC<{
       return;
     }
     setQIndex(next);
+  };
+
+  const submit = () => {
+    if (!answer) return;
+    if (answerMode !== 'input') return;
+    const built = buildRationalFromUi({ sign: inputSign, mode: inputMode, whole: inputWhole, num: inputNum, den: inputDen });
+    if (!built.ok) return alert(built.error);
+    const ok = rationalKey(built.value) === rationalKey(answer);
+    applyAnswerEffects(ok);
+    advanceAfterAnswer();
+  };
+
+  const pickMcq = (pickedIndex: number) => {
+    if (answerMode !== 'mcq') return;
+    if (!mcqPack) return;
+    if (loading || mcqLocked || completedRef.current) return;
+    const ok = pickedIndex === mcqPack.correctIndex;
+    setMcqLocked(true);
+    setMcqFeedback({ ok, correctIndex: mcqPack.correctIndex, pickedIndex });
+    applyAnswerEffects(ok);
+    window.setTimeout(() => {
+      if (completedRef.current) return;
+      setMcqFeedback(null);
+      setMcqLocked(false);
+      advanceAfterAnswer();
+    }, 450);
   };
 
   if (loading && stageQuestions.length === 0) {
@@ -750,167 +796,209 @@ export const RangerTdGame: React.FC<{
           )}
         </div>
 
-        <div className="mt-3 flex items-center justify-between gap-3 flex-wrap">
-          <div className="flex items-center gap-2 flex-wrap">
-            <button
-              type="button"
-              onClick={() => resetInput('int')}
-              disabled={configuredNumberMode === 'decimal' || (answerNumberType !== 'int' && configuredNumberMode !== null)}
-              className={`px-3 py-1 rounded-full border-2 font-black ${inputMode === 'int' ? 'bg-[#B5F8CE] border-[#4FBF7A] text-[#2F2A4A]' : 'bg-white/10 border-white/20 text-white hover:bg-white/20'} disabled:opacity-50 disabled:cursor-not-allowed`}
-            >
-              整數
-            </button>
-            <button
-              type="button"
-              onClick={() => resetInput('frac')}
-              disabled={configuredNumberMode === 'decimal'}
-              className={`px-3 py-1 rounded-full border-2 font-black ${inputMode === 'frac' ? 'bg-[#B5D8F8] border-[#4B87BF] text-[#2F2A4A]' : 'bg-white/10 border-white/20 text-white hover:bg-white/20'} disabled:opacity-50 disabled:cursor-not-allowed`}
-            >
-              分數
-            </button>
-            <button
-              type="button"
-              onClick={() => resetInput('mixed')}
-              disabled={configuredNumberMode === 'decimal'}
-              className={`px-3 py-1 rounded-full border-2 font-black ${inputMode === 'mixed' ? 'bg-[#FDEEAD] border-[#B98B4F] text-[#2F2A4A]' : 'bg-white/10 border-white/20 text-white hover:bg-white/20'} disabled:opacity-50 disabled:cursor-not-allowed`}
-            >
-              帶分數
-            </button>
-            <button
-              type="button"
-              onClick={() => resetInput('dec')}
-              disabled={configuredNumberMode === 'fraction' || (answerNumberType !== 'dec' && configuredNumberMode !== null)}
-              className={`px-3 py-1 rounded-full border-2 font-black ${inputMode === 'dec' ? 'bg-[#FFD4B5] border-[#B97A4F] text-[#2F2A4A]' : 'bg-white/10 border-white/20 text-white hover:bg-white/20'} disabled:opacity-50 disabled:cursor-not-allowed`}
-            >
-              小數
-            </button>
-          </div>
-
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={() => {
-                setInputWhole('');
-                setInputNum('');
-                setInputDen('');
-                setInputSign(1);
-              }}
-              className="px-4 py-2 rounded-2xl bg-white/10 hover:bg-white/20 text-white font-black border-2 border-white/20"
-            >
-              清除
-            </button>
-            <button
-              type="button"
-              onClick={submit}
-              className="px-6 py-2 rounded-2xl bg-[#FFD4B5] text-[#2F2A4A] font-black text-lg border-2 border-white/20 hover:bg-[#FFF6D6]"
-            >
-              提交
-            </button>
-          </div>
-        </div>
-
-        <div className="mt-3 flex items-center justify-between gap-3 flex-wrap">
-          <div className="flex items-center gap-3 flex-wrap">
-            <button
-              type="button"
-              onClick={() => setInputSign(1)}
-              className={`px-3 py-1 rounded-full border-2 font-black ${inputSign === 1 ? 'bg-white text-[#2F2A4A]' : 'bg-white/10 border-white/20 text-white hover:bg-white/20'}`}
-            >
-              +
-            </button>
-            <button
-              type="button"
-              onClick={() => setInputSign(-1)}
-              disabled={!allowNegative}
-              className={`px-3 py-1 rounded-full border-2 font-black ${inputSign === -1 ? 'bg-white text-[#2F2A4A]' : 'bg-white/10 border-white/20 text-white hover:bg-white/20'} disabled:opacity-50 disabled:cursor-not-allowed`}
-            >
-              −
-            </button>
-
-            {inputMode === 'dec' && (
-              <input
-                value={inputWhole}
-                onChange={(e) => setInputWhole(clampDecimal(e.target.value, 10))}
-                className="w-56 px-3 py-2 rounded-2xl bg-white/20 border-2 border-white/20 font-black text-white focus:outline-none"
-                placeholder="輸入小數"
-                inputMode="decimal"
-              />
+        {answerMode === 'mcq' ? (
+          <div className="mt-4">
+            {!mcqPack ? (
+              <div className="text-white/80 font-black">載入選項中…</div>
+            ) : (
+              <div className="grid grid-cols-2 gap-3">
+                {mcqPack.choices.map((c, idx) => {
+                  const isCorrect = mcqFeedback ? idx === mcqFeedback.correctIndex : false;
+                  const isWrongPick = mcqFeedback ? (!mcqFeedback.ok && idx === mcqFeedback.pickedIndex) : false;
+                  const baseCls = 'w-full min-h-14 rounded-2xl border-2 font-black text-lg shadow-sm transition';
+                  const cls = mcqFeedback
+                    ? (isCorrect
+                      ? `${baseCls} bg-[#B5F8CE]/80 border-[#4FBF7A] text-[#2F2A4A]`
+                      : isWrongPick
+                        ? `${baseCls} bg-[#FFB5B5]/80 border-[#7A1F1F] text-[#2F2A4A]`
+                        : `${baseCls} bg-white/10 border-white/20 text-white/60`)
+                    : `${baseCls} bg-white/10 border-white/20 text-white hover:bg-white/20 hover:-translate-y-[1px] active:translate-y-0`;
+                  return (
+                    <button
+                      key={`mcq-${idx}-${rationalKey(c)}`}
+                      type="button"
+                      disabled={loading || mcqLocked || completedRef.current}
+                      onClick={() => pickMcq(idx)}
+                      className={cls}
+                    >
+                      <span className="inline-flex items-center gap-2">
+                        <span className="opacity-80">{String.fromCharCode(65 + idx)}.</span>
+                        <span className="text-xl">
+                          <MathExpressionView tokens={[{ t: 'num', n: c.n, d: c.d }]} />
+                        </span>
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
             )}
+            <div className="mt-3 text-sm text-white/80 font-black">答對獲得技能/召喚，答錯扣塔血</div>
+          </div>
+        ) : (
+          <>
+            <div className="mt-3 flex items-center justify-between gap-3 flex-wrap">
+              <div className="flex items-center gap-2 flex-wrap">
+                <button
+                  type="button"
+                  onClick={() => resetInput('int')}
+                  disabled={configuredNumberMode === 'decimal' || (answerNumberType !== 'int' && configuredNumberMode !== null)}
+                  className={`px-3 py-1 rounded-full border-2 font-black ${inputMode === 'int' ? 'bg-[#B5F8CE] border-[#4FBF7A] text-[#2F2A4A]' : 'bg-white/10 border-white/20 text-white hover:bg-white/20'} disabled:opacity-50 disabled:cursor-not-allowed`}
+                >
+                  整數
+                </button>
+                <button
+                  type="button"
+                  onClick={() => resetInput('frac')}
+                  disabled={configuredNumberMode === 'decimal'}
+                  className={`px-3 py-1 rounded-full border-2 font-black ${inputMode === 'frac' ? 'bg-[#B5D8F8] border-[#4B87BF] text-[#2F2A4A]' : 'bg-white/10 border-white/20 text-white hover:bg-white/20'} disabled:opacity-50 disabled:cursor-not-allowed`}
+                >
+                  分數
+                </button>
+                <button
+                  type="button"
+                  onClick={() => resetInput('mixed')}
+                  disabled={configuredNumberMode === 'decimal'}
+                  className={`px-3 py-1 rounded-full border-2 font-black ${inputMode === 'mixed' ? 'bg-[#FDEEAD] border-[#B98B4F] text-[#2F2A4A]' : 'bg-white/10 border-white/20 text-white hover:bg-white/20'} disabled:opacity-50 disabled:cursor-not-allowed`}
+                >
+                  帶分數
+                </button>
+                <button
+                  type="button"
+                  onClick={() => resetInput('dec')}
+                  disabled={configuredNumberMode === 'fraction' || (answerNumberType !== 'dec' && configuredNumberMode !== null)}
+                  className={`px-3 py-1 rounded-full border-2 font-black ${inputMode === 'dec' ? 'bg-[#FFD4B5] border-[#B97A4F] text-[#2F2A4A]' : 'bg-white/10 border-white/20 text-white hover:bg-white/20'} disabled:opacity-50 disabled:cursor-not-allowed`}
+                >
+                  小數
+                </button>
+              </div>
 
-            {(inputMode === 'int') && (
-              <input
-                value={inputWhole}
-                onChange={(e) => setInputWhole(clampDigits(e.target.value))}
-                className="w-56 px-3 py-2 rounded-2xl bg-white/20 border-2 border-white/20 font-black text-white focus:outline-none"
-                placeholder="輸入整數"
-                inputMode="numeric"
-              />
-            )}
-
-            {inputMode === 'frac' && (
               <div className="flex items-center gap-2">
                 <button
                   type="button"
-                  onClick={() => setInputFocus('num')}
-                  className={`w-32 px-3 py-2 rounded-2xl border-2 font-black ${inputFocus === 'num' ? 'bg-white text-[#2F2A4A]' : 'bg-white/10 border-white/20 text-white hover:bg-white/20'}`}
+                  onClick={() => {
+                    setInputWhole('');
+                    setInputNum('');
+                    setInputDen('');
+                    setInputSign(1);
+                  }}
+                  className="px-4 py-2 rounded-2xl bg-white/10 hover:bg-white/20 text-white font-black border-2 border-white/20"
                 >
-                  {inputNum || '分子'}
+                  清除
                 </button>
-                <span className="font-black">/</span>
                 <button
                   type="button"
-                  onClick={() => setInputFocus('den')}
-                  className={`w-32 px-3 py-2 rounded-2xl border-2 font-black ${inputFocus === 'den' ? 'bg-white text-[#2F2A4A]' : 'bg-white/10 border-white/20 text-white hover:bg-white/20'}`}
+                  onClick={submit}
+                  className="px-6 py-2 rounded-2xl bg-[#FFD4B5] text-[#2F2A4A] font-black text-lg border-2 border-white/20 hover:bg-[#FFF6D6]"
                 >
-                  {inputDen || '分母'}
+                  提交
                 </button>
               </div>
-            )}
+            </div>
 
-            {inputMode === 'mixed' && (
-              <div className="flex items-center gap-2">
+            <div className="mt-3 flex items-center justify-between gap-3 flex-wrap">
+              <div className="flex items-center gap-3 flex-wrap">
                 <button
                   type="button"
-                  onClick={() => setInputFocus('whole')}
-                  className={`w-24 px-3 py-2 rounded-2xl border-2 font-black ${inputFocus === 'whole' ? 'bg-white text-[#2F2A4A]' : 'bg-white/10 border-white/20 text-white hover:bg-white/20'}`}
+                  onClick={() => setInputSign(1)}
+                  className={`px-3 py-1 rounded-full border-2 font-black ${inputSign === 1 ? 'bg-white text-[#2F2A4A]' : 'bg-white/10 border-white/20 text-white hover:bg-white/20'}`}
                 >
-                  {inputWhole || '整數'}
+                  +
                 </button>
-                <span className="font-black">^</span>
                 <button
                   type="button"
-                  onClick={() => setInputFocus('num')}
-                  className={`w-24 px-3 py-2 rounded-2xl border-2 font-black ${inputFocus === 'num' ? 'bg-white text-[#2F2A4A]' : 'bg-white/10 border-white/20 text-white hover:bg-white/20'}`}
+                  onClick={() => setInputSign(-1)}
+                  disabled={!allowNegative}
+                  className={`px-3 py-1 rounded-full border-2 font-black ${inputSign === -1 ? 'bg-white text-[#2F2A4A]' : 'bg-white/10 border-white/20 text-white hover:bg-white/20'} disabled:opacity-50 disabled:cursor-not-allowed`}
                 >
-                  {inputNum || '分子'}
+                  −
                 </button>
-                <span className="font-black">/</span>
-                <button
-                  type="button"
-                  onClick={() => setInputFocus('den')}
-                  className={`w-24 px-3 py-2 rounded-2xl border-2 font-black ${inputFocus === 'den' ? 'bg-white text-[#2F2A4A]' : 'bg-white/10 border-white/20 text-white hover:bg-white/20'}`}
-                >
-                  {inputDen || '分母'}
-                </button>
+
+                {inputMode === 'dec' && (
+                  <input
+                    value={inputWhole}
+                    onChange={(e) => setInputWhole(clampDecimal(e.target.value, 10))}
+                    className="w-56 px-3 py-2 rounded-2xl bg-white/20 border-2 border-white/20 font-black text-white focus:outline-none"
+                    placeholder="輸入小數"
+                    inputMode="decimal"
+                  />
+                )}
+
+                {(inputMode === 'int') && (
+                  <input
+                    value={inputWhole}
+                    onChange={(e) => setInputWhole(clampDigits(e.target.value))}
+                    className="w-56 px-3 py-2 rounded-2xl bg-white/20 border-2 border-white/20 font-black text-white focus:outline-none"
+                    placeholder="輸入整數"
+                    inputMode="numeric"
+                  />
+                )}
+
+                {inputMode === 'frac' && (
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setInputFocus('num')}
+                      className={`w-32 px-3 py-2 rounded-2xl border-2 font-black ${inputFocus === 'num' ? 'bg-white text-[#2F2A4A]' : 'bg-white/10 border-white/20 text-white hover:bg-white/20'}`}
+                    >
+                      {inputNum || '分子'}
+                    </button>
+                    <span className="font-black">/</span>
+                    <button
+                      type="button"
+                      onClick={() => setInputFocus('den')}
+                      className={`w-32 px-3 py-2 rounded-2xl border-2 font-black ${inputFocus === 'den' ? 'bg-white text-[#2F2A4A]' : 'bg-white/10 border-white/20 text-white hover:bg-white/20'}`}
+                    >
+                      {inputDen || '分母'}
+                    </button>
+                  </div>
+                )}
+
+                {inputMode === 'mixed' && (
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setInputFocus('whole')}
+                      className={`w-24 px-3 py-2 rounded-2xl border-2 font-black ${inputFocus === 'whole' ? 'bg-white text-[#2F2A4A]' : 'bg-white/10 border-white/20 text-white hover:bg-white/20'}`}
+                    >
+                      {inputWhole || '整數'}
+                    </button>
+                    <span className="font-black">^</span>
+                    <button
+                      type="button"
+                      onClick={() => setInputFocus('num')}
+                      className={`w-24 px-3 py-2 rounded-2xl border-2 font-black ${inputFocus === 'num' ? 'bg-white text-[#2F2A4A]' : 'bg-white/10 border-white/20 text-white hover:bg-white/20'}`}
+                    >
+                      {inputNum || '分子'}
+                    </button>
+                    <span className="font-black">/</span>
+                    <button
+                      type="button"
+                      onClick={() => setInputFocus('den')}
+                      className={`w-24 px-3 py-2 rounded-2xl border-2 font-black ${inputFocus === 'den' ? 'bg-white text-[#2F2A4A]' : 'bg-white/10 border-white/20 text-white hover:bg-white/20'}`}
+                    >
+                      {inputDen || '分母'}
+                    </button>
+                  </div>
+                )}
               </div>
-            )}
-          </div>
 
-          <div className="text-sm text-white/80 font-black">答對獲得技能/召喚，答錯扣塔血</div>
-        </div>
+              <div className="text-sm text-white/80 font-black">答對獲得技能/召喚，答錯扣塔血</div>
+            </div>
 
-        <div className="mt-3 grid grid-cols-3 gap-2">
-          {(inputMode === 'dec'
-            ? ['7', '8', '9', '4', '5', '6', '1', '2', '3', '.', '0', '⌫']
-            : ['7', '8', '9', '4', '5', '6', '1', '2', '3', ...(allowNegative ? ['±'] : ['清除']), '0', '⌫']
-          ).map((k) => (
-            <KeypadButton
-              key={k}
-              label={k}
-              onClick={() => applyKey(k)}
-            />
-          ))}
-        </div>
+            <div className="mt-3 grid grid-cols-3 gap-2">
+              {(inputMode === 'dec'
+                ? ['7', '8', '9', '4', '5', '6', '1', '2', '3', '.', '0', '⌫']
+                : ['7', '8', '9', '4', '5', '6', '1', '2', '3', ...(allowNegative ? ['±'] : ['清除']), '0', '⌫']
+              ).map((k) => (
+                <KeypadButton
+                  key={k}
+                  label={k}
+                  onClick={() => applyKey(k)}
+                />
+              ))}
+            </div>
+          </>
+        )}
       </div>
     </div>
   );

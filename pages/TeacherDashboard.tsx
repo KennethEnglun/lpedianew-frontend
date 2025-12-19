@@ -219,6 +219,7 @@ const TeacherDashboard: React.FC = () => {
   const [rangerMaxDecimalPlacesText, setRangerMaxDecimalPlacesText] = useState('2');
   const [rangerEquationSteps, setRangerEquationSteps] = useState<1 | 2>(2);
   const [rangerEquationAnswerType, setRangerEquationAnswerType] = useState<'any' | 'int' | 'properFraction' | 'decimal'>('int');
+  const [rangerAnswerMode, setRangerAnswerMode] = useState<'mcq' | 'input'>('mcq');
   const [rangerWrongTowerDamageText, setRangerWrongTowerDamageText] = useState('2');
   const [rangerTowerHpText, setRangerTowerHpText] = useState('20');
   const [rangerPromptText, setRangerPromptText] = useState('');
@@ -3705,6 +3706,21 @@ const TeacherDashboard: React.FC = () => {
 
 	              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
 	                <div>
+	                  <label className="block text-sm font-bold text-amber-900 mb-2">作答方式</label>
+	                  <select
+	                    value={rangerAnswerMode}
+	                    onChange={(e) => setRangerAnswerMode(e.target.value === 'input' ? 'input' : 'mcq')}
+	                    className="w-full px-4 py-2 border-4 border-amber-300 rounded-2xl bg-white font-bold"
+	                  >
+	                    <option value="mcq">選擇題（MCQ）</option>
+	                    <option value="input">輸入答案</option>
+	                  </select>
+	                  <p className="text-xs text-gray-600 mt-1">建議先用 MCQ 讓學生快速上手</p>
+	                </div>
+	              </div>
+
+	              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+	                <div>
 	                  <label className="block text-sm font-bold text-amber-900 mb-2">題型比例（方程式 %）</label>
 	                  <input
 	                    value={rangerEquationPercentText}
@@ -3962,6 +3978,7 @@ const TeacherDashboard: React.FC = () => {
 	                        livesLimit: null,
 	                        rangerTd: {
 	                          grade: rangerGrade,
+	                          answerMode: rangerAnswerMode,
 	                          perStageQuestionCount: rangerStageQuestionCount,
 	                          equationPercent: eqPercent,
 	                          decimalPercent: decPercent,
