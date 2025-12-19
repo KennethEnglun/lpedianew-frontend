@@ -1,6 +1,7 @@
 export const LPEDIA_HTML_PREVIEW_ATTR = 'data-lpedia-html-preview';
 export const LPEDIA_HTML_PREVIEW_HTML_ATTR = 'data-lpedia-html';
 export const MAX_LPEDIA_HTML_PREVIEW_CHARS = 300_000;
+export const LPEDIA_HTML_PREVIEW_CODE_PREFIX = 'LPEDIA_HTML_BASE64:';
 
 export function looksLikeExecutableHtml(input: string): boolean {
   const text = (input || '').trim().toLowerCase();
@@ -47,11 +48,13 @@ export function buildHtmlPreviewPlaceholder(rawHtml: string): string {
     throw new Error('HTML too large for preview');
   }
   const encoded = encodeUtf8ToBase64(rawHtml);
+  const includeAttr = encoded.length <= 8192;
   return [
-    `<div ${LPEDIA_HTML_PREVIEW_ATTR}="1" ${LPEDIA_HTML_PREVIEW_HTML_ATTR}="${encoded}"`,
+    `<div ${LPEDIA_HTML_PREVIEW_ATTR}="1"${includeAttr ? ` ${LPEDIA_HTML_PREVIEW_HTML_ATTR}="${encoded}"` : ''}`,
     'style="border: 2px dashed #94a3b8; padding: 12px; border-radius: 12px; background-color: #f8fafc;">',
     '<div style="font-weight: 800; margin-bottom: 4px;">HTML 可執行預覽</div>',
     '<div style="font-size: 12px; color: #64748b;">此區塊會在討論串中以 iframe 方式執行（允許外部資源與網路連線）。</div>',
+    `<pre style="display: none;"><code>${LPEDIA_HTML_PREVIEW_CODE_PREFIX}${encoded}</code></pre>`,
     '</div>',
     '<div><br></div>'
   ].join('');
