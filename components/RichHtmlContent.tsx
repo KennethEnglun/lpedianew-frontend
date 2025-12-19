@@ -65,6 +65,10 @@ export default function RichHtmlContent({ html }: { html: string }) {
     const container = containerRef.current;
     if (!container) return;
 
+    // Let this component own the DOM contents so React rerenders (common in StudentDashboard)
+    // won't overwrite our placeholder replacements.
+    container.innerHTML = safeHtml;
+
     const mounts: Element[] = [];
     const placeholders: Element[] = Array.from(
       container.querySelectorAll(`[${LPEDIA_HTML_PREVIEW_ATTR}="1"]`)
@@ -121,5 +125,5 @@ export default function RichHtmlContent({ html }: { html: string }) {
     };
   }, [safeHtml]);
 
-  return <div ref={containerRef} dangerouslySetInnerHTML={{ __html: safeHtml }} />;
+  return <div ref={containerRef} />;
 }
