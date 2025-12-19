@@ -18,17 +18,28 @@ export function looksLikeExecutableHtml(input: string): boolean {
 }
 
 export function encodeUtf8ToBase64(text: string): string {
-  const bytes = new TextEncoder().encode(text);
-  let binary = '';
-  for (const byte of bytes) binary += String.fromCharCode(byte);
-  return btoa(binary);
+  if (typeof TextEncoder !== 'undefined') {
+    const bytes = new TextEncoder().encode(text);
+    let binary = '';
+    for (const byte of bytes) binary += String.fromCharCode(byte);
+    return btoa(binary);
+  }
+
+  // Fallback for older browsers.
+  return btoa(unescape(encodeURIComponent(text)));
 }
 
 export function decodeBase64ToUtf8(encoded: string): string {
   const binary = atob(encoded);
-  const bytes = new Uint8Array(binary.length);
-  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
-  return new TextDecoder().decode(bytes);
+
+  if (typeof TextDecoder !== 'undefined') {
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+    return new TextDecoder().decode(bytes);
+  }
+
+  // Fallback for older browsers.
+  return decodeURIComponent(escape(binary));
 }
 
 export function buildHtmlPreviewPlaceholder(rawHtml: string): string {
@@ -48,10 +59,10 @@ export function buildHtmlPreviewPlaceholder(rawHtml: string): string {
 
 function escapeHtmlAttribute(value: string): string {
   return value
-    .replaceAll('&', '&amp;')
-    .replaceAll('"', '&quot;')
-    .replaceAll('<', '&lt;')
-    .replaceAll('>', '&gt;');
+    .replace(/&/g, '&amp;')
+    .replace(/"/g, '&quot;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
 }
 
 export function injectCspIntoHtml(rawHtml: string, csp: string): string {
@@ -94,4 +105,3 @@ export function buildPreviewSrcDoc(rawHtml: string): string {
 
   return injectCspIntoHtml(rawHtml, csp);
 }
-

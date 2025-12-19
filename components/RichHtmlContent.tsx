@@ -24,7 +24,9 @@ export default function RichHtmlContent({ html }: { html: string }) {
       if (!encoded) continue;
 
       const mount = document.createElement('div');
-      placeholder.replaceWith(mount);
+      const parent = placeholder.parentNode;
+      if (!parent) continue;
+      parent.replaceChild(mount, placeholder);
       mounts.push(mount);
 
       const root = createRoot(mount);
@@ -45,4 +47,3 @@ export default function RichHtmlContent({ html }: { html: string }) {
 
   return <div ref={containerRef} dangerouslySetInnerHTML={{ __html: safeHtml }} />;
 }
-
