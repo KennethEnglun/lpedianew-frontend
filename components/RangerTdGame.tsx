@@ -1,13 +1,14 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Canvas, useFrame } from '@react-three/fiber';
 import type { MathToken, Rational } from '../services/mathGame';
-import { generateMcqChoices, isPowerOfTen, normalizeRational, rationalKey } from '../services/mathGame';
+import { isPowerOfTen, normalizeRational, rationalKey } from '../services/mathGame';
 import { authService } from '../services/authService';
 import { MathExpressionView } from './MathExpressionView';
 
 type StageQuestion =
   | { kind: 'calc'; numberMode: 'fraction' | 'decimal'; tokens: MathToken[]; answer: Rational }
-  | { kind: 'eq'; numberMode: 'fraction' | 'decimal'; equation: string; leftTokens: MathToken[]; rightTokens: MathToken[]; answer: Rational };
+  | { kind: 'eq'; numberMode: 'fraction' | 'decimal'; equation: string; leftTokens: MathToken[]; rightTokens: MathToken[]; answer: Rational }
+  | { kind: 'mcq'; prompt: string; options: string[]; correctIndex: number };
 
 type InputMode = 'int' | 'frac' | 'mixed' | 'dec';
 type InputFocus = 'whole' | 'num' | 'den';
@@ -142,6 +143,61 @@ const KeypadButton: React.FC<{
 const clamp01 = (x: number) => Math.max(0, Math.min(1, x));
 
 const nowId = () => `${Date.now().toString(36)}-${Math.random().toString(16).slice(2)}`;
+
+const shuffleInPlace = <T,>(arr: T[]) => {
+  for (let i = arr.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [arr[i], arr[j]] = [arr[j], arr[i]];
+  }
+  return arr;
+};
+
+const normalizeBankQuestions = (raw: any): Array<{ prompt: string; options: string[]; correctIndex: number }> => {
+  const list = Array.isArray(raw) ? raw : [];
+  const out: Array<{ prompt: string; options: string[]; correctIndex: number }> = [];
+  for (const q of list) {
+    if (!q || typeof q !== 'object') continue;
+    const type = String((q as any).type || '').trim();
+    if (type === 'mcq') {
+      const prompt = String((q as any).prompt || '').trim();
+      const options = Array.isArray((q as any).options) ? (q as any).options.map((x: any) => String(x ?? '').trim()) : [];
+      const correctIndex = Number.isInteger((q as any).correctIndex) ? Number((q as any).correctIndex) : 0;
+      if (!prompt) continue;
+      if (options.length !== 4 || options.some((o: string) => !o)) continue;
+      out.push({ prompt, options, correctIndex: Math.max(0, Math.min(3, correctIndex)) });
+      continue;
+    }
+    if (type === 'match') {
+      const prompt = String((q as any).left || (q as any).prompt || '').trim();
+      const options = Array.isArray((q as any).options) ? (q as any).options.map((x: any) => String(x ?? '').trim()) : [];
+      const correctIndex = Number.isInteger((q as any).correctIndex) ? Number((q as any).correctIndex) : 0;
+      if (!prompt) continue;
+      if (options.length !== 4 || options.some((o: string) => !o)) continue;
+      out.push({ prompt, options, correctIndex: Math.max(0, Math.min(3, correctIndex)) });
+      continue;
+    }
+    // legacy: { question, answer, wrongOptions? }
+    if (typeof (q as any).question === 'string' && typeof (q as any).answer === 'string') {
+      const prompt = String((q as any).question || '').trim();
+      const correct = String((q as any).answer || '').trim();
+      const wrong = Array.isArray((q as any).wrongOptions) ? (q as any).wrongOptions.map((x: any) => String(x ?? '').trim()) : [];
+      const options = [correct, ...wrong].filter(Boolean).slice(0, 4);
+      while (options.length < 4) options.push('');
+      if (!prompt) continue;
+      if (options.length !== 4 || options.some((o) => !o)) continue;
+      out.push({ prompt, options, correctIndex: 0 });
+    }
+  }
+  return out;
+};
+
+const shuffleMcq = (q: { prompt: string; options: string[]; correctIndex: number }) => {
+  const order = [0, 1, 2, 3];
+  shuffleInPlace(order);
+  const options = order.map((i) => q.options[i]);
+  const correctIndex = order.indexOf(q.correctIndex);
+  return { ...q, options, correctIndex: correctIndex >= 0 ? correctIndex : 0 };
+};
 
 const unitPreset = (type: UnitType, side: UnitSide, stageIndex: number, skillLevel: number) => {
   const stageMul = 1 + Math.min(2, stageIndex * 0.08);
@@ -307,10 +363,11 @@ export const RangerTdGame: React.FC<{
   onComplete: (result: { success: boolean; score: number; correctAnswers: number; totalQuestions: number; timeSpent: number; details?: any }) => void;
 }> = ({ game, gameId, onExit, onStart, onComplete }) => {
   const cfg = (game?.rangerTd && typeof game.rangerTd === 'object') ? game.rangerTd : {};
-  const allowNegative = Boolean(cfg?.constraints?.allowNegative);
   const answerMode: 'mcq' | 'input' = String(cfg?.answerMode || 'mcq').trim() === 'input' ? 'input' : 'mcq';
+  const allowNegative = answerMode === 'input' ? Boolean(cfg?.constraints?.allowNegative) : false;
   const wrongTowerDamage = Number(cfg?.wrongTowerDamage) || 2;
   const towerHpMax = Number(cfg?.towerHp) || 20;
+  const perStageQuestionCount = Number(cfg?.perStageQuestionCount) || 10;
   const timeLimitSeconds: number | null = typeof game?.timeLimitSeconds === 'number' ? game.timeLimitSeconds : 300;
 
   const [loading, setLoading] = useState(false);
@@ -344,13 +401,15 @@ export const RangerTdGame: React.FC<{
   const [inputDen, setInputDen] = useState('');
   const [inputFocus, setInputFocus] = useState<InputFocus>('whole');
 
-  const mcqCacheRef = useRef(new Map<string, { choices: Rational[]; correctIndex: number }>());
   const [mcqLocked, setMcqLocked] = useState(false);
   const [mcqFeedback, setMcqFeedback] = useState<null | { ok: boolean; correctIndex: number; pickedIndex: number }>(null);
 
+  const bankQuestions = useMemo(() => normalizeBankQuestions(game?.questions), [game?.questions]);
+
   const current: StageQuestion | null = stageQuestions[qIndex] || null;
-  const answer: Rational | null = current?.answer ? normalizeRational(current.answer) : null;
-  const configuredNumberMode: 'fraction' | 'decimal' | null = current?.numberMode || null;
+  const isMcqQuestion = current?.kind === 'mcq';
+  const answer: Rational | null = (!current || isMcqQuestion || !('answer' in current)) ? null : normalizeRational((current as any).answer);
+  const configuredNumberMode: 'fraction' | 'decimal' | null = (!current || isMcqQuestion || !('numberMode' in current)) ? null : (current as any).numberMode || null;
 
   const answerNumberType: 'int' | 'frac' | 'dec' = useMemo(() => {
     if (!answer) return 'int';
@@ -534,9 +593,26 @@ export const RangerTdGame: React.FC<{
       setError('');
       setLoading(true);
       stageIndexRef.current = nextStageIndex;
-      const resp = await authService.generateRangerMathStage(gameId, { stageIndex: nextStageIndex });
-      const qs = Array.isArray(resp?.questions) ? resp.questions : [];
-      setStageQuestions(qs);
+      if (answerMode === 'mcq') {
+        if (bankQuestions.length === 0) {
+          setError('題庫為空（請教師先建立四選一題目）');
+          setStageQuestions([]);
+          setQIndex(0);
+          return;
+        }
+        const total = Math.max(1, Math.min(50, Math.floor(perStageQuestionCount)));
+        const start = (nextStageIndex * total) % bankQuestions.length;
+        const qs: StageQuestion[] = Array.from({ length: total }, (_, i) => {
+          const src = bankQuestions[(start + i) % bankQuestions.length];
+          const shuffled = shuffleMcq(src);
+          return { kind: 'mcq', prompt: shuffled.prompt, options: shuffled.options, correctIndex: shuffled.correctIndex };
+        });
+        setStageQuestions(qs);
+      } else {
+        const resp = await authService.generateRangerMathStage(gameId, { stageIndex: nextStageIndex });
+        const qs = Array.isArray(resp?.questions) ? resp.questions : [];
+        setStageQuestions(qs);
+      }
       setQIndex(0);
       setEnemyHp(30 + nextStageIndex * 5);
       enemyHpRef.current = 30 + nextStageIndex * 5;
@@ -625,15 +701,11 @@ export const RangerTdGame: React.FC<{
 
   const mcqPack = useMemo(() => {
     if (answerMode !== 'mcq') return null;
-    if (!answer) return null;
-    const mode = configuredNumberMode === 'decimal' ? 'decimal' : 'fraction';
-    const key = `${stageIndex}:${qIndex}:${mode}:${rationalKey(answer)}`;
-    const hit = mcqCacheRef.current.get(key);
-    if (hit) return hit;
-    const pack = generateMcqChoices(answer, { numberMode: mode });
-    mcqCacheRef.current.set(key, pack);
-    return pack;
-  }, [answerMode, configuredNumberMode, stageIndex, qIndex, answer?.n, answer?.d]);
+    if (!current || current.kind !== 'mcq') return null;
+    const options = Array.isArray(current.options) ? current.options : [];
+    if (options.length !== 4) return null;
+    return { choices: options, correctIndex: Math.max(0, Math.min(3, Number(current.correctIndex) || 0)) };
+  }, [answerMode, current]);
 
   const applyKey = (key: string) => {
     const setTargetInt = (setter: (v: string) => void, currentValue: string) => {
@@ -745,7 +817,7 @@ export const RangerTdGame: React.FC<{
     );
   }
 
-  if (!current || !answer) {
+  if (!current || (answerMode === 'input' && !answer)) {
     return (
       <div className="text-white">
         <div className="text-2xl font-black mb-2">題目資料不完整</div>
@@ -780,12 +852,16 @@ export const RangerTdGame: React.FC<{
 
       <div className="bg-white/10 border-4 border-white/15 rounded-3xl p-4 text-white">
         <div className="flex items-center justify-between gap-3 flex-wrap">
-          <div className="font-black">{current.kind === 'eq' ? '請解方程式：' : '請計算：'}</div>
+          <div className="font-black">
+            {current.kind === 'mcq' ? '請回答：' : (current.kind === 'eq' ? '請解方程式：' : '請計算：')}
+          </div>
           <div className="text-sm text-white/80">技能等級：{skillLevel}</div>
         </div>
 
         <div className="mt-2 text-2xl font-black">
-          {current.kind === 'eq' ? (
+          {current.kind === 'mcq' ? (
+            <div className="whitespace-pre-wrap leading-snug">{current.prompt}</div>
+          ) : current.kind === 'eq' ? (
             <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
               <MathExpressionView tokens={current.leftTokens as any} />
               <span className="px-0.5 font-black">=</span>
@@ -815,7 +891,7 @@ export const RangerTdGame: React.FC<{
                     : `${baseCls} bg-white/10 border-white/20 text-white hover:bg-white/20 hover:-translate-y-[1px] active:translate-y-0`;
                   return (
                     <button
-                      key={`mcq-${idx}-${rationalKey(c)}`}
+                      key={`mcq-${stageIndex}-${qIndex}-${idx}`}
                       type="button"
                       disabled={loading || mcqLocked || completedRef.current}
                       onClick={() => pickMcq(idx)}
@@ -823,9 +899,7 @@ export const RangerTdGame: React.FC<{
                     >
                       <span className="inline-flex items-center gap-2">
                         <span className="opacity-80">{String.fromCharCode(65 + idx)}.</span>
-                        <span className="text-xl">
-                          <MathExpressionView tokens={[{ t: 'num', n: c.n, d: c.d }]} />
-                        </span>
+                        <span className="text-left whitespace-pre-wrap break-words leading-snug">{String(c)}</span>
                       </span>
                     </button>
                   );

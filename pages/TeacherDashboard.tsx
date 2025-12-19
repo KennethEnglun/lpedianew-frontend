@@ -200,6 +200,7 @@ const TeacherDashboard: React.FC = () => {
   // Ranger 塔防（數學驅動）
   const [rangerForm, setRangerForm] = useState({ title: '', description: '', targetClasses: [] as string[], targetGroups: [] as string[] });
   const [rangerGrade, setRangerGrade] = useState<'小一' | '小二' | '小三' | '小四' | '小五' | '小六'>('小一');
+  const [rangerSubject, setRangerSubject] = useState<Subject>(Subject.MATH);
   const [rangerStageQuestionCount, setRangerStageQuestionCount] = useState(10);
   const [rangerEquationPercentText, setRangerEquationPercentText] = useState('30'); // 方程式比例
   const [rangerDecimalPercentText, setRangerDecimalPercentText] = useState('50'); // 小數比例
@@ -220,6 +221,7 @@ const TeacherDashboard: React.FC = () => {
   const [rangerEquationSteps, setRangerEquationSteps] = useState<1 | 2>(2);
   const [rangerEquationAnswerType, setRangerEquationAnswerType] = useState<'any' | 'int' | 'properFraction' | 'decimal'>('int');
   const [rangerAnswerMode, setRangerAnswerMode] = useState<'mcq' | 'input'>('mcq');
+  const [rangerMcqQuestions, setRangerMcqQuestions] = useState<TowerDefenseQuestionDraft[]>([]);
   const [rangerWrongTowerDamageText, setRangerWrongTowerDamageText] = useState('2');
   const [rangerTowerHpText, setRangerTowerHpText] = useState('20');
   const [rangerPromptText, setRangerPromptText] = useState('');
@@ -1394,15 +1396,18 @@ const TeacherDashboard: React.FC = () => {
 	    setShowGameModal(true);
 	  };
 
-	  const openRangerTdCreator = () => {
-	    setGameType('ranger-td');
-	    setRangerForm({ title: '', description: '', targetClasses: [], targetGroups: [] });
-	    setRangerGrade('小一');
-	    setRangerStageQuestionCount(10);
-	    setRangerEquationPercentText('30');
-	    setRangerDecimalPercentText('50');
-	    setRangerOps({ add: true, sub: true, mul: true, div: true, paren: true });
-	    setRangerRunSeconds(300);
+		  const openRangerTdCreator = () => {
+		    setGameType('ranger-td');
+		    setRangerForm({ title: '', description: '', targetClasses: [], targetGroups: [] });
+		    setRangerGrade('小一');
+		    setRangerSubject(Subject.MATH);
+		    setRangerAnswerMode('mcq');
+		    setRangerMcqQuestions([]);
+		    setRangerStageQuestionCount(10);
+		    setRangerEquationPercentText('30');
+		    setRangerDecimalPercentText('50');
+		    setRangerOps({ add: true, sub: true, mul: true, div: true, paren: true });
+		    setRangerRunSeconds(300);
 	    setRangerRunSecondsText('300');
 	    setRangerAllowNegative(false);
 	    setRangerMinValueText('0');
@@ -1441,10 +1446,11 @@ const TeacherDashboard: React.FC = () => {
   // 監聽遊戲模態框開啟
   useEffect(() => {
     if (showGameModal) {
-      if (gameType === 'math' || gameType === 'ranger-td') loadClassesAndGroups(Subject.MATH);
+      if (gameType === 'math') loadClassesAndGroups(Subject.MATH);
+      else if (gameType === 'ranger-td') loadClassesAndGroups(rangerAnswerMode === 'mcq' ? rangerSubject : Subject.MATH);
       else loadClassesAndGroups(gameForm.subject);
     }
-  }, [showGameModal, gameType]);
+  }, [showGameModal, gameType, rangerAnswerMode, rangerSubject]);
 
   // 監聽問答比賽模態框開啟
   useEffect(() => {
@@ -1757,6 +1763,41 @@ const TeacherDashboard: React.FC = () => {
   const updateTowerDefenseOption = (questionIndex: number, optionIndex: number, value: string) => {
     setTowerDefenseQuestions((prev) =>
       prev.map((q, i) => (i === questionIndex ? { ...q, options: q.options.map((opt, j) => (j === optionIndex ? value : opt)) } : q))
+    );
+  };
+
+  // === Ranger TD（MCQ 題庫） ===
+  const addRangerMcqQuestion = () => {
+    setRangerMcqQuestions((prev) => [
+      ...prev,
+      { type: 'mcq', prompt: '', options: ['', '', '', ''], correctIndex: 0 }
+    ]);
+  };
+
+  const removeRangerMcqQuestion = (index: number) => {
+    setRangerMcqQuestions((prev) => prev.filter((_, i) => i !== index));
+  };
+
+  const updateRangerMcqCorrectIndex = (index: number, value: number) => {
+    setRangerMcqQuestions((prev) => prev.map((q, i) => (i === index ? { ...q, correctIndex: value } : q)));
+  };
+
+  const updateRangerMcqPrompt = (index: number, value: string) => {
+    setRangerMcqQuestions((prev) =>
+      prev.map((q, i) => {
+        if (i !== index) return q;
+        if (q.type !== 'mcq') return q;
+        return { ...q, prompt: value };
+      })
+    );
+  };
+
+  const updateRangerMcqOption = (questionIndex: number, optionIndex: number, value: string) => {
+    setRangerMcqQuestions((prev) =>
+      prev.map((q, i) => {
+        if (i !== questionIndex) return q;
+        return { ...q, options: q.options.map((opt, j) => (j === optionIndex ? value : opt)) };
+      })
     );
   };
 
@@ -3617,11 +3658,13 @@ const TeacherDashboard: React.FC = () => {
 	        <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
 	          <div className="bg-white border-4 border-amber-400 rounded-3xl w-full max-w-5xl max-h-[90vh] overflow-y-auto shadow-comic">
 	            <div className="p-6 border-b-4 border-amber-400 bg-gradient-to-r from-amber-100 to-rose-100">
-	              <div className="flex justify-between items-center">
-	                <div className="flex items-center gap-3">
-	                  <span className="text-3xl">🧸</span>
-	                  <h2 className="text-3xl font-black text-amber-900">創建 Ranger 塔防（數學）</h2>
-	                </div>
+		              <div className="flex justify-between items-center">
+		                <div className="flex items-center gap-3">
+		                  <span className="text-3xl">🧸</span>
+		                  <h2 className="text-3xl font-black text-amber-900">
+		                    {rangerAnswerMode === 'mcq' ? '創建 Ranger 塔防（答題）' : '創建 Ranger 塔防（數學）'}
+		                  </h2>
+		                </div>
 	                <button
 	                  onClick={() => { setShowGameModal(false); setGameType(null); }}
 	                  className="w-10 h-10 rounded-full bg-white border-2 border-amber-400 hover:bg-amber-50 flex items-center justify-center"
@@ -3632,33 +3675,53 @@ const TeacherDashboard: React.FC = () => {
 	            </div>
 
 	            <div className="p-6 space-y-6">
-	              <div className="bg-amber-50 p-4 rounded-xl border-2 border-amber-200">
-	                <p className="text-amber-900 text-sm">
-	                  🧸 <strong>玩法：</strong>左邊是你的塔（基地），右邊是敵人的塔。角色自動前進與戰鬥；學生需持續回答數學題目來獲得召喚/技能。每關完成一組題目後（且基地未被摧毀）即可升級技能並進入下一關。
-	                </p>
-	              </div>
+		              <div className="bg-amber-50 p-4 rounded-xl border-2 border-amber-200">
+		                <p className="text-amber-900 text-sm">
+		                  🧸 <strong>玩法：</strong>左邊是你的塔（基地），右邊是敵人的塔。角色自動前進與戰鬥；學生需持續回答題目來獲得召喚/技能。每關完成一組題目後（且基地未被摧毀）即可升級技能並進入下一關。
+		                </p>
+		              </div>
 
-	              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-	                <Input
-	                  label="測驗標題"
-	                  placeholder="輸入測驗標題..."
-	                  value={rangerForm.title}
-	                  onChange={(e) => setRangerForm(prev => ({ ...prev, title: e.target.value }))}
-	                />
+		              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+		                <Input
+		                  label="測驗標題"
+		                  placeholder="輸入測驗標題..."
+		                  value={rangerForm.title}
+		                  onChange={(e) => setRangerForm(prev => ({ ...prev, title: e.target.value }))}
+		                />
 
-	                <div>
-	                  <label className="block text-sm font-bold text-amber-900 mb-2">年級（AI 生成難度參考）</label>
-	                  <select
-	                    className="w-full px-4 py-2 border-4 border-amber-300 rounded-2xl bg-white font-bold"
-	                    value={rangerGrade}
-	                    onChange={(e) => setRangerGrade(e.target.value as any)}
-	                  >
-	                    {(['小一', '小二', '小三', '小四', '小五', '小六'] as const).map((g) => (
-	                      <option key={g} value={g}>{g}</option>
-	                    ))}
-	                  </select>
-	                </div>
-	              </div>
+		                {rangerAnswerMode === 'mcq' ? (
+		                  <div>
+		                    <label className="block text-sm font-bold text-amber-900 mb-2">科目</label>
+		                    <select
+		                      className="w-full px-4 py-2 border-4 border-amber-300 rounded-2xl bg-white font-bold"
+		                      value={rangerSubject}
+		                      onChange={(e) => {
+		                        const newSubject = e.target.value as Subject;
+		                        setRangerSubject(newSubject);
+		                        setRangerForm(prev => ({ ...prev, targetClasses: [], targetGroups: [] }));
+		                        loadClassesAndGroups(newSubject);
+		                      }}
+		                    >
+		                      {Object.values(Subject).map(subject => (
+		                        <option key={subject} value={subject}>{subject}</option>
+		                      ))}
+		                    </select>
+		                  </div>
+		                ) : (
+		                  <div>
+		                    <label className="block text-sm font-bold text-amber-900 mb-2">年級（AI 生成難度參考）</label>
+		                    <select
+		                      className="w-full px-4 py-2 border-4 border-amber-300 rounded-2xl bg-white font-bold"
+		                      value={rangerGrade}
+		                      onChange={(e) => setRangerGrade(e.target.value as any)}
+		                    >
+		                      {(['小一', '小二', '小三', '小四', '小五', '小六'] as const).map((g) => (
+		                        <option key={g} value={g}>{g}</option>
+		                      ))}
+		                    </select>
+		                  </div>
+		                )}
+		              </div>
 
 	              <Input
 	                label="描述（可選）"
@@ -3667,10 +3730,10 @@ const TeacherDashboard: React.FC = () => {
 	                onChange={(e) => setRangerForm(prev => ({ ...prev, description: e.target.value }))}
 	              />
 
-	              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-	                <div>
-	                  <label className="block text-sm font-bold text-amber-900 mb-2">整局時間（秒）</label>
-	                  <input
+		              <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+		                <div>
+		                  <label className="block text-sm font-bold text-amber-900 mb-2">整局時間（秒）</label>
+		                  <input
 	                    value={rangerRunSecondsText}
 	                    onChange={(e) => setRangerRunSecondsText(e.target.value)}
 	                    className="w-full px-4 py-2 border-4 border-amber-300 rounded-2xl bg-white font-bold"
@@ -3700,199 +3763,326 @@ const TeacherDashboard: React.FC = () => {
 	                    className="w-full px-4 py-2 border-4 border-amber-300 rounded-2xl bg-white font-bold"
 	                    inputMode="numeric"
 	                  />
-	                  <p className="text-xs text-gray-600 mt-1">答錯會扣血 + combo 歸零</p>
-	                </div>
-	              </div>
+		                  <p className="text-xs text-gray-600 mt-1">答錯會扣血 + combo 歸零</p>
+		                </div>
+		                <div>
+		                  <label className="block text-sm font-bold text-amber-900 mb-2">基地血量（起始）</label>
+		                  <input
+		                    value={rangerTowerHpText}
+		                    onChange={(e) => setRangerTowerHpText(e.target.value)}
+		                    className="w-full px-4 py-2 border-4 border-amber-300 rounded-2xl bg-white font-bold"
+		                    inputMode="numeric"
+		                  />
+		                  <p className="text-xs text-gray-600 mt-1">範圍 5–999</p>
+		                </div>
+		              </div>
 
-	              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-	                <div>
-	                  <label className="block text-sm font-bold text-amber-900 mb-2">作答方式</label>
-	                  <select
-	                    value={rangerAnswerMode}
-	                    onChange={(e) => setRangerAnswerMode(e.target.value === 'input' ? 'input' : 'mcq')}
-	                    className="w-full px-4 py-2 border-4 border-amber-300 rounded-2xl bg-white font-bold"
-	                  >
-	                    <option value="mcq">選擇題（MCQ）</option>
-	                    <option value="input">輸入答案</option>
-	                  </select>
-	                  <p className="text-xs text-gray-600 mt-1">建議先用 MCQ 讓學生快速上手</p>
-	                </div>
-	              </div>
+		              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+		                <div>
+		                  <label className="block text-sm font-bold text-amber-900 mb-2">作答方式</label>
+		                  <select
+		                    value={rangerAnswerMode}
+		                    onChange={(e) => setRangerAnswerMode(e.target.value === 'input' ? 'input' : 'mcq')}
+		                    className="w-full px-4 py-2 border-4 border-amber-300 rounded-2xl bg-white font-bold"
+		                  >
+		                    <option value="mcq">選擇題（MCQ）</option>
+		                    <option value="input">輸入答案</option>
+		                  </select>
+		                  <p className="text-xs text-gray-600 mt-1">建議先用 MCQ 讓學生快速上手</p>
+		                </div>
+		              </div>
 
-	              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-	                <div>
-	                  <label className="block text-sm font-bold text-amber-900 mb-2">題型比例（方程式 %）</label>
-	                  <input
-	                    value={rangerEquationPercentText}
-	                    onChange={(e) => setRangerEquationPercentText(e.target.value)}
-	                    className="w-full px-4 py-2 border-4 border-amber-300 rounded-2xl bg-white font-bold"
-	                    inputMode="numeric"
-	                  />
-	                  <p className="text-xs text-gray-600 mt-1">其餘為計算題</p>
-	                </div>
-	                <div>
-	                  <label className="block text-sm font-bold text-amber-900 mb-2">數字比例（小數 %）</label>
-	                  <input
-	                    value={rangerDecimalPercentText}
-	                    onChange={(e) => setRangerDecimalPercentText(e.target.value)}
-	                    className="w-full px-4 py-2 border-4 border-amber-300 rounded-2xl bg-white font-bold"
-	                    inputMode="numeric"
-	                  />
-	                  <p className="text-xs text-gray-600 mt-1">其餘為分數（可混合出題）</p>
-	                </div>
-	              </div>
+		              {rangerAnswerMode === 'mcq' && (
+		                <div>
+		                  <label className="block text-sm font-bold text-amber-900 mb-2">題庫（四選一）</label>
+		                  <div className="border-2 border-amber-200 rounded-2xl p-4 bg-white">
+		                    <div className="flex justify-between items-center mb-4">
+		                      <span className="font-bold text-amber-900">題目列表（四選一）</span>
+		                      <div className="flex gap-2">
+		                        <button
+		                          type="button"
+		                          onClick={() => openAiGenerator({
+		                            mode: 'mcq',
+		                            title: 'AI 生成 Ranger 塔防題目',
+		                            subject: String(rangerSubject),
+		                            importModes: ['replace', 'append'],
+		                            onImport: (payload, importMode) => {
+		                              const incoming: TowerDefenseQuestionDraft[] = (payload.mcq || [])
+		                                .map((q: any) => ({
+		                                  type: 'mcq',
+		                                  prompt: String(q.question || ''),
+		                                  options: Array.isArray(q.options) ? q.options.map((x: any) => String(x ?? '')) : ['', '', '', ''],
+		                                  correctIndex: Number(q.correctIndex ?? 0)
+		                                }))
+		                                .filter((q: any) => q.prompt && Array.isArray(q.options) && q.options.length === 4);
+		                              setRangerMcqQuestions(prev => importMode === 'replace' ? incoming : [...prev, ...incoming]);
+		                              setShowAiGenerator(false);
+		                            }
+		                          })}
+		                          className="px-4 py-2 bg-blue-100 text-blue-800 border-2 border-blue-300 rounded-2xl font-bold hover:bg-blue-200"
+		                        >
+		                          🤖 AI 生成
+		                        </button>
+		                        <button
+		                          type="button"
+		                          onClick={addRangerMcqQuestion}
+		                          className="px-4 py-2 bg-amber-100 text-amber-900 border-2 border-amber-300 rounded-2xl font-bold hover:bg-amber-200 flex items-center gap-2"
+		                        >
+		                          <Plus className="w-4 h-4" />
+		                          新增四選一
+		                        </button>
+		                      </div>
+		                    </div>
 
-	              <div>
-	                <label className="block text-sm font-bold text-amber-900 mb-2">運算範疇（可多選）</label>
-	                <div className="flex flex-wrap gap-2">
-	                  {[
-	                    { key: 'add', label: '加' },
-	                    { key: 'sub', label: '減' },
-	                    { key: 'mul', label: '乘' },
-	                    { key: 'div', label: '除' },
-	                    { key: 'paren', label: '加括號' }
-	                  ].map((item) => {
-	                    const active = (rangerOps as any)[item.key] as boolean;
-	                    return (
-	                      <button
-	                        key={item.key}
-	                        type="button"
-	                        onClick={() => setRangerOps(prev => ({ ...prev, [item.key]: !active } as any))}
-	                        className={`px-4 py-2 rounded-2xl border-2 font-black transition-colors ${active
-	                          ? 'bg-amber-200 border-amber-500 text-amber-900'
-	                          : 'bg-white border-gray-300 text-gray-700 hover:bg-gray-50'
-	                          }`}
-	                      >
-	                        {item.label}
-	                      </button>
-	                    );
-	                  })}
-	                </div>
-	                {rangerAllowedOps.length === 0 && (
-	                  <div className="mt-2 text-sm font-bold text-red-600">請至少選擇一種運算（加/減/乘/除）</div>
-	                )}
-	              </div>
+		                    {rangerMcqQuestions.length === 0 ? (
+		                      <div className="text-center py-8 text-gray-500">
+		                        <p className="font-bold mb-2">還沒有題目</p>
+		                        <p className="text-sm">點擊上方「新增四選一」或「AI 生成」開始建立題庫</p>
+		                      </div>
+		                    ) : (
+		                      <div className="space-y-6">
+		                        {rangerMcqQuestions.map((q, questionIndex) => (
+		                          <div key={questionIndex} className="border-2 border-amber-200 rounded-2xl p-4 bg-amber-50">
+		                            <div className="flex justify-between items-start mb-4">
+		                              <div className="flex items-center gap-2">
+		                                <h4 className="text-lg font-bold text-amber-900">題目 {questionIndex + 1}</h4>
+		                                <span className="px-2 py-0.5 rounded-full text-xs font-black border-2 bg-blue-100 border-blue-300 text-blue-900">四選一</span>
+		                              </div>
+		                              <button
+		                                type="button"
+		                                onClick={() => removeRangerMcqQuestion(questionIndex)}
+		                                className="p-2 bg-red-100 text-red-700 rounded-xl hover:bg-red-200"
+		                              >
+		                                <Trash className="w-4 h-4" />
+		                              </button>
+		                            </div>
 
-	              <div className="bg-white border-2 border-gray-200 rounded-2xl p-4 space-y-4">
-	                <div className="flex items-center justify-between gap-3 flex-wrap">
-	                  <div>
-	                    <div className="text-sm font-black text-amber-900">數字/方程式限制</div>
-	                    <div className="text-xs text-gray-600">此設定會影響 AI 出題與學生輸入方式</div>
-	                  </div>
-	                  <button
-	                    type="button"
-	                    onClick={() => {
-	                      setRangerAllowNegative((v) => {
-	                        const next = !v;
-	                        if (!next) {
-	                          const minV = Number.parseInt(String(rangerMinValueText || '0').trim(), 10);
-	                          if (Number.isFinite(minV) && minV < 0) setRangerMinValueText('0');
-	                        }
-	                        return next;
-	                      });
-	                    }}
-	                    className={`px-4 py-2 rounded-2xl border-2 font-black ${rangerAllowNegative
-	                      ? 'bg-[#A1D9AE] border-[#5E8B66] text-white'
-	                      : 'bg-white border-gray-300 text-gray-700 hover:bg-gray-50'
-	                      }`}
-	                  >
-	                    {rangerAllowNegative ? '允許負數' : '不允許負數'}
-	                  </button>
-	                </div>
+		                            {q.type === 'mcq' && (
+		                              <>
+		                                <Input
+		                                  label="問題內容"
+		                                  placeholder="輸入問題..."
+		                                  multiline={true}
+		                                  rows={3}
+		                                  value={q.prompt}
+		                                  onChange={(e) => updateRangerMcqPrompt(questionIndex, e.target.value)}
+		                                />
 
-	                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-	                  <div>
-	                    <label className="block text-xs font-bold text-gray-600 mb-1">數值範圍（最小）</label>
-	                    <input
-	                      value={rangerMinValueText}
-	                      onChange={(e) => setRangerMinValueText(e.target.value)}
-	                      className="w-full px-4 py-2 rounded-2xl border-2 border-gray-300 font-bold"
-	                      inputMode="numeric"
-	                    />
-	                  </div>
-	                  <div>
-	                    <label className="block text-xs font-bold text-gray-600 mb-1">數值範圍（最大）</label>
-	                    <input
-	                      value={rangerMaxValueText}
-	                      onChange={(e) => setRangerMaxValueText(e.target.value)}
-	                      className="w-full px-4 py-2 rounded-2xl border-2 border-gray-300 font-bold"
-	                      inputMode="numeric"
-	                    />
-	                  </div>
-	                  <div>
-	                    <label className="block text-xs font-bold text-gray-600 mb-1">基地血量（起始）</label>
-	                    <input
-	                      value={rangerTowerHpText}
-	                      onChange={(e) => setRangerTowerHpText(e.target.value)}
-	                      className="w-full px-4 py-2 rounded-2xl border-2 border-gray-300 font-bold"
-	                      inputMode="numeric"
-	                    />
-	                  </div>
-	                </div>
+		                                <div className="mt-4">
+		                                  <label className="block text-sm font-bold text-amber-900 mb-2">選項</label>
+		                                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+		                                    {q.options.map((option, optionIndex) => (
+		                                      <div key={optionIndex} className="relative">
+		                                        <div className={`flex items-center gap-3 p-3 rounded-2xl border-2 ${q.correctIndex === optionIndex ? 'bg-amber-100 border-amber-400' : 'bg-white border-amber-200'}`}>
+		                                          <input
+		                                            type="radio"
+		                                            name={`ranger-correct-${questionIndex}`}
+		                                            checked={q.correctIndex === optionIndex}
+		                                            onChange={() => updateRangerMcqCorrectIndex(questionIndex, optionIndex)}
+		                                            className="w-4 h-4 text-amber-600"
+		                                          />
+		                                          <span className="font-bold text-amber-900 min-w-[20px]">
+		                                            {String.fromCharCode(65 + optionIndex)}.
+		                                          </span>
+		                                          <input
+		                                            type="text"
+		                                            placeholder={`選項 ${String.fromCharCode(65 + optionIndex)}`}
+		                                            value={option}
+		                                            onChange={(e) => updateRangerMcqOption(questionIndex, optionIndex, e.target.value)}
+		                                            className="flex-1 px-3 py-2 border-2 border-amber-200 rounded-xl focus:border-amber-400 font-medium"
+		                                          />
+		                                        </div>
+		                                        {q.correctIndex === optionIndex && (
+		                                          <div className="absolute -top-1 -right-1 w-6 h-6 bg-amber-500 text-white rounded-full flex items-center justify-center text-xs font-bold">
+		                                            ✓
+		                                          </div>
+		                                        )}
+		                                      </div>
+		                                    ))}
+		                                  </div>
+		                                  <p className="text-xs text-gray-600 mt-2">☑️ 點擊左側圓圈選擇正確答案</p>
+		                                </div>
+		                              </>
+		                            )}
+		                          </div>
+		                        ))}
+		                      </div>
+		                    )}
+		                  </div>
+		                </div>
+		              )}
 
-	                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-	                  <div>
-	                    <label className="block text-xs font-bold text-gray-600 mb-1">分母上限（分數題）</label>
-	                    <input
-	                      value={rangerMaxDenText}
-	                      onChange={(e) => setRangerMaxDenText(e.target.value)}
-	                      className="w-full px-4 py-2 rounded-2xl border-2 border-gray-300 font-bold"
-	                      inputMode="numeric"
-	                    />
-	                  </div>
-	                  <div>
-	                    <label className="block text-xs font-bold text-gray-600 mb-1">小數位數上限（小數題）</label>
-	                    <input
-	                      value={rangerMaxDecimalPlacesText}
-	                      onChange={(e) => setRangerMaxDecimalPlacesText(e.target.value)}
-	                      className="w-full px-4 py-2 rounded-2xl border-2 border-gray-300 font-bold"
-	                      inputMode="numeric"
-	                    />
-	                  </div>
-	                  <div>
-	                    <label className="block text-xs font-bold text-gray-600 mb-1">方程式步數（上限）</label>
-	                    <select
-	                      value={String(rangerEquationSteps)}
-	                      onChange={(e) => setRangerEquationSteps(e.target.value === '2' ? 2 : 1)}
-	                      className="w-full px-4 py-2 rounded-2xl border-2 border-gray-300 font-bold"
-	                    >
-	                      <option value="1">一步</option>
-	                      <option value="2">最多兩步</option>
-	                    </select>
-	                  </div>
-	                </div>
+		              {rangerAnswerMode === 'input' && (
+		                <>
+		                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+		                    <div>
+		                      <label className="block text-sm font-bold text-amber-900 mb-2">題型比例（方程式 %）</label>
+		                      <input
+		                        value={rangerEquationPercentText}
+		                        onChange={(e) => setRangerEquationPercentText(e.target.value)}
+		                        className="w-full px-4 py-2 border-4 border-amber-300 rounded-2xl bg-white font-bold"
+		                        inputMode="numeric"
+		                      />
+		                      <p className="text-xs text-gray-600 mt-1">其餘為計算題</p>
+		                    </div>
+		                    <div>
+		                      <label className="block text-sm font-bold text-amber-900 mb-2">數字比例（小數 %）</label>
+		                      <input
+		                        value={rangerDecimalPercentText}
+		                        onChange={(e) => setRangerDecimalPercentText(e.target.value)}
+		                        className="w-full px-4 py-2 border-4 border-amber-300 rounded-2xl bg-white font-bold"
+		                        inputMode="numeric"
+		                      />
+		                      <p className="text-xs text-gray-600 mt-1">其餘為分數（可混合出題）</p>
+		                    </div>
+		                  </div>
 
-	                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-	                  <div>
-	                    <label className="block text-xs font-bold text-gray-600 mb-1">方程式答案類型</label>
-	                    <select
-	                      value={rangerEquationAnswerType}
-	                      onChange={(e) => setRangerEquationAnswerType(e.target.value as any)}
-	                      className="w-full px-4 py-2 rounded-2xl border-2 border-gray-300 font-bold"
-	                    >
-	                      <option value="int">只出整數</option>
-	                      <option value="properFraction">只出真分數</option>
-	                      <option value="decimal">只出小數</option>
-	                      <option value="any">不限</option>
-	                    </select>
-	                  </div>
-	                  <div>
-	                    <label className="block text-xs font-bold text-gray-600 mb-1">AI 額外要求（可選）</label>
-	                    <input
-	                      value={rangerPromptText}
-	                      onChange={(e) => setRangerPromptText(e.target.value)}
-	                      className="w-full px-4 py-2 rounded-2xl border-2 border-gray-300 font-bold"
-	                      placeholder="例如：多用括號；避免除法..."
-	                    />
-	                  </div>
-	                </div>
-	              </div>
+		                  <div>
+		                    <label className="block text-sm font-bold text-amber-900 mb-2">運算範疇（可多選）</label>
+		                    <div className="flex flex-wrap gap-2">
+		                      {[
+		                        { key: 'add', label: '加' },
+		                        { key: 'sub', label: '減' },
+		                        { key: 'mul', label: '乘' },
+		                        { key: 'div', label: '除' },
+		                        { key: 'paren', label: '加括號' }
+		                      ].map((item) => {
+		                        const active = (rangerOps as any)[item.key] as boolean;
+		                        return (
+		                          <button
+		                            key={item.key}
+		                            type="button"
+		                            onClick={() => setRangerOps(prev => ({ ...prev, [item.key]: !active } as any))}
+		                            className={`px-4 py-2 rounded-2xl border-2 font-black transition-colors ${active
+		                              ? 'bg-amber-200 border-amber-500 text-amber-900'
+		                              : 'bg-white border-gray-300 text-gray-700 hover:bg-gray-50'
+		                              }`}
+		                          >
+		                            {item.label}
+		                          </button>
+		                        );
+		                      })}
+		                    </div>
+		                    {rangerAllowedOps.length === 0 && (
+		                      <div className="mt-2 text-sm font-bold text-red-600">請至少選擇一種運算（加/減/乘/除）</div>
+		                    )}
+		                  </div>
+
+		                  <div className="bg-white border-2 border-gray-200 rounded-2xl p-4 space-y-4">
+		                    <div className="flex items-center justify-between gap-3 flex-wrap">
+		                      <div>
+		                        <div className="text-sm font-black text-amber-900">數字/方程式限制</div>
+		                        <div className="text-xs text-gray-600">此設定會影響 AI 出題與學生輸入方式</div>
+		                      </div>
+		                      <button
+		                        type="button"
+		                        onClick={() => {
+		                          setRangerAllowNegative((v) => {
+		                            const next = !v;
+		                            if (!next) {
+		                              const minV = Number.parseInt(String(rangerMinValueText || '0').trim(), 10);
+		                              if (Number.isFinite(minV) && minV < 0) setRangerMinValueText('0');
+		                            }
+		                            return next;
+		                          });
+		                        }}
+		                        className={`px-4 py-2 rounded-2xl border-2 font-black ${rangerAllowNegative
+		                          ? 'bg-[#A1D9AE] border-[#5E8B66] text-white'
+		                          : 'bg-white border-gray-300 text-gray-700 hover:bg-gray-50'
+		                          }`}
+		                      >
+		                        {rangerAllowNegative ? '允許負數' : '不允許負數'}
+		                      </button>
+		                    </div>
+
+		                    <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+		                      <div>
+		                        <label className="block text-xs font-bold text-gray-600 mb-1">數值範圍（最小）</label>
+		                        <input
+		                          value={rangerMinValueText}
+		                          onChange={(e) => setRangerMinValueText(e.target.value)}
+		                          className="w-full px-4 py-2 rounded-2xl border-2 border-gray-300 font-bold"
+		                          inputMode="numeric"
+		                        />
+		                      </div>
+		                      <div>
+		                        <label className="block text-xs font-bold text-gray-600 mb-1">數值範圍（最大）</label>
+		                        <input
+		                          value={rangerMaxValueText}
+		                          onChange={(e) => setRangerMaxValueText(e.target.value)}
+		                          className="w-full px-4 py-2 rounded-2xl border-2 border-gray-300 font-bold"
+		                          inputMode="numeric"
+		                        />
+		                      </div>
+		                    </div>
+
+		                    <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+		                      <div>
+		                        <label className="block text-xs font-bold text-gray-600 mb-1">分母上限（分數題）</label>
+		                        <input
+		                          value={rangerMaxDenText}
+		                          onChange={(e) => setRangerMaxDenText(e.target.value)}
+		                          className="w-full px-4 py-2 rounded-2xl border-2 border-gray-300 font-bold"
+		                          inputMode="numeric"
+		                        />
+		                      </div>
+		                      <div>
+		                        <label className="block text-xs font-bold text-gray-600 mb-1">小數位數上限（小數題）</label>
+		                        <input
+		                          value={rangerMaxDecimalPlacesText}
+		                          onChange={(e) => setRangerMaxDecimalPlacesText(e.target.value)}
+		                          className="w-full px-4 py-2 rounded-2xl border-2 border-gray-300 font-bold"
+		                          inputMode="numeric"
+		                        />
+		                      </div>
+		                      <div>
+		                        <label className="block text-xs font-bold text-gray-600 mb-1">方程式步數（上限）</label>
+		                        <select
+		                          value={String(rangerEquationSteps)}
+		                          onChange={(e) => setRangerEquationSteps(e.target.value === '2' ? 2 : 1)}
+		                          className="w-full px-4 py-2 rounded-2xl border-2 border-gray-300 font-bold"
+		                        >
+		                          <option value="1">一步</option>
+		                          <option value="2">最多兩步</option>
+		                        </select>
+		                      </div>
+		                    </div>
+
+		                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+		                      <div>
+		                        <label className="block text-xs font-bold text-gray-600 mb-1">方程式答案類型</label>
+		                        <select
+		                          value={rangerEquationAnswerType}
+		                          onChange={(e) => setRangerEquationAnswerType(e.target.value as any)}
+		                          className="w-full px-4 py-2 rounded-2xl border-2 border-gray-300 font-bold"
+		                        >
+		                          <option value="int">只出整數</option>
+		                          <option value="properFraction">只出真分數</option>
+		                          <option value="decimal">只出小數</option>
+		                          <option value="any">不限</option>
+		                        </select>
+		                      </div>
+		                      <div>
+		                        <label className="block text-xs font-bold text-gray-600 mb-1">AI 額外要求（可選）</label>
+		                        <input
+		                          value={rangerPromptText}
+		                          onChange={(e) => setRangerPromptText(e.target.value)}
+		                          className="w-full px-4 py-2 rounded-2xl border-2 border-gray-300 font-bold"
+		                          placeholder="例如：多用括號；避免除法..."
+		                        />
+		                      </div>
+		                    </div>
+		                  </div>
+		                </>
+		              )}
 
 	              {/* Target Classes */}
-	              {availableClasses.length > 0 && (
-	                <div>
-	                  <label className="block text-sm font-bold text-amber-900 mb-2">選擇班級（數學）</label>
-	                  <div className="flex flex-wrap gap-2">
+		              {availableClasses.length > 0 && (
+		                <div>
+		                  <label className="block text-sm font-bold text-amber-900 mb-2">
+		                    {rangerAnswerMode === 'mcq' ? `派發至班級（${rangerSubject}）` : '選擇班級（數學）'}
+		                  </label>
+		                  <div className="flex flex-wrap gap-2">
 	                    {availableClasses.map(className => (
 	                      <button
 	                        key={className}
@@ -3918,10 +4108,12 @@ const TeacherDashboard: React.FC = () => {
 	              )}
 
 	              {/* Target Groups */}
-	              {availableGroups.length > 0 && (
-	                <div>
-	                  <label className="block text-sm font-bold text-amber-900 mb-2">選擇分組（數學）</label>
-	                  <div className="flex flex-wrap gap-2">
+		              {availableGroups.length > 0 && (
+		                <div>
+		                  <label className="block text-sm font-bold text-amber-900 mb-2">
+		                    {rangerAnswerMode === 'mcq' ? `選擇分組（${rangerSubject}）` : '選擇分組（數學）'}
+		                  </label>
+		                  <div className="flex flex-wrap gap-2">
 	                    {availableGroups.map(groupName => (
 	                      <button
 	                        key={groupName}
@@ -3954,50 +4146,78 @@ const TeacherDashboard: React.FC = () => {
 	                  取消
 	                </button>
 	                <button
-	                  onClick={async () => {
-	                    try {
-	                      if (!rangerForm.title.trim()) return alert('請輸入測驗標題');
-	                      if (rangerAllowedOps.length === 0) return alert('請至少選擇一種運算（加/減/乘/除）');
-	                      if (!rangerForm.targetClasses?.length && !rangerForm.targetGroups?.length) return alert('請選擇至少一個目標班級或分組');
+		                  onClick={async () => {
+		                    try {
+		                      if (!rangerForm.title.trim()) return alert('請輸入測驗標題');
+		                      if (!rangerForm.targetClasses?.length && !rangerForm.targetGroups?.length) return alert('請選擇至少一個目標班級或分組');
 
-	                      const eqPercent = Math.max(0, Math.min(100, Number.parseInt(String(rangerEquationPercentText || '0').trim(), 10) || 0));
-	                      const decPercent = Math.max(0, Math.min(100, Number.parseInt(String(rangerDecimalPercentText || '0').trim(), 10) || 0));
-	                      const wrongTowerDamage = Math.max(1, Math.min(99, Number.parseInt(String(rangerWrongTowerDamageText || '2').trim(), 10) || 2));
-	                      const towerHp = Math.max(5, Math.min(999, Number.parseInt(String(rangerTowerHpText || '20').trim(), 10) || 20));
+		                      const wrongTowerDamage = Math.max(1, Math.min(99, Number.parseInt(String(rangerWrongTowerDamageText || '2').trim(), 10) || 2));
+		                      const towerHp = Math.max(5, Math.min(999, Number.parseInt(String(rangerTowerHpText || '20').trim(), 10) || 20));
 
-	                      await authService.createGame({
-	                        title: rangerForm.title,
-	                        description: rangerForm.description,
-	                        gameType: 'ranger-td',
-	                        subject: Subject.MATH,
-	                        targetClasses: rangerForm.targetClasses,
-	                        targetGroups: rangerForm.targetGroups,
-	                        questions: [],
-	                        difficulty: 'medium',
-	                        timeLimitSeconds: clampTowerDefenseTimeSeconds(rangerRunSecondsText, rangerRunSeconds),
-	                        livesLimit: null,
-	                        rangerTd: {
-	                          grade: rangerGrade,
-	                          answerMode: rangerAnswerMode,
-	                          perStageQuestionCount: rangerStageQuestionCount,
-	                          equationPercent: eqPercent,
-	                          decimalPercent: decPercent,
-	                          allowedOps: rangerAllowedOps,
-	                          allowParentheses: rangerOps.paren,
-	                          constraints: rangerConstraints,
-	                          promptText: rangerPromptText,
-	                          wrongTowerDamage,
-	                          towerHp
-	                        }
-	                      });
+		                      const isMcq = rangerAnswerMode === 'mcq';
+		                      const subject = isMcq ? rangerSubject : Subject.MATH;
 
-	                      alert('Ranger 塔防創建成功！');
-	                      setShowGameModal(false);
-	                      setGameType(null);
-	                    } catch (e: any) {
-	                      alert('創建遊戲失敗：' + (e?.message || '未知錯誤'));
-	                    }
-	                  }}
+		                      const questionsPayload: any[] = (() => {
+		                        if (!isMcq) return [];
+		                        return rangerMcqQuestions
+		                          .filter((q) => q.type === 'mcq')
+		                          .map((q) => {
+		                            const options = (q.options || []).map((o) => String(o || '').trim());
+		                            const correctIndex = Number.isInteger(q.correctIndex) ? q.correctIndex : 0;
+		                            const safeCorrectIndex = Math.max(0, Math.min(3, correctIndex));
+		                            return { type: 'mcq', prompt: String(q.prompt || '').trim(), options, correctIndex: safeCorrectIndex };
+		                          })
+		                          .filter((q) => q.prompt && Array.isArray(q.options) && q.options.length === 4 && q.options.every((o) => String(o || '').trim()));
+		                      })();
+		                      if (isMcq && questionsPayload.length === 0) {
+		                        alert('請至少新增一個完整題目（四個選項都要填，且需選擇正確答案）');
+		                        return;
+		                      }
+
+		                      if (!isMcq && rangerAllowedOps.length === 0) {
+		                        alert('請至少選擇一種運算（加/減/乘/除）');
+		                        return;
+		                      }
+
+		                      const rangerTdPayload: any = {
+		                        answerMode: rangerAnswerMode,
+		                        perStageQuestionCount: rangerStageQuestionCount,
+		                        wrongTowerDamage,
+		                        towerHp
+		                      };
+		                      if (!isMcq) {
+		                        const eqPercent = Math.max(0, Math.min(100, Number.parseInt(String(rangerEquationPercentText || '0').trim(), 10) || 0));
+		                        const decPercent = Math.max(0, Math.min(100, Number.parseInt(String(rangerDecimalPercentText || '0').trim(), 10) || 0));
+		                        rangerTdPayload.grade = rangerGrade;
+		                        rangerTdPayload.equationPercent = eqPercent;
+		                        rangerTdPayload.decimalPercent = decPercent;
+		                        rangerTdPayload.allowedOps = rangerAllowedOps;
+		                        rangerTdPayload.allowParentheses = rangerOps.paren;
+		                        rangerTdPayload.constraints = rangerConstraints;
+		                        rangerTdPayload.promptText = rangerPromptText;
+		                      }
+
+		                      await authService.createGame({
+		                        title: rangerForm.title,
+		                        description: rangerForm.description,
+		                        gameType: 'ranger-td',
+		                        subject,
+		                        targetClasses: rangerForm.targetClasses,
+		                        targetGroups: rangerForm.targetGroups,
+		                        questions: questionsPayload,
+		                        difficulty: 'medium',
+		                        timeLimitSeconds: clampTowerDefenseTimeSeconds(rangerRunSecondsText, rangerRunSeconds),
+		                        livesLimit: null,
+		                        rangerTd: rangerTdPayload
+		                      });
+
+		                      alert(isMcq ? 'Ranger 塔防（答題）創建成功！' : 'Ranger 塔防創建成功！');
+		                      setShowGameModal(false);
+		                      setGameType(null);
+		                    } catch (e: any) {
+		                      alert('創建遊戲失敗：' + (e?.message || '未知錯誤'));
+		                    }
+		                  }}
 	                  className="px-6 py-3 rounded-2xl border-4 border-amber-600 bg-amber-600 text-white font-black hover:bg-amber-700"
 	                >
 	                  創建遊戲
