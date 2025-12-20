@@ -28,6 +28,7 @@ import type { MathConstraints } from '../services/mathConstraints';
 import { validateEquationAnswerType, validateEquationSteps, validateRationalAgainstConstraints, validateTokensAgainstConstraints } from '../services/mathConstraints';
 import { parseAndSolveSingleUnknownEquation } from '../services/equationSolver';
 import { Subject, Discussion } from '../types';
+import { DEFAULT_SUBJECT, GROUPS_ENABLED, VISIBLE_SUBJECTS } from '../platform';
 
 type TowerDefenseQuestionDraft =
   | { type: 'mcq'; prompt: string; options: string[]; correctIndex: number }
@@ -59,7 +60,7 @@ const TeacherDashboard: React.FC = () => {
   const [showDiscussionModal, setShowDiscussionModal] = useState(false);
   const [discussionForm, setDiscussionForm] = useState({
     title: '',
-    subject: Subject.CHINESE,
+    subject: DEFAULT_SUBJECT,
     targetClasses: [] as string[],
     targetGroups: [] as string[],
     content: ''
@@ -71,7 +72,7 @@ const TeacherDashboard: React.FC = () => {
   const [quizForm, setQuizForm] = useState({
     title: '',
     description: '',
-    subject: Subject.CHINESE,
+    subject: DEFAULT_SUBJECT,
     targetClasses: [] as string[],
     targetGroups: [] as string[],
     questions: [] as Array<{
@@ -86,7 +87,7 @@ const TeacherDashboard: React.FC = () => {
   const [showAiGenerator, setShowAiGenerator] = useState(false);
   const [aiGeneratorMode, setAiGeneratorMode] = useState<'mcq' | 'pairs'>('mcq');
   const [aiGeneratorTitle, setAiGeneratorTitle] = useState('AI 生成題目');
-  const [aiGeneratorSubject, setAiGeneratorSubject] = useState<string>(String(Subject.CHINESE));
+  const [aiGeneratorSubject, setAiGeneratorSubject] = useState<string>(String(DEFAULT_SUBJECT));
   const [aiGeneratorImportModes, setAiGeneratorImportModes] = useState<Array<'replace' | 'append'>>(['replace']);
   const aiGeneratorOnImportRef = useRef<(payload: any, mode: 'replace' | 'append') => void>(() => {});
 
@@ -104,7 +105,7 @@ const TeacherDashboard: React.FC = () => {
   const [showBotTaskAssignModal, setShowBotTaskAssignModal] = useState(false);
   const [botTaskForm, setBotTaskForm] = useState<{ botId: string; subject: string; targetClasses: string[]; targetGroups: string[] }>({
     botId: '',
-    subject: String(Subject.CHINESE),
+    subject: String(DEFAULT_SUBJECT),
     targetClasses: [],
     targetGroups: []
   });
@@ -172,7 +173,7 @@ const TeacherDashboard: React.FC = () => {
     topic: '',
     scopeText: '',
     advancedOnly: false,
-    subject: Subject.CHINESE,
+    subject: DEFAULT_SUBJECT,
     grade: '小一',
     questionCount: 10,
     timeLimitSeconds: null as number | null,
@@ -182,7 +183,7 @@ const TeacherDashboard: React.FC = () => {
   const [gameForm, setGameForm] = useState({
     title: '',
     description: '',
-    subject: Subject.CHINESE,
+    subject: DEFAULT_SUBJECT,
     targetClasses: [] as string[],
     targetGroups: [] as string[],
     questions: [] as Array<{
@@ -202,7 +203,7 @@ const TeacherDashboard: React.FC = () => {
   // Ranger 塔防（數學驅動）
   const [rangerForm, setRangerForm] = useState({ title: '', description: '', targetClasses: [] as string[], targetGroups: [] as string[] });
   const [rangerGrade, setRangerGrade] = useState<'小一' | '小二' | '小三' | '小四' | '小五' | '小六'>('小一');
-  const [rangerSubject, setRangerSubject] = useState<Subject>(Subject.MATH);
+  const [rangerSubject, setRangerSubject] = useState<Subject>(DEFAULT_SUBJECT);
   const [rangerStageQuestionCount, setRangerStageQuestionCount] = useState(10);
   const [rangerEquationPercentText, setRangerEquationPercentText] = useState('30'); // 方程式比例
   const [rangerDecimalPercentText, setRangerDecimalPercentText] = useState('50'); // 小數比例
@@ -622,7 +623,7 @@ const TeacherDashboard: React.FC = () => {
 	    }
 
 	    const defaultBotId = String(bots[0]?.id || '');
-	    const defaultSubject = filterSubject || String(Subject.CHINESE);
+	    const defaultSubject = filterSubject || String(DEFAULT_SUBJECT);
 	    setBotTaskForm({
 	      botId: defaultBotId,
 	      subject: defaultSubject,
@@ -637,12 +638,12 @@ const TeacherDashboard: React.FC = () => {
     try {
       if (!botTaskForm.botId) return alert('請選擇 Pedia');
       if (!botTaskForm.subject) return alert('請選擇科目');
-      if (botTaskForm.targetClasses.length === 0 && botTaskForm.targetGroups.length === 0) return alert('請選擇班級或分組');
+      if (botTaskForm.targetClasses.length === 0) return alert('請選擇班級');
       await authService.createBotTask({
         botId: botTaskForm.botId,
         subject: botTaskForm.subject,
         targetClasses: botTaskForm.targetClasses,
-        targetGroups: botTaskForm.targetGroups
+        targetGroups: GROUPS_ENABLED ? botTaskForm.targetGroups : []
       });
       alert('Pedia 任務已派發！');
       setShowBotTaskAssignModal(false);
@@ -1402,7 +1403,7 @@ const TeacherDashboard: React.FC = () => {
 		    setGameType('ranger-td');
 		    setRangerForm({ title: '', description: '', targetClasses: [], targetGroups: [] });
 		    setRangerGrade('小一');
-		    setRangerSubject(Subject.MATH);
+		    setRangerSubject(DEFAULT_SUBJECT);
 		    setRangerAnswerMode('mcq');
 		    setRangerMcqQuestions([]);
 		    setRangerStageQuestionCount(10);
@@ -1448,8 +1449,8 @@ const TeacherDashboard: React.FC = () => {
   // 監聽遊戲模態框開啟
   useEffect(() => {
     if (showGameModal) {
-      if (gameType === 'math') loadClassesAndGroups(Subject.MATH);
-      else if (gameType === 'ranger-td') loadClassesAndGroups(rangerAnswerMode === 'mcq' ? rangerSubject : Subject.MATH);
+      if (gameType === 'math') loadClassesAndGroups(DEFAULT_SUBJECT);
+      else if (gameType === 'ranger-td') loadClassesAndGroups(DEFAULT_SUBJECT);
       else loadClassesAndGroups(gameForm.subject);
     }
   }, [showGameModal, gameType, rangerAnswerMode, rangerSubject]);
@@ -1815,8 +1816,8 @@ const TeacherDashboard: React.FC = () => {
       return;
     }
 
-    if (quizForm.targetClasses.length === 0 && quizForm.targetGroups.length === 0) {
-      alert('請選擇班級或分組');
+    if (quizForm.targetClasses.length === 0) {
+      alert('請選擇班級');
       return;
     }
 
@@ -1843,7 +1844,7 @@ const TeacherDashboard: React.FC = () => {
         description: quizForm.description,
         subject: quizForm.subject,
         targetClasses: quizForm.targetClasses,
-        targetGroups: quizForm.targetGroups,
+        targetGroups: GROUPS_ENABLED ? quizForm.targetGroups : [],
         questions: quizForm.questions,
         timeLimit: quizForm.timeLimit
       });
@@ -1853,7 +1854,7 @@ const TeacherDashboard: React.FC = () => {
       setQuizForm({
         title: '',
         description: '',
-        subject: Subject.CHINESE,
+        subject: DEFAULT_SUBJECT,
         targetClasses: [],
         targetGroups: [],
         questions: [],
@@ -1880,8 +1881,8 @@ const TeacherDashboard: React.FC = () => {
       alert('請選擇年級');
       return;
     }
-    if (contestForm.targetClasses.length === 0 && contestForm.targetGroups.length === 0) {
-      alert('請選擇至少一個班級或分組');
+    if (contestForm.targetClasses.length === 0) {
+      alert('請選擇至少一個班級');
       return;
     }
 
@@ -1896,7 +1897,7 @@ const TeacherDashboard: React.FC = () => {
         questionCount: contestForm.questionCount,
         timeLimitSeconds: contestForm.timeLimitSeconds,
         targetClasses: contestForm.targetClasses,
-        targetGroups: contestForm.targetGroups
+        targetGroups: GROUPS_ENABLED ? contestForm.targetGroups : []
       });
       alert('問答比賽創建成功！');
       setShowContestModal(false);
@@ -1905,7 +1906,7 @@ const TeacherDashboard: React.FC = () => {
         topic: '',
         scopeText: '',
         advancedOnly: false,
-        subject: Subject.CHINESE,
+        subject: DEFAULT_SUBJECT,
         grade: '小一',
         questionCount: 10,
         timeLimitSeconds: null,
@@ -1924,8 +1925,8 @@ const TeacherDashboard: React.FC = () => {
       return;
     }
 
-    if (discussionForm.targetClasses.length === 0 && discussionForm.targetGroups.length === 0) {
-      alert('請選擇班級或分組');
+    if (discussionForm.targetClasses.length === 0) {
+      alert('請選擇班級');
       return;
     }
 
@@ -1949,14 +1950,14 @@ const TeacherDashboard: React.FC = () => {
         content: contentBlocks,
         subject: discussionForm.subject,
         targetClasses: discussionForm.targetClasses,
-        targetGroups: discussionForm.targetGroups
+        targetGroups: GROUPS_ENABLED ? discussionForm.targetGroups : []
       });
 
       alert('討論串派發成功！');
       setShowDiscussionModal(false);
       setDiscussionForm({
         title: '',
-        subject: Subject.CHINESE,
+        subject: DEFAULT_SUBJECT,
         targetClasses: [],
         targetGroups: [],
         content: ''
@@ -2103,7 +2104,7 @@ const TeacherDashboard: React.FC = () => {
                       className="w-full px-3 py-2 border-2 border-gray-300 rounded-xl"
                     >
                       <option value="">全部科目</option>
-                      {Object.values(Subject).map(subject => (
+                      {VISIBLE_SUBJECTS.map(subject => (
                         <option key={subject} value={subject}>{subject}</option>
                       ))}
                     </select>
@@ -2753,7 +2754,7 @@ const TeacherDashboard: React.FC = () => {
                       loadClassesAndGroups(newSubject);
                     }}
                   >
-                    {Object.values(Subject).map(subject => (
+                    {VISIBLE_SUBJECTS.map(subject => (
                       <option key={subject} value={subject}>{subject}</option>
                     ))}
                   </select>
@@ -2937,8 +2938,8 @@ const TeacherDashboard: React.FC = () => {
                         alert('請填寫遊戲標題');
                         return;
                       }
-                      if (gameForm.targetClasses.length === 0 && gameForm.targetGroups.length === 0) {
-                        alert('請選擇至少一個班級或分組');
+                      if (gameForm.targetClasses.length === 0) {
+                        alert('請選擇至少一個班級');
                         return;
                       }
                       if (gameForm.questions.length === 0) {
@@ -2952,7 +2953,7 @@ const TeacherDashboard: React.FC = () => {
                         gameType: 'maze',
                         subject: gameForm.subject,
                         targetClasses: gameForm.targetClasses,
-                        targetGroups: gameForm.targetGroups,
+                        targetGroups: GROUPS_ENABLED ? gameForm.targetGroups : [],
                         questions: gameForm.questions,
                         difficulty: gameForm.difficulty
                       });
@@ -2963,7 +2964,7 @@ const TeacherDashboard: React.FC = () => {
                       setGameForm({
                         title: '',
                         description: '',
-                        subject: Subject.CHINESE,
+                        subject: DEFAULT_SUBJECT,
                         targetClasses: [],
                         targetGroups: [],
                         questions: [],
@@ -3042,7 +3043,7 @@ const TeacherDashboard: React.FC = () => {
 	                    loadClassesAndGroups(newSubject);
 	                  }}
 	                >
-	                  {Object.values(Subject).map(subject => (
+	                  {VISIBLE_SUBJECTS.map(subject => (
 	                    <option key={subject} value={subject}>{subject}</option>
 	                  ))}
 	                </select>
@@ -3202,8 +3203,8 @@ const TeacherDashboard: React.FC = () => {
 	                          return;
 	                        }
 
-	                        if (gameForm.targetClasses.length === 0 && gameForm.targetGroups.length === 0) {
-	                          alert('請選擇至少一個班級或分組');
+	                        if (gameForm.targetClasses.length === 0) {
+	                          alert('請選擇至少一個班級');
 	                          return;
 	                        }
 
@@ -3226,7 +3227,7 @@ const TeacherDashboard: React.FC = () => {
 	                          gameType: 'matching',
 	                          subject: gameForm.subject,
 	                          targetClasses: gameForm.targetClasses,
-	                          targetGroups: gameForm.targetGroups,
+	                          targetGroups: GROUPS_ENABLED ? gameForm.targetGroups : [],
 	                          questions: cleanedPairs.slice(0, requiredPairs),
 	                          difficulty: gameForm.difficulty
 	                        });
@@ -3237,7 +3238,7 @@ const TeacherDashboard: React.FC = () => {
 	                        setGameForm({
 	                          title: '',
 	                          description: '',
-	                          subject: Subject.CHINESE,
+	                          subject: DEFAULT_SUBJECT,
 	                          targetClasses: [],
 	                          targetGroups: [],
 	                          questions: [],
@@ -3302,7 +3303,7 @@ const TeacherDashboard: React.FC = () => {
 	                    loadClassesAndGroups(newSubject);
 	                  }}
 	                >
-	                  {Object.values(Subject).map(subject => (
+	                  {VISIBLE_SUBJECTS.map(subject => (
 	                    <option key={subject} value={subject}>{subject}</option>
 	                  ))}
 	                </select>
@@ -3587,8 +3588,8 @@ const TeacherDashboard: React.FC = () => {
 	                        alert('請填寫遊戲標題');
 	                        return;
 	                      }
-		                      if (gameForm.targetClasses.length === 0 && gameForm.targetGroups.length === 0) {
-		                        alert('請選擇至少一個班級或分組');
+		                      if (gameForm.targetClasses.length === 0) {
+		                        alert('請選擇至少一個班級');
 		                        return;
 		                      }
 		                      const cleanedQuestions: TowerDefenseQuestionDraft[] = towerDefenseQuestions
@@ -3617,7 +3618,7 @@ const TeacherDashboard: React.FC = () => {
 		                        gameType: 'tower-defense',
 		                        subject: gameForm.subject,
 		                        targetClasses: gameForm.targetClasses,
-		                        targetGroups: gameForm.targetGroups,
+		                        targetGroups: GROUPS_ENABLED ? gameForm.targetGroups : [],
 		                        questions: cleanedQuestions,
 		                        difficulty: gameForm.difficulty,
 		                        timeLimitSeconds: clampTowerDefenseTimeSeconds(towerDefenseTimeSecondsText, towerDefenseTimeSeconds),
@@ -3635,7 +3636,7 @@ const TeacherDashboard: React.FC = () => {
 			                      setGameForm({
 			                        title: '',
 			                        description: '',
-			                        subject: Subject.CHINESE,
+			                        subject: DEFAULT_SUBJECT,
 			                        targetClasses: [],
 			                        targetGroups: [],
 			                        questions: [],
@@ -3704,7 +3705,7 @@ const TeacherDashboard: React.FC = () => {
 		                        loadClassesAndGroups(newSubject);
 		                      }}
 		                    >
-		                      {Object.values(Subject).map(subject => (
+		                      {VISIBLE_SUBJECTS.map(subject => (
 		                        <option key={subject} value={subject}>{subject}</option>
 		                      ))}
 		                    </select>
@@ -4151,13 +4152,13 @@ const TeacherDashboard: React.FC = () => {
 		                  onClick={async () => {
 		                    try {
 		                      if (!rangerForm.title.trim()) return alert('請輸入測驗標題');
-		                      if (!rangerForm.targetClasses?.length && !rangerForm.targetGroups?.length) return alert('請選擇至少一個目標班級或分組');
+		                      if (!rangerForm.targetClasses?.length) return alert('請選擇至少一個目標班級');
 
 		                      const wrongTowerDamage = Math.max(1, Math.min(99, Number.parseInt(String(rangerWrongTowerDamageText || '2').trim(), 10) || 2));
 		                      const towerHp = Math.max(5, Math.min(999, Number.parseInt(String(rangerTowerHpText || '20').trim(), 10) || 20));
 
 		                      const isMcq = rangerAnswerMode === 'mcq';
-		                      const subject = isMcq ? rangerSubject : Subject.MATH;
+		                      const subject = DEFAULT_SUBJECT;
 
 		                      const questionsPayload: any[] = (() => {
 		                        if (!isMcq) return [];
@@ -4205,7 +4206,7 @@ const TeacherDashboard: React.FC = () => {
 		                        gameType: 'ranger-td',
 		                        subject,
 		                        targetClasses: rangerForm.targetClasses,
-		                        targetGroups: rangerForm.targetGroups,
+		                        targetGroups: GROUPS_ENABLED ? rangerForm.targetGroups : [],
 		                        questions: questionsPayload,
 		                        difficulty: 'medium',
 		                        timeLimitSeconds: clampTowerDefenseTimeSeconds(rangerRunSecondsText, rangerRunSeconds),
@@ -4824,7 +4825,7 @@ const TeacherDashboard: React.FC = () => {
 	                    try {
 	                      if (!mathForm.title.trim()) return alert('請輸入遊戲標題');
 	                      if (mathAllowedOps.length === 0 && mathQuestionType === 'calc') return alert('請至少選擇一種運算（加/減/乘/除）');
-	                      if (!mathForm.targetClasses?.length && !mathForm.targetGroups?.length) return alert('請選擇至少一個目標班級或分組');
+	                      if (!mathForm.targetClasses?.length) return alert('請選擇至少一個目標班級');
 	                      if (!mathDrafts.length) return alert('請新增至少一題');
 
 	                      const questions = mathQuestionType === 'equation'
@@ -4847,9 +4848,9 @@ const TeacherDashboard: React.FC = () => {
 	                        title: mathForm.title,
 	                        description: mathForm.description,
 	                        gameType: 'math',
-	                        subject: Subject.MATH,
+	                        subject: DEFAULT_SUBJECT,
 	                        targetClasses: mathForm.targetClasses,
-	                        targetGroups: mathForm.targetGroups,
+	                        targetGroups: GROUPS_ENABLED ? mathForm.targetGroups : [],
 	                        questions,
 	                        difficulty: 'medium',
 	                        timeLimitSeconds: mathTimeEnabled ? clampTowerDefenseTimeSeconds(mathTimeSecondsText, mathTimeSeconds) : undefined,
@@ -4924,7 +4925,7 @@ const TeacherDashboard: React.FC = () => {
                         loadClassesAndGroups(newSubject);
                       }}
                     >
-                      {Object.values(Subject).map(subject => (
+                      {VISIBLE_SUBJECTS.map(subject => (
                         <option key={subject} value={subject}>{subject}</option>
                       ))}
                     </select>
@@ -6127,7 +6128,7 @@ const TeacherDashboard: React.FC = () => {
 	                      }}
 	                      className="w-full px-4 py-2 border-4 border-brand-brown rounded-2xl bg-white font-bold"
 	                    >
-	                      {Object.values(Subject).map((s) => (
+	                      {VISIBLE_SUBJECTS.map((s) => (
 	                        <option key={s} value={s}>{s}</option>
 	                      ))}
 	                    </select>
@@ -6294,7 +6295,7 @@ const TeacherDashboard: React.FC = () => {
                         loadClassesAndGroups(newSubject);
                       }}
                     >
-                      {Object.values(Subject).map(subject => (
+                      {VISIBLE_SUBJECTS.map(subject => (
                         <option key={subject} value={subject}>{subject}</option>
                       ))}
                     </select>
@@ -6602,7 +6603,7 @@ const TeacherDashboard: React.FC = () => {
 			                <div>
 			                  <div className="text-sm font-black text-gray-700 mb-2">任教科目</div>
 			                  <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
-			                    {Object.values(Subject).map((subject) => {
+			                    {VISIBLE_SUBJECTS.map((subject) => {
 			                      const checked = teacherSettingsDraft.subjectsTaught.includes(subject);
 			                      return (
 			                        <label
@@ -7026,7 +7027,7 @@ const TeacherDashboard: React.FC = () => {
                       value={contestForm.subject}
                       onChange={(e) => setContestForm(prev => ({ ...prev, subject: e.target.value as Subject }))}
                     >
-                      {Object.values(Subject).map(subject => (
+                      {VISIBLE_SUBJECTS.map(subject => (
                         <option key={subject} value={subject}>{subject}</option>
                       ))}
                     </select>

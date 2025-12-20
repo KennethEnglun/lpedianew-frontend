@@ -1,6 +1,7 @@
 import React, { useMemo, useState, useEffect, useRef, useCallback } from 'react';
 import { Settings, LogOut, MessageSquare, HelpCircle, Bot, RefreshCw, X, Eye, EyeOff, Code2 } from 'lucide-react';
 import { Subject, SUBJECT_CONFIG, Task } from '../types';
+import { DEFAULT_SUBJECT, SINGLE_SUBJECT_MODE, VISIBLE_SUBJECTS } from '../platform';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { authService } from '../services/authService';
@@ -122,7 +123,7 @@ const generateMaze = (width: number, height: number, items: number) => {
 };
 
 const StudentDashboard: React.FC = () => {
-  const [selectedSubject, setSelectedSubject] = useState<Subject>(Subject.CHINESE);
+  const [selectedSubject, setSelectedSubject] = useState<Subject>(DEFAULT_SUBJECT);
   const [discussions, setDiscussions] = useState<Discussion[]>([]);
   const [tasks, setTasks] = useState<Task[]>([]);
   const [loading, setLoading] = useState(true);
@@ -1076,7 +1077,7 @@ const StudentDashboard: React.FC = () => {
 
   const subjectProgress = useMemo(() => {
     const map = new Map<Subject, { total: number; completed: number }>();
-    for (const subject of Object.values(Subject)) {
+    for (const subject of VISIBLE_SUBJECTS) {
       map.set(subject, { total: 0, completed: 0 });
     }
     for (const task of visibleAllTasks) {
@@ -1234,14 +1235,14 @@ const StudentDashboard: React.FC = () => {
               <span className="text-lg font-bold text-brand-brown flex-1 text-left">小程式工作坊</span>
             </button>
 
-            {Object.values(Subject).map((subject) => {
+            {VISIBLE_SUBJECTS.map((subject) => {
               const config = SUBJECT_CONFIG[subject];
               const isSelected = selectedSubject === subject;
               const stats = subjectProgress.get(subject) ?? { total: 0, completed: 0 };
               return (
                 <button
                   key={subject}
-                  onClick={() => setSelectedSubject(subject)}
+                  onClick={() => (SINGLE_SUBJECT_MODE ? null : setSelectedSubject(subject))}
                   className={`w-[calc(100%-10px)] flex items-center gap-3 px-4 py-2 rounded-2xl border-4 transition-all duration-150 ${isSelected
                     ? 'border-brand-brown translate-x-2 bg-opacity-100 shadow-comic'
                     : 'border-transparent hover:border-brand-brown/30 bg-opacity-70'
