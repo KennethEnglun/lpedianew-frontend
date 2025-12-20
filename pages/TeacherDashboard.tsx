@@ -5839,8 +5839,6 @@ const TeacherDashboard: React.FC = () => {
                               if (subject === '中文') studentGroup = student.profile?.chineseGroup || '';
                               else if (subject === '英文') studentGroup = student.profile?.englishGroup || '';
                               else if (subject === '數學') studentGroup = student.profile?.mathGroup || '';
-                              else if (subject === '常識') studentGroup = student.profile?.gsGroup || ''; // Assuming generic or specific mapping
-
                               inGroup = targetGroupList.includes(studentGroup);
                             }
 
