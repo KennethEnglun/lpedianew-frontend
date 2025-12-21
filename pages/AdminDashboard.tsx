@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { Download, Upload, Users, UserPlus, Settings, Eye, Edit3, Trash2, LogOut } from 'lucide-react';
+import React, { useMemo, useState, useEffect } from 'react';
+import { Download, Upload, Users, UserPlus, Settings, Eye, Edit3, Trash2, LogOut, ArchiveRestore } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { authService } from '../services/authService';
 import Button from '../components/Button';
@@ -87,6 +87,12 @@ const AdminDashboard: React.FC = () => {
   const [showAddUser, setShowAddUser] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
+  const [folderClassName, setFolderClassName] = useState('');
+  const [folderLoading, setFolderLoading] = useState(false);
+  const [folderError, setFolderError] = useState('');
+  const [classFolders, setClassFolders] = useState<any[]>([]);
+  const [yearEndLoading, setYearEndLoading] = useState(false);
+  const [yearEndResult, setYearEndResult] = useState<{ archiveId: string; archivedAt: string } | null>(null);
   const [newUserForm, setNewUserForm] = useState({
     username: '',
     password: '',
@@ -139,6 +145,81 @@ const AdminDashboard: React.FC = () => {
   }, [filterRole, searchTerm]);
 
   const filteredUsers = users;
+
+  const classOptions = useMemo(() => {
+    const set = new Set<string>();
+    for (const u of users) {
+      if (u.role !== 'student') continue;
+      const c = String(u.class || '').trim();
+      if (c) set.add(c);
+    }
+    return Array.from(set).sort((a, b) => a.localeCompare(b, 'zh-Hant'));
+  }, [users]);
+
+  useEffect(() => {
+    if (folderClassName) return;
+    if (classOptions.length > 0) setFolderClassName(classOptions[0]);
+  }, [classOptions, folderClassName]);
+
+  const folderById = useMemo(() => {
+    const map = new Map<string, any>();
+    for (const f of classFolders) {
+      if (!f) continue;
+      map.set(String(f.id), f);
+    }
+    return map;
+  }, [classFolders]);
+
+  const getFolderPath = (folderId: string) => {
+    const fid = String(folderId || '').trim();
+    if (!fid) return '';
+    const path: string[] = [];
+    let cur = folderById.get(fid);
+    while (cur) {
+      path.push(String(cur.name || ''));
+      if (!cur.parentId) break;
+      cur = folderById.get(String(cur.parentId));
+    }
+    path.reverse();
+    return path.join(' / ');
+  };
+
+  const archivedFolders = useMemo(() => {
+    return classFolders.filter((f) => f && f.archivedAt);
+  }, [classFolders]);
+
+  const loadClassFolders = async (cls: string) => {
+    const c = String(cls || '').trim();
+    if (!c) return;
+    setFolderLoading(true);
+    setFolderError('');
+    try {
+      const resp = await authService.getClassFoldersAdmin(c, { includeArchived: true });
+      setClassFolders(Array.isArray(resp.folders) ? resp.folders : []);
+    } catch (e: any) {
+      setFolderError(e?.message || '載入失敗');
+      setClassFolders([]);
+    } finally {
+      setFolderLoading(false);
+    }
+  };
+
+  const runYearEndArchive = async () => {
+    if (yearEndLoading) return;
+    const token = window.prompt('此操作會封存本年度所有學生內容並清空（不可逆）。\n如確定，請輸入「升班」確認：', '');
+    if (token !== '升班') return;
+    try {
+      setYearEndLoading(true);
+      setError('');
+      const resp = await authService.archiveYearEnd();
+      setYearEndResult({ archiveId: resp.archiveId, archivedAt: resp.archivedAt });
+      alert(`已封存完成（archiveId: ${resp.archiveId}）`);
+    } catch (e: any) {
+      setError(e?.message || '年度封存失敗');
+    } finally {
+      setYearEndLoading(false);
+    }
+  };
 
   const exportToCSV = async () => {
     try {
@@ -483,6 +564,123 @@ const AdminDashboard: React.FC = () => {
               </Button>
             </div>
           </div>
+        </div>
+
+        {/* Year End */}
+        <div className="bg-white border-4 border-brand-brown rounded-3xl p-6 mb-6 shadow-comic">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <h2 className="text-2xl font-bold text-brand-brown">年度操作</h2>
+              <div className="text-sm text-gray-600 font-bold mt-1">
+                「升班」會封存本年度所有學生內容並清空（可在後端 data/year_archives 找到封存檔）。
+              </div>
+              {yearEndResult && (
+                <div className="text-xs text-gray-600 font-bold mt-2">
+                  最近一次封存：{yearEndResult.archiveId}（{yearEndResult.archivedAt}）
+                </div>
+              )}
+            </div>
+            <Button
+              className="bg-red-100 hover:bg-red-200 text-red-800 flex items-center gap-2"
+              onClick={() => void runYearEndArchive()}
+              disabled={yearEndLoading}
+            >
+              {yearEndLoading ? '封存中...' : '升班（封存本年度）'}
+            </Button>
+          </div>
+        </div>
+
+        {/* Archived Class Folders */}
+        <div className="bg-white border-4 border-brand-brown rounded-3xl p-6 mb-6 shadow-comic">
+          <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
+            <h2 className="text-2xl font-bold text-brand-brown">班級資料夾（封存）</h2>
+            <div className="flex items-center gap-3">
+              <label className="font-bold text-brand-brown">班別</label>
+              <select
+                className="px-4 py-2 border-4 border-brand-brown rounded-2xl bg-white font-bold"
+                value={folderClassName}
+                onChange={(e) => setFolderClassName(e.target.value)}
+                disabled={classOptions.length === 0}
+              >
+                {classOptions.length === 0 ? (
+                  <option value="">（未有班別）</option>
+                ) : (
+                  classOptions.map((c) => (
+                    <option key={c} value={c}>{c}</option>
+                  ))
+                )}
+              </select>
+              <Button
+                className="bg-[#E8F5E9] hover:bg-[#C8E6C9] flex items-center gap-2"
+                onClick={() => void loadClassFolders(folderClassName)}
+                disabled={!folderClassName || folderLoading}
+              >
+                <ArchiveRestore className="w-4 h-4" />
+                {folderLoading ? '載入中...' : '載入封存資料夾'}
+              </Button>
+            </div>
+          </div>
+
+          {folderError && (
+            <div className="mb-3 text-red-700 font-bold">{folderError}</div>
+          )}
+
+          {archivedFolders.length === 0 ? (
+            <div className="text-gray-600 font-bold">
+              目前沒有封存資料夾
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {archivedFolders
+                .slice()
+                .sort((a, b) => {
+                  const la = Number(a.level) || 0;
+                  const lb = Number(b.level) || 0;
+                  if (la !== lb) return la - lb;
+                  return String(a.name || '').localeCompare(String(b.name || ''), 'zh-Hant');
+                })
+                .map((f: any) => {
+                  const level = Number(f.level);
+                  const label = level === 1 ? '學段' : level === 2 ? '課題' : level === 3 ? '子folder' : '資料夾';
+                  const path = getFolderPath(String(f.id));
+                  return (
+                    <div key={String(f.id)} className="flex flex-wrap items-center justify-between gap-3 p-3 rounded-2xl border-2 border-gray-200 bg-gray-50">
+                      <div className="min-w-0">
+                        <div className="font-black text-brand-brown">
+                          {label}：{String(f.name || '')}
+                        </div>
+                        <div className="text-xs text-gray-600 font-bold break-words">
+                          路徑：{path || String(f.name || '')}
+                        </div>
+                        <div className="text-xs text-gray-500 font-bold">
+                          封存時間：{String(f.archivedAt || '')}
+                        </div>
+                      </div>
+                      <Button
+                        className="bg-[#B5D8F8] hover:bg-[#A1CCF0] flex items-center gap-2"
+                        onClick={async () => {
+                          if (!folderClassName) return;
+                          if (!window.confirm('確定要復原此資料夾及其子層嗎？')) return;
+                          try {
+                            setFolderLoading(true);
+                            await authService.restoreClassFolder(folderClassName, String(f.id));
+                            await loadClassFolders(folderClassName);
+                          } catch (e: any) {
+                            setFolderError(e?.message || '復原失敗');
+                          } finally {
+                            setFolderLoading(false);
+                          }
+                        }}
+                        disabled={folderLoading || !folderClassName}
+                      >
+                        <ArchiveRestore className="w-4 h-4" />
+                        復原
+                      </Button>
+                    </div>
+                  );
+                })}
+            </div>
+          )}
         </div>
 
         {/* Users Table */}

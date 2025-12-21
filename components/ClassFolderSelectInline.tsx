@@ -148,11 +148,10 @@ const ClassFolderSelectInline: React.FC<Props> = ({ authService, className, valu
       </div>
 
       {required && !resolvedValue && (
-        <div className="text-xs font-bold text-red-700">請先選擇課題（lv2）或子folder（lv3）</div>
+      <div className="text-xs font-bold text-red-700">請先選擇課題或子folder</div>
       )}
     </div>
   );
 };
 
 export default ClassFolderSelectInline;
-

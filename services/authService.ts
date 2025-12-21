@@ -898,6 +898,34 @@ class AuthService {
     return this.handleResponse(response);
   }
 
+  // 班級資料夾：管理員（可查看封存 + 復原）
+  async getClassFoldersAdmin(className: string, opts?: { includeArchived?: boolean }): Promise<{ className: string; folders: any[] }> {
+    const params = new URLSearchParams();
+    if (opts?.includeArchived) params.append('includeArchived', '1');
+    const qs = params.toString() ? `?${params.toString()}` : '';
+    const response = await fetch(`${this.API_BASE}/class-folders/${encodeURIComponent(className)}${qs}`, {
+      headers: this.getAuthHeaders()
+    });
+    return this.handleResponse(response);
+  }
+
+  async restoreClassFolder(className: string, folderId: string): Promise<{ result: any }> {
+    const response = await fetch(`${this.API_BASE}/class-folders/${encodeURIComponent(className)}/${encodeURIComponent(folderId)}/restore`, {
+      method: 'POST',
+      headers: this.getAuthHeaders()
+    });
+    return this.handleResponse(response);
+  }
+
+  // 年度封存（升班）：管理員專用
+  async archiveYearEnd(): Promise<{ message: string; archiveId: string; archivedAt: string; files: Array<{ file: string; existed: boolean; count: number }> }> {
+    const response = await fetch(`${this.API_BASE}/admin/year-end/archive`, {
+      method: 'POST',
+      headers: this.getAuthHeaders()
+    });
+    return this.handleResponse(response);
+  }
+
   async createClassFolder(className: string, payload: { parentId: string; level: 2 | 3; name: string; order?: number }): Promise<{ folder: any }> {
     const response = await fetch(`${this.API_BASE}/class-folders/${encodeURIComponent(className)}`, {
       method: 'POST',

@@ -75,7 +75,7 @@ const ClassFolderManagerModal: React.FC<Props> = ({ open, onClose, authService, 
         <div className="p-6 border-b-4 border-brand-brown bg-[#C0E2BE] flex items-center justify-between">
           <div>
             <div className="text-2xl font-black text-brand-brown">班級資料夾管理</div>
-            <div className="text-sm text-brand-brown/80 font-bold">學段(lv1) 固定；可建課題(lv2) 與子folder(lv3)</div>
+            <div className="text-sm text-brand-brown/80 font-bold">學段固定；可建課題與子folder</div>
           </div>
           <button
             onClick={onClose}
@@ -112,7 +112,7 @@ const ClassFolderManagerModal: React.FC<Props> = ({ open, onClose, authService, 
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div className="p-4 rounded-2xl border-2 border-gray-200 bg-gray-50">
-              <div className="font-black text-gray-700 mb-3">學段 (lv1)</div>
+              <div className="font-black text-gray-700 mb-3">學段</div>
               <div className="space-y-2">
                 {stageFolders.map((s) => (
                   <button
@@ -131,7 +131,7 @@ const ClassFolderManagerModal: React.FC<Props> = ({ open, onClose, authService, 
 
             <div className="p-4 rounded-2xl border-2 border-gray-200 bg-gray-50 md:col-span-2">
               <div className="flex items-center justify-between gap-3 mb-3">
-                <div className="font-black text-gray-700">課題 (lv2)</div>
+                <div className="font-black text-gray-700">課題</div>
                 <div className="text-sm text-gray-600 font-bold">可貼上多行批次新增</div>
               </div>
 
@@ -223,7 +223,7 @@ const ClassFolderManagerModal: React.FC<Props> = ({ open, onClose, authService, 
                     </div>
 
                     <div className="mt-3 pl-3 border-l-4 border-gray-200">
-                      <div className="text-sm font-black text-gray-700 mb-2">子folder (lv3，可選)</div>
+                      <div className="text-sm font-black text-gray-700 mb-2">子folder（可選）</div>
                       <div className="flex gap-2 mb-2">
                         <input
                           className="flex-1 px-3 py-2 rounded-xl border-2 border-gray-300 font-bold"
@@ -326,4 +326,3 @@ const ClassFolderManagerModal: React.FC<Props> = ({ open, onClose, authService, 
 };
 
 export default ClassFolderManagerModal;
-
