@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Archive, ArchiveRestore, ChevronLeft, RefreshCw, Trash2, X } from 'lucide-react';
 import { VISIBLE_SUBJECTS } from '../platform';
+import RichHtmlContent from './RichHtmlContent';
 
 type ManagedTaskType = 'assignment' | 'quiz' | 'game' | 'contest' | 'ai-bot';
 
@@ -15,6 +16,87 @@ type Props = {
 const normalizeStringArray = (value: any) => (
   Array.isArray(value) ? value.map((v) => String(v || '').trim()).filter(Boolean) : []
 );
+
+type ContentBlock = { type: string; value: string };
+
+const normalizeContentBlocks = (input: any): ContentBlock[] => {
+  if (Array.isArray(input)) {
+    return input
+      .map((raw) => {
+        if (!raw || typeof raw !== 'object') return null;
+        const type = typeof (raw as any).type === 'string' ? (raw as any).type : String((raw as any).type ?? 'text');
+        const value = typeof (raw as any).value === 'string' ? (raw as any).value : String((raw as any).value ?? '');
+        return { type, value };
+      })
+      .filter(Boolean) as ContentBlock[];
+  }
+
+  if (typeof input === 'string') {
+    const looksLikeHtml = /<\/?[a-z][\s\S]*>/i.test(input);
+    return [{ type: looksLikeHtml ? 'html' : 'text', value: input }];
+  }
+
+  if (input && typeof input === 'object') {
+    if ('type' in input && 'value' in input) {
+      const type = typeof (input as any).type === 'string' ? (input as any).type : String((input as any).type ?? 'text');
+      const value = typeof (input as any).value === 'string' ? (input as any).value : String((input as any).value ?? '');
+      return [{ type, value }];
+    }
+  }
+
+  return [];
+};
+
+const renderContentBlocks = (content: any) => {
+  const blocks = normalizeContentBlocks(content);
+  if (blocks.length === 0) return <div className="text-gray-500 font-bold">（無內容）</div>;
+
+  return blocks.map((block, index) => (
+    <div key={index} className="mb-3">
+      {block.type === 'text' && (
+        <div className="prose prose-brand-brown max-w-none">
+          <p className="whitespace-pre-wrap">{block.value}</p>
+        </div>
+      )}
+      {block.type === 'image' && (
+        <div className="flex justify-center">
+          <img
+            src={block.value}
+            alt="內容圖片"
+            className="max-w-full h-auto rounded-xl border-2 border-brand-brown"
+            onError={(e) => {
+              const target = e.target as HTMLImageElement;
+              target.style.display = 'none';
+            }}
+          />
+        </div>
+      )}
+      {block.type === 'link' && (
+        <div className="p-3 bg-blue-50 border-2 border-blue-200 rounded-xl">
+          <a
+            href={block.value}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-blue-600 hover:text-blue-800 underline break-all"
+          >
+            🔗 {block.value}
+          </a>
+        </div>
+      )}
+      {block.type === 'html' && (
+        <div className="p-3 bg-gray-50 border-2 border-gray-200 rounded-xl">
+          <RichHtmlContent html={block.value} />
+        </div>
+      )}
+    </div>
+  ));
+};
+
+const indexToLetter = (idx: number) => {
+  const i = Number(idx);
+  if (!Number.isFinite(i) || i < 0) return '';
+  return String.fromCharCode('A'.charCodeAt(0) + i);
+};
 
 const getTaskLabel = (t: any) => {
   switch (String(t?.type)) {
@@ -48,6 +130,11 @@ const AssignmentExplorerModal: React.FC<Props> = ({ open, onClose, authService, 
   const [selectedTask, setSelectedTask] = useState<any | null>(null);
   const [taskLoading, setTaskLoading] = useState(false);
   const [taskResponses, setTaskResponses] = useState<any[]>([]);
+  const [taskDetail, setTaskDetail] = useState<any | null>(null);
+  const [expandedQuizResultIds, setExpandedQuizResultIds] = useState<Set<string>>(new Set());
+  const [expandedContestAttemptIds, setExpandedContestAttemptIds] = useState<Set<string>>(new Set());
+  const [contestAttemptDetails, setContestAttemptDetails] = useState<Record<string, any>>({});
+  const [contestAttemptLoading, setContestAttemptLoading] = useState<Record<string, boolean>>({});
 
   const canArchive = viewerRole === 'admin';
 
@@ -62,6 +149,7 @@ const AssignmentExplorerModal: React.FC<Props> = ({ open, onClose, authService, 
       if (!opts?.keepSelection) {
         setSelectedTask(null);
         setTaskResponses([]);
+        setTaskDetail(null);
         setTaskLoading(false);
       }
     } catch (e: any) {
@@ -227,28 +315,72 @@ const AssignmentExplorerModal: React.FC<Props> = ({ open, onClose, authService, 
   const openTask = async (t: any) => {
     setSelectedTask(t);
     setTaskResponses([]);
+    setTaskDetail(null);
+    setExpandedQuizResultIds(new Set());
+    setExpandedContestAttemptIds(new Set());
+    setContestAttemptDetails({});
+    setContestAttemptLoading({});
     setTaskLoading(true);
     try {
       if (t.type === 'game') {
         const resp = await authService.getGameResults(t.id);
+        setTaskDetail(resp.game || null);
         setTaskResponses(Array.isArray(resp.scores) ? resp.scores : []);
       } else if (t.type === 'quiz') {
         const resp = await authService.getQuizResults(t.id);
+        setTaskDetail(resp.quiz || null);
         setTaskResponses(Array.isArray(resp.results) ? resp.results : []);
       } else if (t.type === 'contest') {
         const resp = await authService.getContestResults(t.id);
+        setTaskDetail(resp.contest || null);
         setTaskResponses(Array.isArray(resp.attempts) ? resp.attempts : []);
       } else if (t.type === 'ai-bot') {
         const resp = await authService.getBotTaskThreads(t.id);
+        setTaskDetail(resp.task || null);
         setTaskResponses(Array.isArray(resp.threads) ? resp.threads : []);
       } else {
         const resp = await authService.getAssignmentResponses(t.id);
+        setTaskDetail(resp.assignment || null);
         setTaskResponses(Array.isArray(resp.responses) ? resp.responses : []);
       }
     } catch (e: any) {
       setError(e?.message || '載入詳情失敗');
     } finally {
       setTaskLoading(false);
+    }
+  };
+
+  const quizQuestions = useMemo(() => {
+    const q = taskDetail?.questions;
+    return Array.isArray(q) ? q : [];
+  }, [taskDetail]);
+
+  const toggleQuizResult = (id: string) => {
+    setExpandedQuizResultIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const toggleContestAttempt = async (attemptId: string) => {
+    setExpandedContestAttemptIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(attemptId)) next.delete(attemptId);
+      else next.add(attemptId);
+      return next;
+    });
+
+    if (contestAttemptDetails[attemptId]) return;
+    setContestAttemptLoading((prev) => ({ ...prev, [attemptId]: true }));
+    try {
+      const resp = await authService.getContestAttemptDetail(attemptId);
+      setContestAttemptDetails((prev) => ({ ...prev, [attemptId]: resp }));
+    } catch (e: any) {
+      setContestAttemptDetails((prev) => ({ ...prev, [attemptId]: { error: e?.message || '載入失敗' } }));
+    } finally {
+      setContestAttemptLoading((prev) => ({ ...prev, [attemptId]: false }));
     }
   };
 
@@ -388,6 +520,100 @@ const AssignmentExplorerModal: React.FC<Props> = ({ open, onClose, authService, 
               </div>
 
               <div className="mt-4 border-t-2 border-gray-200 pt-4">
+                <div className="text-lg font-black text-brand-brown mb-2">教師內容 / 題目</div>
+                {selectedTask.type === 'assignment' && (
+                  <div className="bg-[#FEF7EC] border-2 border-gray-200 rounded-2xl p-4">
+                    {renderContentBlocks(taskDetail?.content)}
+                  </div>
+                )}
+
+                {selectedTask.type === 'quiz' && (
+                  <div className="bg-[#FEF7EC] border-2 border-gray-200 rounded-2xl p-4 space-y-3">
+                    {quizQuestions.length === 0 ? (
+                      <div className="text-gray-500 font-bold">（未有題目資料）</div>
+                    ) : (
+                      quizQuestions.map((q: any, i: number) => {
+                        const options = Array.isArray(q?.options) ? q.options : [];
+                        const correctIndex = Number.isFinite(Number(q?.correctIndex)) ? Number(q.correctIndex) : null;
+                        return (
+                          <div key={q?.id ?? i} className="border-2 border-gray-200 rounded-2xl bg-white p-3">
+                            <div className="font-black text-brand-brown mb-2">問題 {i + 1}</div>
+                            <div className="text-gray-800 font-bold whitespace-pre-wrap">{String(q?.question || '')}</div>
+                            {options.length > 0 && (
+                              <div className="mt-2 grid grid-cols-1 md:grid-cols-2 gap-2">
+                                {options.map((opt: any, oi: number) => {
+                                  const isCorrect = correctIndex !== null && oi === correctIndex;
+                                  return (
+                                    <div
+                                      key={oi}
+                                      className={`p-2 rounded-xl border-2 font-bold ${isCorrect ? 'border-green-400 bg-green-50 text-green-900' : 'border-gray-200 bg-gray-50 text-gray-800'}`}
+                                    >
+                                      {indexToLetter(oi)}. {String(opt)}
+                                      {isCorrect ? '（正確）' : ''}
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })
+                    )}
+                  </div>
+                )}
+
+                {selectedTask.type === 'contest' && (
+                  <div className="bg-[#FEF7EC] border-2 border-gray-200 rounded-2xl p-4 space-y-2">
+                    <div className="font-bold text-gray-800">主題：{String(taskDetail?.topic || '') || '（未提供）'}</div>
+                    {taskDetail?.scopeText && (
+                      <div className="font-bold text-gray-800 whitespace-pre-wrap">範圍：{String(taskDetail.scopeText)}</div>
+                    )}
+                    <div className="text-sm text-gray-700 font-bold">
+                      題數：{String(taskDetail?.questionCount ?? '') || '-'}；限時：{taskDetail?.timeLimitSeconds ? `${taskDetail.timeLimitSeconds} 秒` : '不限'}
+                    </div>
+                    <div className="text-sm text-gray-600 font-bold">（每位學生的題目/選項/答案請在下方按「查看答題詳情」）</div>
+                  </div>
+                )}
+
+                {selectedTask.type === 'game' && (
+                  <div className="bg-[#FEF7EC] border-2 border-gray-200 rounded-2xl p-4 space-y-2">
+                    {taskDetail?.description && (
+                      <div className="font-bold text-gray-800 whitespace-pre-wrap">{String(taskDetail.description)}</div>
+                    )}
+                    {Array.isArray(taskDetail?.questions) && taskDetail.questions.length > 0 && (
+                      <div className="space-y-2">
+                        {taskDetail.questions.slice(0, 10).map((q: any, i: number) => (
+                          <div key={i} className="border-2 border-gray-200 rounded-2xl bg-white p-3">
+                            <div className="font-black text-brand-brown mb-2">題目 {i + 1}</div>
+                            <div className="text-gray-800 font-bold whitespace-pre-wrap">{String(q?.question || q?.prompt || q?.title || '')}</div>
+                            {Array.isArray(q?.options) && q.options.length > 0 && (
+                              <div className="mt-2 grid grid-cols-1 md:grid-cols-2 gap-2">
+                                {q.options.map((opt: any, oi: number) => (
+                                  <div key={oi} className="p-2 rounded-xl border-2 border-gray-200 bg-gray-50 font-bold text-gray-800">
+                                    {indexToLetter(oi)}. {String(opt)}
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        ))}
+                        {taskDetail.questions.length > 10 && (
+                          <div className="text-xs text-gray-600 font-bold">（只顯示前 10 題）</div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {selectedTask.type === 'ai-bot' && (
+                  <div className="bg-[#FEF7EC] border-2 border-gray-200 rounded-2xl p-4 space-y-1">
+                    <div className="font-bold text-gray-800">Pedia：{String(taskDetail?.botName || selectedTask?.botName || selectedTask?.title || '')}</div>
+                    <div className="text-sm text-gray-600 font-bold">（對話內容請到學生清單點選對話查看）</div>
+                  </div>
+                )}
+              </div>
+
+              <div className="mt-4 border-t-2 border-gray-200 pt-4">
                 <div className="text-lg font-black text-brand-brown mb-2">學生回應 / 結果</div>
                 {taskLoading ? (
                   <div className="text-brand-brown font-bold">載入中...</div>
@@ -426,6 +652,96 @@ const AssignmentExplorerModal: React.FC<Props> = ({ open, onClose, authService, 
                           {selectedTask.type === 'assignment' && typeof r.content === 'string' && (
                             <div className="mt-2 text-sm text-gray-800 whitespace-pre-wrap break-words">
                               {r.content}
+                            </div>
+                          )}
+
+                          {selectedTask.type === 'quiz' && Array.isArray(r.answers) && (
+                            <div className="mt-3">
+                              <button
+                                type="button"
+                                onClick={() => toggleQuizResult(String(r.id || idx))}
+                                className="px-3 py-1 rounded-xl border-2 border-brand-brown bg-white text-brand-brown font-black shadow-comic hover:bg-gray-50"
+                              >
+                                {expandedQuizResultIds.has(String(r.id || idx)) ? '收起答題' : '查看答題'}
+                              </button>
+                              {expandedQuizResultIds.has(String(r.id || idx)) && (
+                                <div className="mt-2 space-y-2">
+                                  {quizQuestions.length === 0 ? (
+                                    <div className="text-gray-500 font-bold">（未有題目資料）</div>
+                                  ) : (
+                                    quizQuestions.map((q: any, qi: number) => {
+                                      const options = Array.isArray(q?.options) ? q.options : [];
+                                      const correctIndex = Number.isFinite(Number(q?.correctIndex)) ? Number(q.correctIndex) : null;
+                                      const ans = Number.isFinite(Number(r.answers?.[qi])) ? Number(r.answers[qi]) : -1;
+                                      const label = ans >= 0 ? indexToLetter(ans) : '（未答）';
+                                      const isCorrect = correctIndex !== null && ans === correctIndex;
+                                      const answerText = ans >= 0 && options[ans] !== undefined ? String(options[ans]) : '';
+                                      return (
+                                        <div key={qi} className="p-2 rounded-2xl border-2 border-gray-200 bg-white">
+                                          <div className="text-xs font-black text-brand-brown">問題 {qi + 1}</div>
+                                          <div className={`text-sm font-bold ${isCorrect ? 'text-green-800' : 'text-gray-800'}`}>
+                                            答案：{label}{answerText ? `（${answerText}）` : ''}{isCorrect ? ' ✅' : ''}
+                                          </div>
+                                        </div>
+                                      );
+                                    })
+                                  )}
+                                </div>
+                              )}
+                            </div>
+                          )}
+
+                          {selectedTask.type === 'contest' && (
+                            <div className="mt-3">
+                              <button
+                                type="button"
+                                onClick={() => void toggleContestAttempt(String(r.id))}
+                                className="px-3 py-1 rounded-xl border-2 border-brand-brown bg-white text-brand-brown font-black shadow-comic hover:bg-gray-50"
+                              >
+                                {expandedContestAttemptIds.has(String(r.id)) ? '收起答題詳情' : '查看答題詳情'}
+                              </button>
+                              {expandedContestAttemptIds.has(String(r.id)) && (
+                                <div className="mt-2">
+                                  {contestAttemptLoading[String(r.id)] ? (
+                                    <div className="text-brand-brown font-bold">載入中...</div>
+                                  ) : contestAttemptDetails[String(r.id)]?.error ? (
+                                    <div className="text-red-700 font-bold">{String(contestAttemptDetails[String(r.id)].error)}</div>
+                                  ) : (
+                                    (() => {
+                                      const attempt = contestAttemptDetails[String(r.id)]?.attempt;
+                                      const questions = Array.isArray(attempt?.questions) ? attempt.questions : [];
+                                      const answers = Array.isArray(attempt?.answers) ? attempt.answers : [];
+                                      if (questions.length === 0) return <div className="text-gray-500 font-bold">（未有答題資料）</div>;
+                                      return (
+                                        <div className="space-y-2">
+                                          {questions.map((q: any, qi: number) => {
+                                            const options = Array.isArray(q?.options) ? q.options : [];
+                                            const ans = Number.isFinite(Number(answers[qi])) ? Number(answers[qi]) : -1;
+                                            const label = ans >= 0 ? indexToLetter(ans) : '（未答）';
+                                            const answerText = ans >= 0 && options[ans] !== undefined ? String(options[ans]) : '';
+                                            return (
+                                              <div key={qi} className="p-3 rounded-2xl border-2 border-gray-200 bg-white">
+                                                <div className="font-black text-brand-brown mb-1">問題 {qi + 1}</div>
+                                                <div className="text-sm font-bold text-gray-800 whitespace-pre-wrap">{String(q?.question || '')}</div>
+                                                {options.length > 0 && (
+                                                  <div className="mt-2 grid grid-cols-1 md:grid-cols-2 gap-2">
+                                                    {options.map((opt: any, oi: number) => (
+                                                      <div key={oi} className="p-2 rounded-xl border-2 border-gray-200 bg-gray-50 font-bold text-gray-800">
+                                                        {indexToLetter(oi)}. {String(opt)}
+                                                      </div>
+                                                    ))}
+                                                  </div>
+                                                )}
+                                                <div className="mt-2 text-sm font-black text-brand-brown">學生答案：{label}{answerText ? `（${answerText}）` : ''}</div>
+                                              </div>
+                                            );
+                                          })}
+                                        </div>
+                                      );
+                                    })()
+                                  )}
+                                </div>
+                              )}
                             </div>
                           )}
                         </div>
