@@ -154,6 +154,7 @@ const StudentDashboard: React.FC = () => {
   const [selectedStageId, setSelectedStageId] = useState<string>('');
   const [selectedTopicId, setSelectedTopicId] = useState<string>('');
   const [selectedSubfolderId, setSelectedSubfolderId] = useState<string>('');
+  const [showAllTasks, setShowAllTasks] = useState(false);
 
   // 小测验相关状态
   const [showQuizModal, setShowQuizModal] = useState(false);
@@ -1103,12 +1104,6 @@ const StudentDashboard: React.FC = () => {
   );
 
   useEffect(() => {
-    if (selectedStageId) return;
-    const first = stageFolders[0];
-    if (first) setSelectedStageId(String(first.id));
-  }, [selectedStageId, stageFolders]);
-
-  useEffect(() => {
     if (!selectedStageId) return;
     setSelectedTopicId('');
     setSelectedSubfolderId('');
@@ -1118,28 +1113,41 @@ const StudentDashboard: React.FC = () => {
     setSelectedSubfolderId('');
   }, [selectedTopicId]);
 
-  const folderFilteredTasks = useMemo(() => {
-    const fid = selectedSubfolderId || selectedTopicId || '';
-    if (!fid) return tasks;
-    return tasks.filter((t: any) => t && String(t.folderId || '') === String(fid));
-  }, [selectedSubfolderId, selectedTopicId, tasks]);
+  useEffect(() => {
+    setSelectedStageId('');
+    setSelectedTopicId('');
+    setSelectedSubfolderId('');
+    setShowAllTasks(false);
+    setShowHiddenTasks(false);
+  }, [selectedSubject]);
 
-  const selectedSubjectTasks = useMemo(
-    () => folderFilteredTasks.filter(task => task.subject === selectedSubject),
-    [folderFilteredTasks, selectedSubject]
+  const selectedSubjectAllTasks = useMemo(
+    () => tasks.filter((task) => task && task.subject === selectedSubject),
+    [tasks, selectedSubject]
   );
 
+  const selectedSubjectScopedTasks = useMemo(() => {
+    if (showAllTasks) return selectedSubjectAllTasks;
+    if (selectedSubfolderId) {
+      return selectedSubjectAllTasks.filter((t: any) => String(t.folderId || '') === String(selectedSubfolderId));
+    }
+    if (selectedTopicId) {
+      return selectedSubjectAllTasks.filter((t: any) => String(t.folderId || '') === String(selectedTopicId));
+    }
+    return [];
+  }, [selectedSubjectAllTasks, selectedSubfolderId, selectedTopicId, showAllTasks]);
+
   const visibleTasks = useMemo(() => {
-    return selectedSubjectTasks
+    return selectedSubjectScopedTasks
       .filter((task: any) => !isTaskHiddenByFolder(task))
       .filter((task) => !isTaskHiddenByManualOrAuto(task));
-  }, [hiddenFolderIds, hiddenTaskKeys, isTaskHiddenByFolder, selectedSubjectTasks]);
+  }, [hiddenFolderIds, hiddenTaskKeys, isTaskHiddenByFolder, selectedSubjectScopedTasks]);
 
   const hiddenTasks = useMemo(() => {
-    return selectedSubjectTasks
+    return selectedSubjectScopedTasks
       .filter((task: any) => !isTaskHiddenByFolder(task))
       .filter((task) => isTaskHiddenByManualOrAuto(task));
-  }, [hiddenFolderIds, hiddenTaskKeys, isTaskHiddenByFolder, selectedSubjectTasks]);
+  }, [hiddenFolderIds, hiddenTaskKeys, isTaskHiddenByFolder, selectedSubjectScopedTasks]);
 
   const setManualHidden = (task: Task, hidden: boolean) => {
     if (!user?.id) return;
@@ -1168,7 +1176,7 @@ const StudentDashboard: React.FC = () => {
   }, [hiddenFolderIds, hiddenTaskKeys, isTaskHiddenByFolder, tasks]);
 
   const folderPathLabel = useMemo(() => {
-    const fid = selectedSubfolderId || selectedTopicId || '';
+    const fid = selectedSubfolderId || selectedTopicId || selectedStageId || '';
     if (!fid) return '';
     const path = [];
     let cur = classFolderById.get(String(fid));
@@ -1179,13 +1187,35 @@ const StudentDashboard: React.FC = () => {
     }
     path.reverse();
     return path.join(' / ');
-  }, [classFolderById, selectedSubfolderId, selectedTopicId]);
+  }, [classFolderById, selectedStageId, selectedSubfolderId, selectedTopicId]);
 
-  const selectedFilterFolderId = selectedSubfolderId || selectedTopicId || '';
-  const selectedFilterFolderHidden = useMemo(() => {
-    if (!selectedFilterFolderId) return false;
-    return isFolderEffectivelyHidden(String(selectedFilterFolderId));
-  }, [isFolderEffectivelyHidden, selectedFilterFolderId]);
+  const currentBrowseFolderId = selectedSubfolderId || selectedTopicId || selectedStageId || '';
+  const currentBrowseFolderHidden = useMemo(() => {
+    if (!currentBrowseFolderId) return false;
+    return isFolderEffectivelyHidden(String(currentBrowseFolderId));
+  }, [currentBrowseFolderId, isFolderEffectivelyHidden]);
+
+  const folderTaskCounts = useMemo(() => {
+    const counts = new Map<string, number>();
+    const bump = (id: string) => {
+      const key = String(id);
+      if (!key) return;
+      counts.set(key, (counts.get(key) || 0) + 1);
+    };
+
+    for (const task of selectedSubjectAllTasks) {
+      const fid = (task as any)?.folderId ? String((task as any).folderId) : '';
+      if (!fid) continue;
+      bump(fid);
+      const folder = classFolderById.get(fid);
+      if (folder?.parentId) bump(String(folder.parentId));
+      const parent = folder?.parentId ? classFolderById.get(String(folder.parentId)) : null;
+      if (parent?.parentId) bump(String(parent.parentId));
+    }
+    return counts;
+  }, [classFolderById, selectedSubjectAllTasks]);
+
+  const shouldShowTaskList = showAllTasks || Boolean(selectedTopicId);
 
   const setFolderHidden = async (folderId: string, hidden: boolean) => {
     const fid = String(folderId || '').trim();
@@ -1419,122 +1449,6 @@ const StudentDashboard: React.FC = () => {
           </nav>
 
           <div className="mt-4 pt-4 border-t-4 border-brand-brown">
-            <div className="text-center mb-3 border-b-4 border-brand-brown pb-2">
-              <h3 className="text-xl font-bold text-brand-brown">我的資料夾</h3>
-            </div>
-
-            <button
-              type="button"
-              onClick={() => { setSelectedTopicId(''); setSelectedSubfolderId(''); }}
-              className={`w-full px-4 py-2 rounded-2xl border-4 font-bold shadow-comic ${!selectedFilterFolderId ? 'bg-white border-brand-brown text-brand-brown' : 'bg-gray-50 border-brand-brown/40 text-brand-brown hover:bg-white'}`}
-              title="顯示全部任務（不按資料夾篩選）"
-            >
-              （全部任務）
-            </button>
-
-            <div className="mt-3 space-y-2">
-              <div className="flex items-center gap-2">
-                <div className="text-xs font-black text-gray-700 w-12">學段</div>
-                <select
-                  className="flex-1 px-3 py-2 rounded-xl border-2 border-gray-300 font-bold bg-white"
-                  value={selectedStageId}
-                  onChange={(e) => setSelectedStageId(e.target.value)}
-                  disabled={stageFolders.length === 0}
-                >
-                  <option value="" disabled>
-                    {stageFolders.length === 0 ? '（未有資料夾）' : '請選擇'}
-                  </option>
-                  {stageFolders.map((s: any) => (
-                    <option key={s.id} value={s.id}>
-                      {s.name}
-                    </option>
-                  ))}
-                </select>
-                <button
-                  type="button"
-                  onClick={() => selectedStageId && setFolderHidden(selectedStageId, !hiddenFolderIds.has(String(selectedStageId)))}
-                  className="w-10 h-10 rounded-2xl border-4 border-brand-brown bg-gray-100 hover:bg-gray-200 shadow-comic active:translate-y-1 active:shadow-none flex items-center justify-center"
-                  title={hiddenFolderIds.has(String(selectedStageId)) ? '顯示此學段' : '隱藏此學段'}
-                  disabled={!selectedStageId}
-                >
-                  {hiddenFolderIds.has(String(selectedStageId))
-                    ? <Eye className="w-5 h-5 text-brand-brown" />
-                    : <EyeOff className="w-5 h-5 text-brand-brown" />
-                  }
-                </button>
-              </div>
-
-              <div className="flex items-center gap-2">
-                <div className="text-xs font-black text-gray-700 w-12">課題</div>
-                <select
-                  className="flex-1 px-3 py-2 rounded-xl border-2 border-gray-300 font-bold bg-white"
-                  value={selectedTopicId}
-                  onChange={(e) => setSelectedTopicId(e.target.value)}
-                  disabled={!selectedStageId || topicFolders.length === 0}
-                >
-                  <option value="">
-                    （不按資料夾）
-                  </option>
-                  {topicFolders.map((t: any) => (
-                    <option key={t.id} value={t.id}>
-                      {hiddenFolderIds.has(String(t.id)) ? `（已隱藏）${t.name}` : t.name}
-                    </option>
-                  ))}
-                </select>
-                <button
-                  type="button"
-                  onClick={() => selectedTopicId && setFolderHidden(selectedTopicId, !hiddenFolderIds.has(String(selectedTopicId)))}
-                  className="w-10 h-10 rounded-2xl border-4 border-brand-brown bg-gray-100 hover:bg-gray-200 shadow-comic active:translate-y-1 active:shadow-none flex items-center justify-center"
-                  title={!selectedTopicId ? '先選擇課題' : hiddenFolderIds.has(String(selectedTopicId)) ? '顯示此課題' : '隱藏此課題'}
-                  disabled={!selectedTopicId}
-                >
-                  {hiddenFolderIds.has(String(selectedTopicId))
-                    ? <Eye className="w-5 h-5 text-brand-brown" />
-                    : <EyeOff className="w-5 h-5 text-brand-brown" />
-                  }
-                </button>
-              </div>
-
-              <div className="flex items-center gap-2">
-                <div className="text-xs font-black text-gray-700 w-12">子夾</div>
-                <select
-                  className="flex-1 px-3 py-2 rounded-xl border-2 border-gray-300 font-bold bg-white"
-                  value={selectedSubfolderId}
-                  onChange={(e) => setSelectedSubfolderId(e.target.value)}
-                  disabled={!selectedTopicId}
-                >
-                  <option value="">
-                    （不選，直接用課題）
-                  </option>
-                  {subFolders.map((sf: any) => (
-                    <option key={sf.id} value={sf.id}>
-                      {hiddenFolderIds.has(String(sf.id)) ? `（已隱藏）${sf.name}` : sf.name}
-                    </option>
-                  ))}
-                </select>
-                <button
-                  type="button"
-                  onClick={() => selectedSubfolderId && setFolderHidden(selectedSubfolderId, !hiddenFolderIds.has(String(selectedSubfolderId)))}
-                  className="w-10 h-10 rounded-2xl border-4 border-brand-brown bg-gray-100 hover:bg-gray-200 shadow-comic active:translate-y-1 active:shadow-none flex items-center justify-center"
-                  title={!selectedSubfolderId ? '先選擇子folder' : hiddenFolderIds.has(String(selectedSubfolderId)) ? '顯示此子folder' : '隱藏此子folder'}
-                  disabled={!selectedSubfolderId}
-                >
-                  {hiddenFolderIds.has(String(selectedSubfolderId))
-                    ? <Eye className="w-5 h-5 text-brand-brown" />
-                    : <EyeOff className="w-5 h-5 text-brand-brown" />
-                  }
-                </button>
-              </div>
-            </div>
-
-            {selectedFilterFolderId && selectedFilterFolderHidden && (
-              <div className="mt-2 text-xs font-bold text-red-700">
-                此資料夾已隱藏（請按 👁 顯示）
-              </div>
-            )}
-          </div>
-
-          <div className="mt-4 pt-4 border-t-4 border-brand-brown">
             <button onClick={() => navigate('/')} className="text-sm text-brand-brown font-bold hover:underline">← 返回登入</button>
           </div>
         </aside>
@@ -1560,28 +1474,291 @@ const StudentDashboard: React.FC = () => {
             </div>
           </div>
 
-          <div className="flex items-center gap-3 mb-6">
+          <div className="flex items-center gap-3 mb-4">
             <span className="text-4xl">{subjectConfig.icon}</span>
             <h4 className="text-2xl font-bold text-brand-brown">{selectedSubject}</h4>
-            {selectedFilterFolderId && (
-              <span className="ml-2 text-sm font-black text-brand-brown bg-white/70 border-2 border-brand-brown rounded-xl px-3 py-2">
-                📁 {folderPathLabel || '已選資料夾'}
-              </span>
+          </div>
+
+          <div className="bg-white/80 border-4 border-brand-brown rounded-3xl p-4 shadow-comic mb-6">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div className="flex flex-wrap items-center gap-2 text-sm font-black text-brand-brown">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowAllTasks(false);
+                    setSelectedStageId('');
+                    setSelectedTopicId('');
+                    setSelectedSubfolderId('');
+                  }}
+                  className="underline underline-offset-2 hover:opacity-80"
+                  title="返回資料夾最上層"
+                >
+                  {selectedSubject}
+                </button>
+                {selectedStageId && (
+                  <>
+                    <span className="text-brand-brown/50">/</span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowAllTasks(false);
+                        setSelectedTopicId('');
+                        setSelectedSubfolderId('');
+                      }}
+                      className="underline underline-offset-2 hover:opacity-80"
+                      title="返回學段"
+                    >
+                      {String(classFolderById.get(String(selectedStageId))?.name || '學段')}
+                    </button>
+                  </>
+                )}
+                {selectedTopicId && (
+                  <>
+                    <span className="text-brand-brown/50">/</span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowAllTasks(false);
+                        setSelectedSubfolderId('');
+                      }}
+                      className="underline underline-offset-2 hover:opacity-80"
+                      title="返回課題"
+                    >
+                      {String(classFolderById.get(String(selectedTopicId))?.name || '課題')}
+                    </button>
+                  </>
+                )}
+                {selectedSubfolderId && (
+                  <>
+                    <span className="text-brand-brown/50">/</span>
+                    <span>{String(classFolderById.get(String(selectedSubfolderId))?.name || '子folder')}</span>
+                  </>
+                )}
+              </div>
+
+              <div className="flex items-center gap-2">
+                {!showAllTasks ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowAllTasks(true);
+                      setSelectedStageId('');
+                      setSelectedTopicId('');
+                      setSelectedSubfolderId('');
+                    }}
+                    className="px-4 py-2 rounded-2xl border-4 border-brand-brown bg-white text-brand-brown font-black shadow-comic hover:bg-gray-50"
+                    title="顯示此科目的全部任務"
+                  >
+                    （全部任務）
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => setShowAllTasks(false)}
+                    className="px-4 py-2 rounded-2xl border-4 border-brand-brown bg-gray-100 text-brand-brown font-black shadow-comic hover:bg-gray-200"
+                    title="返回資料夾瀏覽"
+                  >
+                    ← 返回資料夾
+                  </button>
+                )}
+
+                {!showAllTasks && (selectedStageId || selectedTopicId || selectedSubfolderId) && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (selectedSubfolderId) setSelectedSubfolderId('');
+                      else if (selectedTopicId) setSelectedTopicId('');
+                      else setSelectedStageId('');
+                    }}
+                    className="px-4 py-2 rounded-2xl border-4 border-brand-brown bg-gray-100 text-brand-brown font-black shadow-comic hover:bg-gray-200"
+                    title="返回上一層"
+                  >
+                    ← 上一層
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {!showAllTasks && currentBrowseFolderId && (
+              <div className="mt-2 flex flex-wrap items-center gap-2 justify-between">
+                <div className="text-xs font-bold text-gray-700">📁 {folderPathLabel}</div>
+                {currentBrowseFolderHidden && (
+                  <div className="text-xs font-bold text-red-700">此資料夾已隱藏（按 👁 顯示）</div>
+                )}
+              </div>
+            )}
+
+            {!showAllTasks && !currentBrowseFolderId && (
+              <div className="mt-2 text-xs font-bold text-gray-600">
+                按「學段」→「課題」→（子folder 可選）進入後才會看到任務。
+              </div>
             )}
           </div>
 
-          <div className="space-y-4">
-            {loading ? (
-              <div className="text-center py-12">
-                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-brand-brown mx-auto mb-4"></div>
-                <p className="text-brand-brown font-bold">載入中...</p>
+          {!loading && !showAllTasks && !selectedStageId && (
+            <div className="mb-8">
+              <div className="text-lg font-black text-brand-brown mb-3">學段</div>
+              {stageFolders.length === 0 ? (
+                <div className="text-center py-12 text-gray-500 font-bold border-4 border-dashed border-gray-300 rounded-3xl">
+                  未有資料夾
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  {stageFolders.map((folder: any) => {
+                    const fid = String(folder.id);
+                    const hidden = hiddenFolderIds.has(fid);
+                    const count = folderTaskCounts.get(fid) || 0;
+                    return (
+                      <div
+                        key={fid}
+                        role="button"
+                        tabIndex={0}
+                        onClick={() => { setShowAllTasks(false); setSelectedStageId(fid); }}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' || e.key === ' ') { setShowAllTasks(false); setSelectedStageId(fid); }
+                        }}
+                        className={`bg-white border-4 border-brand-brown rounded-3xl p-4 shadow-comic cursor-pointer hover:-translate-y-1 transition-transform ${hidden ? 'opacity-70' : ''}`}
+                      >
+                        <div className="flex items-start justify-between gap-3">
+                          <div>
+                            <div className="text-xl font-black text-brand-brown">📁 {folder.name}</div>
+                            <div className="mt-1 text-xs font-bold text-gray-600">{count} 個任務</div>
+                            {hidden && <div className="mt-1 text-xs font-black text-red-700">已隱藏</div>}
+                          </div>
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setFolderHidden(fid, !hidden);
+                            }}
+                            className="w-10 h-10 rounded-2xl border-4 border-brand-brown bg-gray-100 hover:bg-gray-200 shadow-comic active:translate-y-1 active:shadow-none flex items-center justify-center"
+                            title={hidden ? '顯示此學段' : '隱藏此學段'}
+                          >
+                            {hidden ? <Eye className="w-5 h-5 text-brand-brown" /> : <EyeOff className="w-5 h-5 text-brand-brown" />}
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          )}
+
+          {!loading && !showAllTasks && selectedStageId && !selectedTopicId && (
+            <div className="mb-8">
+              <div className="text-lg font-black text-brand-brown mb-3">課題</div>
+              {topicFolders.length === 0 ? (
+                <div className="text-center py-12 text-gray-500 font-bold border-4 border-dashed border-gray-300 rounded-3xl">
+                  目前未有課題資料夾
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {topicFolders.map((folder: any) => {
+                    const fid = String(folder.id);
+                    const hidden = hiddenFolderIds.has(fid);
+                    const count = folderTaskCounts.get(fid) || 0;
+                    return (
+                      <div
+                        key={fid}
+                        role="button"
+                        tabIndex={0}
+                        onClick={() => { setShowAllTasks(false); setSelectedTopicId(fid); }}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' || e.key === ' ') { setShowAllTasks(false); setSelectedTopicId(fid); }
+                        }}
+                        className={`bg-white border-4 border-brand-brown rounded-3xl p-4 shadow-comic cursor-pointer hover:-translate-y-1 transition-transform ${hidden ? 'opacity-70' : ''}`}
+                      >
+                        <div className="flex items-start justify-between gap-3">
+                          <div>
+                            <div className="text-xl font-black text-brand-brown">📁 {folder.name}</div>
+                            <div className="mt-1 text-xs font-bold text-gray-600">{count} 個任務</div>
+                            {hidden && <div className="mt-1 text-xs font-black text-red-700">已隱藏</div>}
+                          </div>
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setFolderHidden(fid, !hidden);
+                            }}
+                            className="w-10 h-10 rounded-2xl border-4 border-brand-brown bg-gray-100 hover:bg-gray-200 shadow-comic active:translate-y-1 active:shadow-none flex items-center justify-center"
+                            title={hidden ? '顯示此課題' : '隱藏此課題'}
+                          >
+                            {hidden ? <Eye className="w-5 h-5 text-brand-brown" /> : <EyeOff className="w-5 h-5 text-brand-brown" />}
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          )}
+
+          {!loading && !showAllTasks && selectedTopicId && subFolders.length > 0 && (
+            <div className="mb-8">
+              <div className="text-lg font-black text-brand-brown mb-3">子folder（可選）</div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {subFolders.map((folder: any) => {
+                  const fid = String(folder.id);
+                  const hidden = hiddenFolderIds.has(fid);
+                  const count = folderTaskCounts.get(fid) || 0;
+                  return (
+                    <div
+                      key={fid}
+                      role="button"
+                      tabIndex={0}
+                      onClick={() => { setShowAllTasks(false); setSelectedSubfolderId(fid); }}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' || e.key === ' ') { setShowAllTasks(false); setSelectedSubfolderId(fid); }
+                      }}
+                      className={`bg-white border-4 border-brand-brown rounded-3xl p-4 shadow-comic cursor-pointer hover:-translate-y-1 transition-transform ${hidden ? 'opacity-70' : ''}`}
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <div className="text-xl font-black text-brand-brown">📁 {folder.name}</div>
+                          <div className="mt-1 text-xs font-bold text-gray-600">{count} 個任務</div>
+                          {hidden && <div className="mt-1 text-xs font-black text-red-700">已隱藏</div>}
+                        </div>
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setFolderHidden(fid, !hidden);
+                          }}
+                          className="w-10 h-10 rounded-2xl border-4 border-brand-brown bg-gray-100 hover:bg-gray-200 shadow-comic active:translate-y-1 active:shadow-none flex items-center justify-center"
+                          title={hidden ? '顯示此子folder' : '隱藏此子folder'}
+                        >
+                          {hidden ? <Eye className="w-5 h-5 text-brand-brown" /> : <EyeOff className="w-5 h-5 text-brand-brown" />}
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
-            ) : visibleTasks.length > 0 ? (
-              visibleTasks.map(task => {
-                const getTaskIcon = () => {
-                  switch (task.type) {
-                    case 'quiz': return <HelpCircle className="w-5 h-5 text-blue-600" />;
-                    case 'ai-bot': return <Bot className="w-5 h-5 text-green-600" />;
+            </div>
+          )}
+
+          {loading && !shouldShowTaskList && (
+            <div className="text-center py-12">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-brand-brown mx-auto mb-4"></div>
+              <p className="text-brand-brown font-bold">載入中...</p>
+            </div>
+          )}
+
+          {shouldShowTaskList && (
+            <div className="space-y-4">
+              {loading ? (
+                <div className="text-center py-12">
+                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-brand-brown mx-auto mb-4"></div>
+                  <p className="text-brand-brown font-bold">載入中...</p>
+                </div>
+              ) : visibleTasks.length > 0 ? (
+                visibleTasks.map(task => {
+                  const getTaskIcon = () => {
+                    switch (task.type) {
+                      case 'quiz': return <HelpCircle className="w-5 h-5 text-blue-600" />;
+                      case 'ai-bot': return <Bot className="w-5 h-5 text-green-600" />;
                     case 'discussion': return <MessageSquare className="w-5 h-5 text-purple-600" />;
                     case 'game': return <span className="text-xl">🎮</span>;
                     case 'contest': return <span className="text-xl">🏁</span>;
@@ -1704,7 +1881,8 @@ const StudentDashboard: React.FC = () => {
                 目前沒有任務 🎉
               </div>
             )}
-          </div>
+            </div>
+          )}
 
           {hiddenTasks.length > 0 && (
             <div className="mt-6">
