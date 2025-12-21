@@ -19,7 +19,7 @@ export const finalizeMathEquationQuestions = (drafts: MathEquationDraft[], confi
       allowedOps: config.allowedOps,
       allowParentheses: config.allowParentheses
     });
-    if (!parsed.ok) throw new Error(`第 ${idx + 1} 題：${parsed.error}`);
+    if ('error' in parsed) throw new Error(`第 ${idx + 1} 題：${parsed.error}`);
     const { leftTokens, rightTokens, answer } = parsed.value;
     if (config.constraints) {
       const tokenErrs = [
@@ -127,7 +127,7 @@ export const MathEquationBuilder: React.FC<{
 
   const confirmDialog = () => {
     const result = parseAndSolveSingleUnknownEquation(rawText, { allowedOps, allowParentheses });
-    if (!result.ok) {
+    if ('error' in result) {
       setDialogError(result.error);
       return;
     }
@@ -163,7 +163,7 @@ export const MathEquationBuilder: React.FC<{
 
   const answerPreview: Rational | null = (() => {
     if (!showAnswerPreview) return null;
-    if (!parsed?.ok) return null;
+    if (!parsed || 'error' in parsed) return null;
     return normalizeRational(parsed.value.answer);
   })();
 
@@ -182,7 +182,7 @@ export const MathEquationBuilder: React.FC<{
             ) : (
               <div className="text-xl font-black text-gray-400 break-words">（未設定）</div>
             )}
-            {equation && parsed && !parsed.ok && (
+            {equation && parsed && 'error' in parsed && (
               <div className="mt-2 text-xs font-bold text-red-600">{parsed.error}</div>
             )}
             {answerPreview && (

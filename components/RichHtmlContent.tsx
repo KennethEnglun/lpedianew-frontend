@@ -76,7 +76,7 @@ export default function RichHtmlContent({ html }: { html: string }) {
 
     // Fallback: older content might have had the data-* marker stripped,
     // but still contains the embedded payload in a <code> text node.
-    const fallbackPlaceholders = Array.from(container.querySelectorAll('code'))
+    const fallbackPlaceholders = Array.from(container.querySelectorAll('code') as NodeListOf<HTMLElement>)
       .map((code) => {
         const text = (code.textContent || '').trim();
         if (!text.startsWith(LPEDIA_HTML_PREVIEW_CODE_PREFIX)) return null;
@@ -88,7 +88,7 @@ export default function RichHtmlContent({ html }: { html: string }) {
       .filter(Boolean) as Element[];
 
     // Fallback: payload stored in hidden <input> chunks.
-    const chunkPlaceholders = Array.from(container.querySelectorAll(`input[${LPEDIA_HTML_PREVIEW_CHUNK_ATTR}]`))
+    const chunkPlaceholders = Array.from(container.querySelectorAll(`input[${LPEDIA_HTML_PREVIEW_CHUNK_ATTR}]`) as NodeListOf<HTMLInputElement>)
       .map((input) => input.closest('div'))
       .filter(Boolean) as Element[];
 

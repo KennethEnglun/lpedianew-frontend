@@ -11,6 +11,8 @@ interface User {
     name: string;
     class?: string;
     teacherCode?: string;
+    studentId?: string;
+    email?: string;
     avatar?: string;
     chineseGroup?: string;
     englishGroup?: string;
@@ -385,10 +387,11 @@ class AuthService {
     return this.handleResponse(response);
   }
 
-  async getTeacherBotTasks(subject?: string, targetClass?: string): Promise<{ tasks: any[]; total: number }> {
+  async getTeacherBotTasks(subject?: string, targetClass?: string, groups?: string): Promise<{ tasks: any[]; total: number }> {
     const params = new URLSearchParams();
     if (subject) params.append('subject', subject);
     if (targetClass) params.append('targetClass', targetClass);
+    if (groups) params.append('groups', groups);
     const query = params.toString() ? `?${params.toString()}` : '';
     const response = await fetch(`${this.API_BASE}/bot-tasks${query}`, {
       headers: this.getAuthHeaders()
@@ -602,10 +605,11 @@ class AuthService {
   // === 作業管理相關API ===
 
   // 獲取教師的所有作業（可篩選）
-  async getTeacherAssignments(subject?: string, targetClass?: string): Promise<{ assignments: any[], total: number }> {
+  async getTeacherAssignments(subject?: string, targetClass?: string, groups?: string): Promise<{ assignments: any[], total: number }> {
     const params = new URLSearchParams();
     if (subject) params.append('subject', subject);
     if (targetClass) params.append('targetClass', targetClass);
+    if (groups) params.append('groups', groups);
 
     const queryString = params.toString() ? `?${params.toString()}` : '';
     const response = await fetch(`${this.API_BASE}/assignments${queryString}`, {
@@ -1042,10 +1046,11 @@ class AuthService {
   }
 
   // 獲取教師的所有小測驗（可篩選）
-  async getTeacherQuizzes(subject?: string, targetClass?: string): Promise<{ quizzes: any[], total: number }> {
+  async getTeacherQuizzes(subject?: string, targetClass?: string, groups?: string): Promise<{ quizzes: any[], total: number }> {
     const params = new URLSearchParams();
     if (subject) params.append('subject', subject);
     if (targetClass) params.append('targetClass', targetClass);
+    if (groups) params.append('groups', groups);
 
     const queryString = params.toString() ? `?${params.toString()}` : '';
     const response = await fetch(`${this.API_BASE}/quizzes/teacher${queryString}`, {
@@ -1161,11 +1166,12 @@ class AuthService {
   }
 
   // 獲取教師的遊戲列表
-  async getTeacherGames(subject?: string, targetClass?: string, gameType?: string): Promise<{ games: any[]; total: number }> {
+  async getTeacherGames(subject?: string, targetClass?: string, gameType?: string, groups?: string): Promise<{ games: any[]; total: number }> {
     const params = new URLSearchParams();
     if (subject) params.append('subject', subject);
     if (targetClass) params.append('targetClass', targetClass);
     if (gameType) params.append('gameType', gameType);
+    if (groups) params.append('groups', groups);
 
     const response = await fetch(`${this.API_BASE}/games/teacher?${params.toString()}`, {
       headers: this.getAuthHeaders()
@@ -1298,10 +1304,11 @@ class AuthService {
     return this.handleResponse(response);
   }
 
-  async getTeacherContests(subject?: string, targetClass?: string): Promise<{ contests: any[]; total: number }> {
+  async getTeacherContests(subject?: string, targetClass?: string, groups?: string): Promise<{ contests: any[]; total: number }> {
     const params = new URLSearchParams();
     if (subject) params.append('subject', subject);
     if (targetClass) params.append('targetClass', targetClass);
+    if (groups) params.append('groups', groups);
     const query = params.toString() ? `?${params.toString()}` : '';
     const response = await fetch(`${this.API_BASE}/contests/teacher${query}`, {
       headers: this.getAuthHeaders()

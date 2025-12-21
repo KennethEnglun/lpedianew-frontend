@@ -13,7 +13,9 @@ interface AdminUser {
   username: string;
   role: 'teacher' | 'student' | 'admin';
   name: string;
+  email?: string;
   class?: string;
+  studentId?: string;
   createdAt: string;
   lastLogin?: string;
   isActive: boolean;
@@ -292,7 +294,7 @@ const AdminDashboard: React.FC = () => {
 
         try {
           // 解析CSV行（處理引號包圍的字段）
-          const values = [];
+          const values: string[] = [];
           let currentValue = '';
           let inQuotes = false;
           let j = 0;
@@ -323,7 +325,7 @@ const AdminDashboard: React.FC = () => {
             continue;
           }
 
-          const role = roleText === '教師' ? 'teacher' : roleText === '學生' ? 'student' : null;
+          const role: 'teacher' | 'student' | null = roleText === '教師' ? 'teacher' : roleText === '學生' ? 'student' : null;
           if (!role) {
             errors.push(`第${i + 2}行：無效的角色 "${roleText}"`);
             continue;

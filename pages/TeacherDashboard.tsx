@@ -797,8 +797,8 @@ const TeacherDashboard: React.FC = () => {
           return acc;
         }, {});
 
-        const studentById = new Map(
-          allStudents.map((s: any) => [String(s.id), s])
+        const studentById = new Map<string, any>(
+          allStudents.map((s: any) => [String(s.id), s] as [string, any])
         );
 
         setSelectedAssignment(assignment);
@@ -939,7 +939,11 @@ const TeacherDashboard: React.FC = () => {
         grade = parseGradeFromClassNameLocal(profile?.homeroomClass);
       }
 
-      const grades = Array.from(new Set(availableClasses.map((c) => parseGradeFromClassNameLocal(c)).filter(Boolean)))
+      const grades = Array.from(new Set<string>(
+        availableClasses
+          .map((c: any) => parseGradeFromClassNameLocal(String(c)))
+          .filter((g): g is string => Boolean(g))
+      ))
         .sort((a, b) => Number(a) - Number(b));
 
       if (!grade) {
@@ -1029,7 +1033,7 @@ const TeacherDashboard: React.FC = () => {
     if (isAutoHidden(item.createdAt)) return;
     const key = makeTaskKey(item.type, item.id);
     setHiddenTaskKeys((prev) => {
-      const next = new Set(prev);
+      const next = new Set<string>(prev);
       if (hidden) next.add(key);
       else next.delete(key);
       saveHiddenTaskKeys(user.id, 'teacher', next);
@@ -1336,7 +1340,7 @@ const TeacherDashboard: React.FC = () => {
         authService.getStudentRoster({ limit: 2000 }),
         authService.getTeacherAssignments(progressFilterSubject || undefined, progressFilterClass || undefined, progressFilterGroup || undefined),
         authService.getTeacherQuizzes(progressFilterSubject || undefined, progressFilterClass || undefined, progressFilterGroup || undefined),
-        authService.getTeacherGames(progressFilterSubject || undefined, progressFilterClass || undefined, progressFilterGroup || undefined),
+        authService.getTeacherGames(progressFilterSubject || undefined, progressFilterClass || undefined, undefined, progressFilterGroup || undefined),
         authService.getTeacherBotTasks(progressFilterSubject || undefined, progressFilterClass || undefined, progressFilterGroup || undefined),
         authService.getTeacherContests(progressFilterSubject || undefined, progressFilterClass || undefined, progressFilterGroup || undefined)
       ]);
@@ -1652,7 +1656,7 @@ const TeacherDashboard: React.FC = () => {
       } else {
         try {
           const parsed = parseAndSolveSingleUnknownEquation(d.equation || '', { allowedOps: mathAllowedOps, allowParentheses: mathOps.paren });
-          if (!parsed.ok) {
+          if ('error' in parsed) {
             errors.push(parsed.error);
           } else {
             errors.push(...validateTokensAgainstConstraints(parsed.value.leftTokens, mathConstraints, '數字'));

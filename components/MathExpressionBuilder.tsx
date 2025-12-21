@@ -104,7 +104,7 @@ export const MathExpressionBuilder: React.FC<{
 
   const confirmDialog = () => {
     const result = parseMathExpressionToTokens(rawText, { allowedOps, allowParentheses });
-    if (!result.ok) {
+    if ('error' in result) {
       setDialogError(result.error);
       return;
     }

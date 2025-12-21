@@ -1154,7 +1154,7 @@ const StudentDashboard: React.FC = () => {
     if (isAutoHidden(task.createdAt)) return;
     const key = makeTaskKey(task.type, task.id);
     setHiddenTaskKeys(prev => {
-      const next = new Set(prev);
+      const next = new Set<string>(prev);
       if (hidden) next.add(key);
       else next.delete(key);
       saveHiddenTaskKeys(user.id, 'student', next);

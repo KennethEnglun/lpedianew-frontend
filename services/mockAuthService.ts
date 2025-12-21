@@ -12,6 +12,8 @@ interface User {
     name: string;
     class?: string;
     teacherCode?: string;
+    studentId?: string;
+    email?: string;
     avatar?: string;
     chineseGroup?: string;
     englishGroup?: string;

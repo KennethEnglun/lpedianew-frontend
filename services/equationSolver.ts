@@ -150,9 +150,9 @@ export const parseAndSolveSingleUnknownEquation = (rawEquation: string, options:
   if (!leftRaw || !rightRaw) return { ok: false, error: '等號左右兩邊都需要有算式' };
 
   const leftParsed = parseMathExpressionToTokens(leftRaw, { ...options, allowVariableX: true });
-  if (!leftParsed.ok) return { ok: false, error: `等號左邊：${leftParsed.error}` };
+  if ('error' in leftParsed) return { ok: false, error: `等號左邊：${leftParsed.error}` };
   const rightParsed = parseMathExpressionToTokens(rightRaw, { ...options, allowVariableX: true });
-  if (!rightParsed.ok) return { ok: false, error: `等號右邊：${rightParsed.error}` };
+  if ('error' in rightParsed) return { ok: false, error: `等號右邊：${rightParsed.error}` };
 
   let leftAst: ExprNode;
   let rightAst: ExprNode;
@@ -179,4 +179,3 @@ export const parseAndSolveSingleUnknownEquation = (rawEquation: string, options:
     return { ok: false, error: String(e?.message || '無法解此方程式') };
   }
 };
-

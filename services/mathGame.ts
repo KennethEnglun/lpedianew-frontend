@@ -169,6 +169,7 @@ export const evaluateTokens = (tokens: MathToken[]): Rational => {
   while (ops.length > 0) {
     const top = ops.pop()!;
     if (top.t === 'paren') throw new Error('Unbalanced parentheses');
+    if (top.t !== 'op') throw new Error('Unsupported token');
     output.push({ t: 'op', v: top.v });
   }
 

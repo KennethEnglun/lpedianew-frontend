@@ -309,7 +309,7 @@ export const MathGame: React.FC<{
   const onSubmitInput = () => {
     if (locked || !answer) return;
     const built = buildRationalFromUi({ sign: inputSign, mode: inputMode, whole: inputWhole, num: inputNum, den: inputDen });
-    if (!built.ok) return alert(built.error);
+    if ('error' in built) return alert(built.error);
     checkAndLock(built.value);
   };
 

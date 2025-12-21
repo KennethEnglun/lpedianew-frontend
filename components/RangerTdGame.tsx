@@ -326,32 +326,31 @@ const Battlefield: React.FC<{
   const t = Math.max(0, Math.min(1, intensity));
   const glow = 0.15 + t * 0.6;
   return (
-    <Canvas
-      camera={{ position: [0, 6, 10], fov: 50 }}
-      style={{ width: '100%', height: '100%' }}
-    >
-      <ambientLight intensity={0.6} />
-      <directionalLight position={[6, 10, 4]} intensity={1.0} />
+    <div style={{ width: '100%', height: '100%' }}>
+      <Canvas camera={{ position: [0, 6, 10], fov: 50 }}>
+        <ambientLight intensity={0.6} />
+        <directionalLight position={[6, 10, 4]} intensity={1.0} />
 
-      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.75, 0]}>
-        <planeGeometry args={[40, 10]} />
-        <meshStandardMaterial color="#DFF6FF" roughness={0.9} metalness={0.05} />
-      </mesh>
+        <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.75, 0]}>
+          <planeGeometry args={[40, 10]} />
+          <meshStandardMaterial color="#DFF6FF" roughness={0.9} metalness={0.05} />
+        </mesh>
 
-      <mesh position={[-16, 0, 0]}>
-        <boxGeometry args={[2, 2 + Math.max(0, Math.min(1, playerHp / 20)) * 0.6, 2]} />
-        <meshStandardMaterial color="#A1D9AE" emissive="#A1D9AE" emissiveIntensity={glow} />
-      </mesh>
-      <mesh position={[16, 0, 0]}>
-        <boxGeometry args={[2, 2 + Math.max(0, Math.min(1, enemyHp / 20)) * 0.6, 2]} />
-        <meshStandardMaterial color="#FFB5B5" emissive="#FFB5B5" emissiveIntensity={glow} />
-      </mesh>
+        <mesh position={[-16, 0, 0]}>
+          <boxGeometry args={[2, 2 + Math.max(0, Math.min(1, playerHp / 20)) * 0.6, 2]} />
+          <meshStandardMaterial color="#A1D9AE" emissive="#A1D9AE" emissiveIntensity={glow} />
+        </mesh>
+        <mesh position={[16, 0, 0]}>
+          <boxGeometry args={[2, 2 + Math.max(0, Math.min(1, enemyHp / 20)) * 0.6, 2]} />
+          <meshStandardMaterial color="#FFB5B5" emissive="#FFB5B5" emissiveIntensity={glow} />
+        </mesh>
 
-      {/* units */}
-      {units.map((u) => (
-        <UnitMesh key={u.id} u={u} />
-      ))}
-    </Canvas>
+        {/* units */}
+        {units.map((u) => (
+          <UnitMesh key={u.id} u={u} />
+        ))}
+      </Canvas>
+    </div>
   );
 };
 
@@ -786,7 +785,7 @@ export const RangerTdGame: React.FC<{
     if (!answer) return;
     if (answerMode !== 'input') return;
     const built = buildRationalFromUi({ sign: inputSign, mode: inputMode, whole: inputWhole, num: inputNum, den: inputDen });
-    if (!built.ok) return alert(built.error);
+    if ('error' in built) return alert(built.error);
     const ok = rationalKey(built.value) === rationalKey(answer);
     applyAnswerEffects(ok);
     advanceAfterAnswer();
