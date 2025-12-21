@@ -6,6 +6,7 @@ import Button from '../components/Button';
 import Input from '../components/Input';
 import UiSettingsModal from '../components/UiSettingsModal';
 import AssignmentExplorerModal from '../components/AssignmentExplorerModal';
+import ArchivedFolderDetailsModal from '../components/ArchivedFolderDetailsModal';
 import { useNavigate } from 'react-router-dom';
 
 interface AdminUser {
@@ -94,6 +95,11 @@ const AdminDashboard: React.FC = () => {
   const [folderLoading, setFolderLoading] = useState(false);
   const [folderError, setFolderError] = useState('');
   const [classFolders, setClassFolders] = useState<any[]>([]);
+  const [folderDetailOpen, setFolderDetailOpen] = useState(false);
+  const [folderDetailFolder, setFolderDetailFolder] = useState<any | null>(null);
+  const [folderDetailTasks, setFolderDetailTasks] = useState<any[]>([]);
+  const [folderDetailTasksLoading, setFolderDetailTasksLoading] = useState(false);
+  const [folderDetailTasksError, setFolderDetailTasksError] = useState('');
   const [yearEndLoading, setYearEndLoading] = useState(false);
   const [yearEndResult, setYearEndResult] = useState<{ archiveId: string; archivedAt: string } | null>(null);
   const [showAssignmentManager, setShowAssignmentManager] = useState(false);
@@ -205,6 +211,26 @@ const AdminDashboard: React.FC = () => {
       setClassFolders([]);
     } finally {
       setFolderLoading(false);
+    }
+  };
+
+  const openArchivedFolderDetail = async (f: any) => {
+    const folder = f || null;
+    const cls = String(folder?.className || folderClassName || '').trim();
+    if (!folder || !cls) return;
+    setFolderDetailFolder(folder);
+    setFolderDetailOpen(true);
+    setFolderDetailTasksError('');
+    setFolderDetailTasks([]);
+    try {
+      setFolderDetailTasksLoading(true);
+      const resp = await authService.getManageTasks({ className: cls, includeArchived: true });
+      setFolderDetailTasks(Array.isArray(resp.tasks) ? resp.tasks : []);
+    } catch (e: any) {
+      setFolderDetailTasksError(e?.message || '載入任務失敗');
+      setFolderDetailTasks([]);
+    } finally {
+      setFolderDetailTasksLoading(false);
     }
   };
 
@@ -514,6 +540,32 @@ const AdminDashboard: React.FC = () => {
         viewerRole="admin"
         viewerId="admin"
       />
+      <ArchivedFolderDetailsModal
+        open={folderDetailOpen}
+        onClose={() => setFolderDetailOpen(false)}
+        className={String(folderDetailFolder?.className || folderClassName || '')}
+        folder={folderDetailFolder}
+        folders={classFolders}
+        tasks={folderDetailTasks}
+        tasksLoading={folderDetailTasksLoading}
+        tasksError={folderDetailTasksError}
+        onRestoreFolder={async (folderId) => {
+          const cls = String(folderDetailFolder?.className || folderClassName || '').trim();
+          if (!cls) return;
+          if (!window.confirm('確定要復原此資料夾及其子層嗎？')) return;
+          try {
+            setFolderDetailTasksError('');
+            setFolderLoading(true);
+            await authService.restoreClassFolder(cls, String(folderId));
+            await loadClassFolders(cls);
+            // keep modal open; tasks still reflect current state
+          } catch (e: any) {
+            setFolderDetailTasksError(e?.message || '復原失敗');
+          } finally {
+            setFolderLoading(false);
+          }
+        }}
+      />
 
       {/* Main Content */}
       <div className="relative z-10 max-w-7xl mx-auto p-6">
@@ -685,26 +737,36 @@ const AdminDashboard: React.FC = () => {
                           封存時間：{String(f.archivedAt || '')}
                         </div>
                       </div>
-                      <Button
-                        className="bg-[#B5D8F8] hover:bg-[#A1CCF0] flex items-center gap-2"
-                        onClick={async () => {
-                          if (!folderClassName) return;
-                          if (!window.confirm('確定要復原此資料夾及其子層嗎？')) return;
-                          try {
-                            setFolderLoading(true);
-                            await authService.restoreClassFolder(folderClassName, String(f.id));
-                            await loadClassFolders(folderClassName);
-                          } catch (e: any) {
-                            setFolderError(e?.message || '復原失敗');
-                          } finally {
-                            setFolderLoading(false);
-                          }
-                        }}
-                        disabled={folderLoading || !folderClassName}
-                      >
-                        <ArchiveRestore className="w-4 h-4" />
-                        復原
-                      </Button>
+                      <div className="flex items-center gap-2">
+                        <Button
+                          className="bg-white hover:bg-gray-100 flex items-center gap-2 border-2 border-brand-brown text-brand-brown"
+                          onClick={() => void openArchivedFolderDetail(f)}
+                          disabled={folderLoading}
+                        >
+                          <Eye className="w-4 h-4" />
+                          查看
+                        </Button>
+                        <Button
+                          className="bg-[#B5D8F8] hover:bg-[#A1CCF0] flex items-center gap-2"
+                          onClick={async () => {
+                            if (!folderClassName) return;
+                            if (!window.confirm('確定要復原此資料夾及其子層嗎？')) return;
+                            try {
+                              setFolderLoading(true);
+                              await authService.restoreClassFolder(folderClassName, String(f.id));
+                              await loadClassFolders(folderClassName);
+                            } catch (e: any) {
+                              setFolderError(e?.message || '復原失敗');
+                            } finally {
+                              setFolderLoading(false);
+                            }
+                          }}
+                          disabled={folderLoading || !folderClassName}
+                        >
+                          <ArchiveRestore className="w-4 h-4" />
+                          復原
+                        </Button>
+                      </div>
                     </div>
                   );
                 })}
