@@ -926,6 +926,35 @@ class AuthService {
     return this.handleResponse(response);
   }
 
+  // 作業管理（檔案總管）
+  async getManageTasks(params?: { subject?: string; className?: string; includeArchived?: boolean }): Promise<{ tasks: any[]; total: number }> {
+    const searchParams = new URLSearchParams();
+    if (params?.subject) searchParams.append('subject', params.subject);
+    if (params?.className) searchParams.append('className', params.className);
+    if (params?.includeArchived) searchParams.append('includeArchived', '1');
+    const qs = searchParams.toString() ? `?${searchParams.toString()}` : '';
+    const response = await fetch(`${this.API_BASE}/manage/tasks${qs}`, {
+      headers: this.getAuthHeaders()
+    });
+    return this.handleResponse(response);
+  }
+
+  async archiveManageTask(type: 'assignment' | 'quiz' | 'game' | 'contest' | 'ai-bot', id: string): Promise<{ message: string; task: any }> {
+    const response = await fetch(`${this.API_BASE}/manage/tasks/${encodeURIComponent(type)}/${encodeURIComponent(id)}/archive`, {
+      method: 'POST',
+      headers: this.getAuthHeaders()
+    });
+    return this.handleResponse(response);
+  }
+
+  async restoreManageTask(type: 'assignment' | 'quiz' | 'game' | 'contest' | 'ai-bot', id: string): Promise<{ message: string; task: any }> {
+    const response = await fetch(`${this.API_BASE}/manage/tasks/${encodeURIComponent(type)}/${encodeURIComponent(id)}/restore`, {
+      method: 'POST',
+      headers: this.getAuthHeaders()
+    });
+    return this.handleResponse(response);
+  }
+
   async createClassFolder(className: string, payload: { parentId: string; level: 2 | 3; name: string; order?: number }): Promise<{ folder: any }> {
     const response = await fetch(`${this.API_BASE}/class-folders/${encodeURIComponent(className)}`, {
       method: 'POST',

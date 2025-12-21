@@ -10,6 +10,7 @@ import AppStudioModal from '../components/AppStudioModal';
 import ClassFolderManagerModal from '../components/ClassFolderManagerModal';
 import TemplateLibraryModal from '../components/TemplateLibraryModal';
 import ClassFolderSelectInline from '../components/ClassFolderSelectInline';
+import AssignmentExplorerModal from '../components/AssignmentExplorerModal';
 import { MathExpressionBuilder, finalizeMathQuestions } from '../components/MathExpressionBuilder';
 import { MathEquationBuilder, finalizeMathEquationQuestions } from '../components/MathEquationBuilder';
 import { MathExpressionView, FractionView } from '../components/MathExpressionView';
@@ -5418,12 +5419,22 @@ const TeacherDashboard: React.FC = () => {
         )
       }
 
-      {/* Assignment Management Modal */}
-	      {
-	        showAssignmentModal && (
-	          <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
-            <div className="bg-white border-4 border-brand-brown rounded-3xl w-full max-w-6xl max-h-[90vh] overflow-y-auto shadow-comic">
-              <div className="p-6 border-b-4 border-brand-brown bg-[#C0E2BE]">
+	      {/* Assignment Management Modal */}
+          {showAssignmentModal && (
+            <AssignmentExplorerModal
+              open={showAssignmentModal}
+              onClose={() => setShowAssignmentModal(false)}
+              authService={authService}
+              viewerRole="teacher"
+              viewerId={String(user?.id || '')}
+            />
+          )}
+
+		      {
+		        showAssignmentModal && false && (
+		          <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
+	            <div className="bg-white border-4 border-brand-brown rounded-3xl w-full max-w-6xl max-h-[90vh] overflow-y-auto shadow-comic">
+	              <div className="p-6 border-b-4 border-brand-brown bg-[#C0E2BE]">
                 <div className="flex justify-between items-center">
                   <h2 className="text-3xl font-black text-brand-brown">作業管理</h2>
                   <div className="flex items-center gap-2">

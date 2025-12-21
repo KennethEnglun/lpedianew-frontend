@@ -5,6 +5,7 @@ import { authService } from '../services/authService';
 import Button from '../components/Button';
 import Input from '../components/Input';
 import UiSettingsModal from '../components/UiSettingsModal';
+import AssignmentExplorerModal from '../components/AssignmentExplorerModal';
 import { useNavigate } from 'react-router-dom';
 
 interface AdminUser {
@@ -93,6 +94,7 @@ const AdminDashboard: React.FC = () => {
   const [classFolders, setClassFolders] = useState<any[]>([]);
   const [yearEndLoading, setYearEndLoading] = useState(false);
   const [yearEndResult, setYearEndResult] = useState<{ archiveId: string; archivedAt: string } | null>(null);
+  const [showAssignmentManager, setShowAssignmentManager] = useState(false);
   const [newUserForm, setNewUserForm] = useState({
     username: '',
     password: '',
@@ -503,6 +505,13 @@ const AdminDashboard: React.FC = () => {
       </header>
 
       <UiSettingsModal open={showUiSettings} onClose={() => setShowUiSettings(false)} />
+      <AssignmentExplorerModal
+        open={showAssignmentManager}
+        onClose={() => setShowAssignmentManager(false)}
+        authService={authService}
+        viewerRole="admin"
+        viewerId="admin"
+      />
 
       {/* Main Content */}
       <div className="relative z-10 max-w-7xl mx-auto p-6">
@@ -586,6 +595,24 @@ const AdminDashboard: React.FC = () => {
               disabled={yearEndLoading}
             >
               {yearEndLoading ? '封存中...' : '升班（封存本年度）'}
+            </Button>
+          </div>
+        </div>
+
+        {/* Assignment Management */}
+        <div className="bg-white border-4 border-brand-brown rounded-3xl p-6 mb-6 shadow-comic">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <h2 className="text-2xl font-bold text-brand-brown">作業管理</h2>
+              <div className="text-sm text-gray-600 font-bold mt-1">
+                以「科目 → 班別 → 學段 → 課題 → 任務」瀏覽；管理員可查看、刪除及封存。
+              </div>
+            </div>
+            <Button
+              className="bg-[#B5D8F8] hover:bg-[#A1CCF0] flex items-center gap-2"
+              onClick={() => setShowAssignmentManager(true)}
+            >
+              開啟作業管理
             </Button>
           </div>
         </div>
