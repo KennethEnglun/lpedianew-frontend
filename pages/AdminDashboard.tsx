@@ -1,110 +1,38 @@
-import React, { useMemo, useState, useEffect } from 'react';
-import { Download, Upload, Users, UserPlus, Settings, Eye, Edit3, Trash2, LogOut, ArchiveRestore, ClipboardList, FolderArchive, ShieldAlert } from 'lucide-react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { ClipboardList, FolderArchive, ShieldAlert, Users } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { authService } from '../services/authService';
-import Button from '../components/Button';
-import Input from '../components/Input';
-import UiSettingsModal from '../components/UiSettingsModal';
-import AssignmentExplorerModal from '../components/AssignmentExplorerModal';
 import ArchivedFolderDetailsModal from '../components/ArchivedFolderDetailsModal';
-import { useNavigate } from 'react-router-dom';
-
-interface AdminUser {
-  id: string;
-  username: string;
-  role: 'teacher' | 'student' | 'admin';
-  name: string;
-  email?: string;
-  class?: string;
-  studentId?: string;
-  createdAt: string;
-  lastLogin?: string;
-  isActive: boolean;
-  chineseGroup?: string;
-  englishGroup?: string;
-  mathGroup?: string;
-}
-
-const mockUsers: AdminUser[] = [
-  {
-    id: '1',
-    username: 'teacher01',
-    role: 'teacher',
-    name: '李老師',
-    email: 'lee.teacher@school.edu.hk',
-    createdAt: '2024-01-15',
-    lastLogin: '2024-12-07',
-    isActive: true
-  },
-  {
-    id: '2',
-    username: 'teacher02',
-    role: 'teacher',
-    name: '王老師',
-    email: 'wang.teacher@school.edu.hk',
-    createdAt: '2024-01-15',
-    lastLogin: '2024-12-06',
-    isActive: true
-  },
-  {
-    id: '3',
-    username: 'student001',
-    role: 'student',
-    name: '張小明',
-    class: '4A',
-    studentId: '2024001',
-    createdAt: '2024-02-01',
-    lastLogin: '2024-12-07',
-    isActive: true
-  },
-  {
-    id: '4',
-    username: 'student002',
-    role: 'student',
-    name: '李小華',
-    class: '4A',
-    studentId: '2024002',
-    createdAt: '2024-02-01',
-    lastLogin: '2024-12-05',
-    isActive: true
-  },
-  {
-    id: '5',
-    username: 'student003',
-    role: 'student',
-    name: '陳小美',
-    class: '4B',
-    studentId: '2024003',
-    createdAt: '2024-02-01',
-    lastLogin: '2024-12-04',
-    isActive: false
-  }
-];
+import AssignmentExplorerModal from '../components/AssignmentExplorerModal';
+import UiSettingsModal from '../components/UiSettingsModal';
+import AdminShell from '../components/admin/AdminShell';
+import AdminAddUserModal from '../components/admin/modals/AdminAddUserModal';
+import AdminUserModal from '../components/admin/modals/AdminUserModal';
+import AdminAssignmentsPanel from '../components/admin/panels/AdminAssignmentsPanel';
+import AdminFoldersPanel from '../components/admin/panels/AdminFoldersPanel';
+import AdminUsersPanel from '../components/admin/panels/AdminUsersPanel';
+import AdminYearEndPanel from '../components/admin/panels/AdminYearEndPanel';
+import type { AdminSection, AdminUser, SidebarItem, UserRoleFilter } from '../components/admin/types';
 
 const AdminDashboard: React.FC = () => {
   const navigate = useNavigate();
   const { logout } = useAuth();
-  type AdminSection = 'users' | 'assignments' | 'folders' | 'yearEnd';
+
   const [activeSection, setActiveSection] = useState<AdminSection>('users');
   const [showUiSettings, setShowUiSettings] = useState(false);
+
+  // Users
   const [users, setUsers] = useState<AdminUser[]>([]);
-  const [filterRole, setFilterRole] = useState<'all' | 'teacher' | 'student'>('all');
+  const [filterRole, setFilterRole] = useState<UserRoleFilter>('all');
   const [searchTerm, setSearchTerm] = useState('');
+  const [usersLoading, setUsersLoading] = useState(false);
+  const [usersError, setUsersError] = useState('');
+
+  // Add user
   const [showAddUser, setShowAddUser] = useState(false);
-  const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState('');
-  const [folderClassName, setFolderClassName] = useState('');
-  const [folderLoading, setFolderLoading] = useState(false);
-  const [folderError, setFolderError] = useState('');
-  const [classFolders, setClassFolders] = useState<any[]>([]);
-  const [folderDetailOpen, setFolderDetailOpen] = useState(false);
-  const [folderDetailFolder, setFolderDetailFolder] = useState<any | null>(null);
-  const [folderDetailTasks, setFolderDetailTasks] = useState<any[]>([]);
-  const [folderDetailTasksLoading, setFolderDetailTasksLoading] = useState(false);
-  const [folderDetailTasksError, setFolderDetailTasksError] = useState('');
-  const [yearEndLoading, setYearEndLoading] = useState(false);
-  const [yearEndResult, setYearEndResult] = useState<{ archiveId: string; archivedAt: string } | null>(null);
-  const [showAssignmentManager, setShowAssignmentManager] = useState(false);
+  const [addUserLoading, setAddUserLoading] = useState(false);
+  const [addUserError, setAddUserError] = useState('');
   const [newUserForm, setNewUserForm] = useState({
     username: '',
     password: '',
@@ -117,18 +45,45 @@ const AdminDashboard: React.FC = () => {
     mathGroup: ''
   });
 
-  // 載入用戶列表
-  const loadUsers = async () => {
+  // Assignments explorer modal
+  const [showAssignmentManager, setShowAssignmentManager] = useState(false);
+
+  // Folder archive
+  const [folderClassName, setFolderClassName] = useState('');
+  const [folderLoading, setFolderLoading] = useState(false);
+  const [folderError, setFolderError] = useState('');
+  const [classFolders, setClassFolders] = useState<any[]>([]);
+  const [folderDetailOpen, setFolderDetailOpen] = useState(false);
+  const [folderDetailFolder, setFolderDetailFolder] = useState<any | null>(null);
+  const [folderDetailTasks, setFolderDetailTasks] = useState<any[]>([]);
+  const [folderDetailTasksLoading, setFolderDetailTasksLoading] = useState(false);
+  const [folderDetailTasksError, setFolderDetailTasksError] = useState('');
+
+  // Year end
+  const [yearEndLoading, setYearEndLoading] = useState(false);
+  const [yearEndResult, setYearEndResult] = useState<{ archiveId: string; archivedAt: string } | null>(null);
+
+  // User details modal
+  const [userModalOpen, setUserModalOpen] = useState(false);
+  const [userModalMode, setUserModalMode] = useState<'view' | 'edit'>('view');
+  const [userModalLoading, setUserModalLoading] = useState(false);
+  const [userModalSaving, setUserModalSaving] = useState(false);
+  const [userModalError, setUserModalError] = useState('');
+  const [userModalUserId, setUserModalUserId] = useState<string | null>(null);
+  const [userModalUser, setUserModalUser] = useState<any | null>(null);
+  const [userModalStats, setUserModalStats] = useState<any | null>(null);
+
+  const loadUsers = useCallback(async () => {
     try {
-      setIsLoading(true);
+      setUsersLoading(true);
       const response = await authService.getUsers({
         role: filterRole === 'all' ? undefined : filterRole,
         search: searchTerm || undefined,
         page: 1,
         limit: 100
       });
-      // Transform User to AdminUser format
-      const adminUsers: AdminUser[] = response.users.map(user => ({
+
+      const adminUsers: AdminUser[] = response.users.map((user) => ({
         id: user.id,
         username: user.username,
         role: user.role,
@@ -141,22 +96,20 @@ const AdminDashboard: React.FC = () => {
         englishGroup: user.profile.englishGroup,
         mathGroup: user.profile.mathGroup
       }));
+
       setUsers(adminUsers);
-      setError('');
+      setUsersError('');
     } catch (err) {
-      setError('載入用戶列表失敗');
+      setUsersError('載入用戶列表失敗');
       console.error(err);
     } finally {
-      setIsLoading(false);
+      setUsersLoading(false);
     }
-  };
-
-  // 初始載入和搜尋/篩選改變時重新載入
-  useEffect(() => {
-    loadUsers();
   }, [filterRole, searchTerm]);
 
-  const filteredUsers = users;
+  useEffect(() => {
+    void loadUsers();
+  }, [loadUsers]);
 
   const classOptions = useMemo(() => {
     const set = new Set<string>();
@@ -182,7 +135,7 @@ const AdminDashboard: React.FC = () => {
     return map;
   }, [classFolders]);
 
-  const getFolderPath = (folderId: string) => {
+  const getFolderPath = useCallback((folderId: string) => {
     const fid = String(folderId || '').trim();
     if (!fid) return '';
     const path: string[] = [];
@@ -194,13 +147,11 @@ const AdminDashboard: React.FC = () => {
     }
     path.reverse();
     return path.join(' / ');
-  };
+  }, [folderById]);
 
-  const archivedFolders = useMemo(() => {
-    return classFolders.filter((f) => f && f.archivedAt);
-  }, [classFolders]);
+  const archivedFolders = useMemo(() => classFolders.filter((f) => f && f.archivedAt), [classFolders]);
 
-  const loadClassFolders = async (cls: string) => {
+  const loadClassFolders = useCallback(async (cls: string) => {
     const c = String(cls || '').trim();
     if (!c) return;
     setFolderLoading(true);
@@ -214,9 +165,9 @@ const AdminDashboard: React.FC = () => {
     } finally {
       setFolderLoading(false);
     }
-  };
+  }, []);
 
-  const openArchivedFolderDetail = async (f: any) => {
+  const openArchivedFolderDetail = useCallback(async (f: any) => {
     const folder = f || null;
     const cls = String(folder?.className || folderClassName || '').trim();
     if (!folder || !cls) return;
@@ -234,37 +185,36 @@ const AdminDashboard: React.FC = () => {
     } finally {
       setFolderDetailTasksLoading(false);
     }
-  };
+  }, [folderClassName]);
 
-  const runYearEndArchive = async () => {
+  const runYearEndArchive = useCallback(async () => {
     if (yearEndLoading) return;
     const token = window.prompt('此操作會封存本年度所有學生內容並清空（不可逆）。\n如確定，請輸入「升班」確認：', '');
     if (token !== '升班') return;
     try {
       setYearEndLoading(true);
-      setError('');
+      setUsersError('');
       const resp = await authService.archiveYearEnd();
       setYearEndResult({ archiveId: resp.archiveId, archivedAt: resp.archivedAt });
       alert(`已封存完成（archiveId: ${resp.archiveId}）`);
     } catch (e: any) {
-      setError(e?.message || '年度封存失敗');
+      setUsersError(e?.message || '年度封存失敗');
     } finally {
       setYearEndLoading(false);
     }
-  };
+  }, [yearEndLoading]);
 
-  const exportToCSV = async () => {
+  const exportToCSV = useCallback(async () => {
     try {
       const headers = ['用戶名', '密碼', '角色', '姓名', '班級', '教師代碼', '中文分組', '英文分組', '數學分組', '狀態'];
 
-      // 使用當前載入的用戶數據而不是靜態數據
-      const csvData = users.map(user => [
+      const csvData = users.map((user) => [
         user.username,
-        '******', // 密碼不顯示實際內容
+        '******',
         user.role === 'teacher' ? '教師' : user.role === 'student' ? '學生' : '管理員',
         user.name,
         user.class || '',
-        '', // 教師代碼（如果需要可以添加到 AdminUser 接口）
+        '',
         user.chineseGroup || '',
         user.englishGroup || '',
         user.mathGroup || '',
@@ -272,29 +222,24 @@ const AdminDashboard: React.FC = () => {
       ]);
 
       const csvContent = [headers, ...csvData]
-        .map(row => row.map(field => `"${field}"`).join(','))
+        .map((row) => row.map((field) => `"${field}"`).join(','))
         .join('\n');
 
-      // 添加 UTF-8 BOM 以確保中文正確顯示
       const bom = '\uFEFF';
       const blob = new Blob([bom + csvContent], { type: 'text/csv;charset=utf-8;' });
-
       const link = document.createElement('a');
       link.href = URL.createObjectURL(blob);
       link.download = `lpedia_users_${new Date().toISOString().split('T')[0]}.csv`;
       link.click();
     } catch (error) {
-      setError('匯出CSV失敗');
+      setUsersError('匯出CSV失敗');
       console.error(error);
     }
-  };
+  }, [users]);
 
-  const handleImportCSV = async (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (!file) return;
-
+  const importUsersFromCsvFile = useCallback(async (file: File) => {
     try {
-      setIsLoading(true);
+      setUsersLoading(true);
 
       const text = await new Promise<string>((resolve, reject) => {
         const reader = new FileReader();
@@ -303,15 +248,10 @@ const AdminDashboard: React.FC = () => {
         reader.readAsText(file, 'utf-8');
       });
 
-      // 移除 BOM 如果存在
       const cleanText = text.replace(/^\uFEFF/, '');
-      const lines = cleanText.split('\n').filter(line => line.trim());
+      const lines = cleanText.split('\n').filter((line) => line.trim());
+      if (lines.length < 2) throw new Error('CSV 文件格式無效');
 
-      if (lines.length < 2) {
-        throw new Error('CSV 文件格式無效');
-      }
-
-      // 跳過標題行
       const dataLines = lines.slice(1);
       let imported = 0;
       const errors: string[] = [];
@@ -321,7 +261,6 @@ const AdminDashboard: React.FC = () => {
         if (!line) continue;
 
         try {
-          // 解析CSV行（處理引號包圍的字段）
           const values: string[] = [];
           let currentValue = '';
           let inQuotes = false;
@@ -329,14 +268,11 @@ const AdminDashboard: React.FC = () => {
 
           while (j < line.length) {
             const char = line[j];
-            if (char === '"') {
-              inQuotes = !inQuotes;
-            } else if (char === ',' && !inQuotes) {
+            if (char === '"') inQuotes = !inQuotes;
+            else if (char === ',' && !inQuotes) {
               values.push(currentValue.trim());
               currentValue = '';
-            } else {
-              currentValue += char;
-            }
+            } else currentValue += char;
             j++;
           }
           values.push(currentValue.trim());
@@ -359,7 +295,6 @@ const AdminDashboard: React.FC = () => {
             continue;
           }
 
-          // 創建新用戶數據
           const userData = {
             username,
             password: password || 'temp123456',
@@ -376,67 +311,72 @@ const AdminDashboard: React.FC = () => {
 
           await authService.createUser(userData);
           imported++;
-
         } catch (error) {
           errors.push(`第${i + 2}行：${error instanceof Error ? error.message : '處理失敗'}`);
         }
       }
 
       alert(`成功導入 ${imported} 個用戶${errors.length > 0 ? '\\n錯誤：\\n' + errors.slice(0, 5).join('\\n') + (errors.length > 5 ? '\\n...' : '') : ''}`);
-      loadUsers(); // 重新載入用戶列表
-
+      await loadUsers();
     } catch (error) {
-      setError('CSV導入失敗');
+      setUsersError('CSV導入失敗');
       console.error(error);
     } finally {
-      setIsLoading(false);
-      // 清除文件輸入
-      event.target.value = '';
+      setUsersLoading(false);
     }
-  };
+  }, [loadUsers]);
 
-  const toggleUserStatus = async (userId: string) => {
+  const toggleUserStatus = useCallback(async (userId: string) => {
     try {
-      const user = users.find(u => u.id === userId);
+      const user = users.find((u) => u.id === userId);
       if (!user) return;
 
-      if (user.isActive) {
-        await authService.deleteUser(userId, false); // 停用
-      } else {
-        await authService.activateUser(userId); // 啟用
-      }
+      if (user.isActive) await authService.deleteUser(userId, false);
+      else await authService.activateUser(userId);
 
-      loadUsers(); // 重新載入用戶列表
+      await loadUsers();
     } catch (error) {
-      setError('更新用戶狀態失敗');
+      setUsersError('更新用戶狀態失敗');
       console.error(error);
     }
-  };
+  }, [loadUsers, users]);
 
-  const deleteUser = async (userId: string) => {
-    if (window.confirm('確定要永久刪除此用戶？此操作無法復原！')) {
-      try {
-        await authService.deleteUser(userId, true);
-        loadUsers(); // 重新載入用戶列表
-      } catch (error) {
-        setError('刪除用戶失敗');
-        console.error(error);
-      }
+  const deleteUser = useCallback(async (userId: string) => {
+    if (!window.confirm('確定要永久刪除此用戶？此操作無法復原！')) return;
+    try {
+      await authService.deleteUser(userId, true);
+      await loadUsers();
+    } catch (error) {
+      setUsersError('刪除用戶失敗');
+      console.error(error);
     }
-  };
+  }, [loadUsers]);
 
-  const handleAddUser = async () => {
-    // 驗證必填欄位
+  const resetForm = useCallback(() => {
+    setNewUserForm({
+      username: '',
+      password: '',
+      name: '',
+      role: 'student',
+      class: '',
+      teacherCode: '',
+      chineseGroup: '',
+      englishGroup: '',
+      mathGroup: ''
+    });
+    setAddUserError('');
+  }, []);
+
+  const handleAddUser = useCallback(async () => {
     if (!newUserForm.username || !newUserForm.password || !newUserForm.name) {
-      setError('請填寫必填欄位：用戶名、密碼和姓名');
+      setAddUserError('請填寫必填欄位：用戶名、密碼和姓名');
       return;
     }
 
     try {
-      setIsLoading(true);
-      setError('');
+      setAddUserLoading(true);
+      setAddUserError('');
 
-      // 準備用戶資料
       const userData = {
         username: newUserForm.username,
         password: newUserForm.password,
@@ -452,139 +392,158 @@ const AdminDashboard: React.FC = () => {
       };
 
       await authService.createUser(userData);
-
-      // 成功後重置表單和關閉模態框
-      setNewUserForm({
-        username: '',
-        password: '',
-        name: '',
-        role: 'student',
-        class: '',
-        teacherCode: '',
-        chineseGroup: '',
-        englishGroup: '',
-        mathGroup: ''
-      });
+      resetForm();
       setShowAddUser(false);
-      loadUsers(); // 重新載入用戶列表
-
+      await loadUsers();
       alert('用戶新增成功！');
-
     } catch (error) {
-      setError(error instanceof Error ? error.message : '新增用戶失敗');
+      setAddUserError(error instanceof Error ? error.message : '新增用戶失敗');
     } finally {
-      setIsLoading(false);
+      setAddUserLoading(false);
     }
-  };
+  }, [loadUsers, newUserForm, resetForm]);
 
-  const resetForm = () => {
-    setNewUserForm({
-      username: '',
-      password: '',
-      name: '',
-      role: 'student',
-      class: '',
-      teacherCode: '',
-      chineseGroup: '',
-      englishGroup: '',
-      mathGroup: ''
-    });
-    setError('');
-  };
+  const openUserModal = useCallback(async (userId: string, mode: 'view' | 'edit') => {
+    setUserModalOpen(true);
+    setUserModalMode(mode);
+    setUserModalUserId(userId);
+    setUserModalLoading(true);
+    setUserModalSaving(false);
+    setUserModalError('');
+    setUserModalUser(null);
+    setUserModalStats(null);
+    try {
+      const resp = await authService.getUserDetails(userId);
+      setUserModalUser(resp.user);
+      setUserModalStats(resp.learningStats);
+    } catch (e: any) {
+      setUserModalError(e?.message || '載入用戶詳情失敗');
+    } finally {
+      setUserModalLoading(false);
+    }
+  }, []);
+
+  const saveUserModal = useCallback(async (payload: { username: string; role: 'teacher' | 'student'; isActive: boolean; profile: Record<string, any> }) => {
+    if (!userModalUserId) return;
+    try {
+      setUserModalSaving(true);
+      setUserModalError('');
+      const updated = await authService.updateUser(userModalUserId, payload as any);
+      setUserModalUser(updated);
+      setUserModalMode('view');
+      await loadUsers();
+    } catch (e: any) {
+      setUserModalError(e?.message || '儲存失敗');
+    } finally {
+      setUserModalSaving(false);
+    }
+  }, [loadUsers, userModalUserId]);
+
+  const restoreArchivedFolder = useCallback(async (folder: any) => {
+    const cls = String(folder?.className || folderClassName || '').trim();
+    if (!cls) return;
+    if (!window.confirm('確定要復原此資料夾及其子層嗎？')) return;
+    try {
+      setFolderError('');
+      setFolderLoading(true);
+      await authService.restoreClassFolder(cls, String(folder.id));
+      await loadClassFolders(cls);
+    } catch (e: any) {
+      setFolderError(e?.message || '復原失敗');
+    } finally {
+      setFolderLoading(false);
+    }
+  }, [folderClassName, loadClassFolders]);
+
+  const sidebarItems: SidebarItem[] = useMemo(() => ([
+    { key: 'users', label: '帳號管理', icon: <Users className="w-5 h-5" /> },
+    { key: 'assignments', label: '作業管理', icon: <ClipboardList className="w-5 h-5" /> },
+    { key: 'folders', label: '班級資料夾', icon: <FolderArchive className="w-5 h-5" /> },
+    { key: 'yearEnd', label: '年度操作', icon: <ShieldAlert className="w-5 h-5" /> }
+  ]), []);
 
   const sectionTitle = useMemo(() => {
     switch (activeSection) {
       case 'users': return '帳號管理';
       case 'assignments': return '作業管理';
-      case 'folders': return '班級資料夾';
+      case 'folders': return '班級資料夾（封存）';
       case 'yearEnd': return '年度操作';
+      default: return '管理後台';
     }
   }, [activeSection]);
 
-  const sidebarItems: Array<{ key: AdminSection; label: string; icon: React.ReactNode }> = [
-    { key: 'users', label: '帳號管理', icon: <Users className="w-5 h-5" /> },
-    { key: 'assignments', label: '作業管理', icon: <ClipboardList className="w-5 h-5" /> },
-    { key: 'folders', label: '班級資料夾', icon: <FolderArchive className="w-5 h-5" /> },
-    { key: 'yearEnd', label: '年度操作', icon: <ShieldAlert className="w-5 h-5" /> }
-  ];
+  const sectionSubtitle = useMemo(() => {
+    switch (activeSection) {
+      case 'users': return '新增/停用/刪除用戶，匯入匯出 CSV（只影響帳號資料）';
+      case 'assignments': return '以檔案總管方式查看作業；管理員可查看、刪除及封存';
+      case 'folders': return '查看封存資料夾、詳細內容及復原';
+      case 'yearEnd': return '升班（封存本年度所有學生內容）';
+      default: return undefined;
+    }
+  }, [activeSection]);
 
   return (
-    <div className="min-h-screen bg-gray-50 font-sans flex">
-      {/* Sidebar */}
-      <aside className="w-64 bg-white border-r border-gray-200 flex flex-col">
-        <div className="px-5 py-5 border-b border-gray-200">
-          <div className="text-2xl font-black text-brand-brown font-rounded leading-tight">LPedia Admin</div>
-          <div className="text-xs font-bold text-gray-500 mt-1">管理後台</div>
-        </div>
-
-        <nav className="p-3 space-y-1">
-          {sidebarItems.map((it) => {
-            const active = it.key === activeSection;
-            return (
-              <button
-                key={it.key}
-                type="button"
-                onClick={() => setActiveSection(it.key)}
-                className={[
-                  'w-full flex items-center gap-3 px-3 py-2 rounded-xl font-black text-left transition-colors',
-                  active ? 'bg-[#E8F5E9] text-brand-brown' : 'bg-transparent text-gray-700 hover:bg-gray-100'
-                ].join(' ')}
-              >
-                <span className={active ? 'text-brand-brown' : 'text-gray-500'}>{it.icon}</span>
-                <span className="truncate">{it.label}</span>
-              </button>
-            );
-          })}
-        </nav>
-
-        <div className="mt-auto p-4 border-t border-gray-200 space-y-2">
-          <button
-            type="button"
-            onClick={() => setShowUiSettings(true)}
-            className="w-full flex items-center gap-3 px-3 py-2 rounded-xl font-bold text-gray-700 hover:bg-gray-100"
-          >
-            <Settings className="w-5 h-5 text-gray-500" />
-            介面顯示設定
-          </button>
-          <button
-            type="button"
-            onClick={() => navigate('/')}
-            className="w-full flex items-center gap-3 px-3 py-2 rounded-xl font-bold text-gray-700 hover:bg-gray-100"
-          >
-            <Users className="w-5 h-5 text-gray-500" />
-            返回平台
-          </button>
-          <button
-            type="button"
-            onClick={logout}
-            className="w-full flex items-center gap-3 px-3 py-2 rounded-xl font-bold text-red-700 hover:bg-red-50"
-          >
-            <LogOut className="w-5 h-5 text-red-600" />
-            登出
-          </button>
-        </div>
-      </aside>
-
-      {/* Main */}
-      <div className="flex-1 min-w-0 flex flex-col">
-        <header className="sticky top-0 z-10 bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between">
-          <div className="min-w-0">
-            <div className="text-2xl font-black text-brand-brown truncate">{sectionTitle}</div>
-            <div className="text-xs font-bold text-gray-500 truncate">
-              {activeSection === 'users' && '新增/停用/刪除用戶，匯入匯出 CSV'}
-              {activeSection === 'assignments' && '以檔案總管方式查看/刪除/封存任務'}
-              {activeSection === 'folders' && '查看封存資料夾、詳細內容及復原'}
-              {activeSection === 'yearEnd' && '升班（封存本年度）'}
-            </div>
+    <>
+      <AdminShell
+        activeSection={activeSection}
+        sidebarItems={sidebarItems}
+        onSelectSection={setActiveSection}
+        title={sectionTitle}
+        subtitle={sectionSubtitle}
+        onOpenSettings={() => setShowUiSettings(true)}
+        onBackToPlatform={() => navigate('/')}
+        onLogout={logout}
+      >
+        {activeSection === 'users' && (
+          <div className="space-y-3">
+            {usersError && <div className="text-red-700 font-bold">{usersError}</div>}
+            {usersLoading && <div className="text-gray-700 font-bold">載入中…</div>}
+            <AdminUsersPanel
+              searchTerm={searchTerm}
+              setSearchTerm={setSearchTerm}
+              filterRole={filterRole}
+              setFilterRole={setFilterRole}
+              users={users}
+              onOpenAddUser={() => {
+                setAddUserError('');
+                setShowAddUser(true);
+              }}
+              onExportCSV={exportToCSV}
+              onImportCSVFile={(file) => void importUsersFromCsvFile(file)}
+              onViewUser={(userId) => void openUserModal(userId, 'view')}
+              onEditUser={(userId) => void openUserModal(userId, 'edit')}
+              onToggleUserStatus={(userId) => void toggleUserStatus(userId)}
+              onDeleteUser={(userId) => void deleteUser(userId)}
+            />
           </div>
-          <div className="flex items-center gap-2">
-            <Button className="bg-white hover:bg-gray-100 border border-gray-200 text-gray-800" onClick={() => setShowUiSettings(true)}>
-              <Settings className="w-4 h-4" />
-            </Button>
-          </div>
-        </header>
+        )}
+
+        {activeSection === 'assignments' && (
+          <AdminAssignmentsPanel onOpen={() => setShowAssignmentManager(true)} />
+        )}
+
+        {activeSection === 'folders' && (
+          <AdminFoldersPanel
+            folderClassName={folderClassName}
+            classOptions={classOptions}
+            folderLoading={folderLoading}
+            folderError={folderError}
+            archivedFolders={archivedFolders}
+            onClassChange={(v) => setFolderClassName(v)}
+            onLoad={() => void loadClassFolders(folderClassName)}
+            getFolderPath={getFolderPath}
+            onView={(folder) => void openArchivedFolderDetail(folder)}
+            onRestore={(folder) => void restoreArchivedFolder(folder)}
+          />
+        )}
+
+        {activeSection === 'yearEnd' && (
+          <AdminYearEndPanel yearEndLoading={yearEndLoading} yearEndResult={yearEndResult} onRun={() => void runYearEndArchive()} />
+        )}
+      </AdminShell>
 
       <UiSettingsModal open={showUiSettings} onClose={() => setShowUiSettings(false)} />
+
       <AssignmentExplorerModal
         open={showAssignmentManager}
         onClose={() => setShowAssignmentManager(false)}
@@ -592,6 +551,7 @@ const AdminDashboard: React.FC = () => {
         viewerRole="admin"
         viewerId="admin"
       />
+
       <ArchivedFolderDetailsModal
         open={folderDetailOpen}
         onClose={() => setFolderDetailOpen(false)}
@@ -610,7 +570,6 @@ const AdminDashboard: React.FC = () => {
             setFolderLoading(true);
             await authService.restoreClassFolder(cls, String(folderId));
             await loadClassFolders(cls);
-            // keep modal open; tasks still reflect current state
           } catch (e: any) {
             setFolderDetailTasksError(e?.message || '復原失敗');
           } finally {
@@ -619,423 +578,39 @@ const AdminDashboard: React.FC = () => {
         }}
       />
 
-	      {/* Main Content */}
-	      <div className="p-6 space-y-4">
+      <AdminUserModal
+        open={userModalOpen}
+        mode={userModalMode}
+        loading={userModalLoading}
+        saving={userModalSaving}
+        error={userModalError}
+        user={userModalUser}
+        learningStats={userModalStats}
+        onClose={() => {
+          setUserModalOpen(false);
+          setUserModalUserId(null);
+          setUserModalUser(null);
+          setUserModalStats(null);
+          setUserModalMode('view');
+          setUserModalError('');
+        }}
+        onRequestEdit={() => setUserModalMode('edit')}
+        onSave={saveUserModal}
+      />
 
-	        {activeSection === 'users' && (
-	        <div className="bg-white border border-gray-200 rounded-2xl p-5 shadow-sm">
-	          <div className="text-lg font-black text-brand-brown mb-3">帳號管理</div>
-
-          <div className="flex flex-wrap gap-4 items-end">
-            {/* Search */}
-            <div className="flex-1 min-w-64">
-              <Input
-                placeholder="搜尋用戶名、姓名或學生號..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-              />
-            </div>
-
-            {/* Role Filter */}
-            <div>
-	              <select
-	                value={filterRole}
-	                onChange={(e) => setFilterRole(e.target.value as any)}
-	                className="px-4 py-2 border border-gray-300 rounded-xl bg-white font-bold"
-	              >
-                <option value="all">所有用戶</option>
-                <option value="teacher">教師</option>
-                <option value="student">學生</option>
-              </select>
-            </div>
-
-            {/* Action Buttons */}
-            <Button
-              className="bg-[#B5F8CE] hover:bg-[#A1E5B8] flex items-center gap-2"
-              onClick={() => setShowAddUser(true)}
-            >
-              <UserPlus className="w-4 h-4" />
-              新增用戶
-            </Button>
-
-            <Button
-              className="bg-[#F8E2B5] hover:bg-[#F4D490] flex items-center gap-2"
-              onClick={exportToCSV}
-            >
-              <Download className="w-4 h-4" />
-              匯出CSV
-            </Button>
-
-            <div className="relative">
-              <input
-                type="file"
-                accept=".csv"
-                onChange={handleImportCSV}
-                className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
-              />
-              <Button className="bg-[#D2B5F8] hover:bg-[#C4A1F0] flex items-center gap-2">
-                <Upload className="w-4 h-4" />
-                匯入CSV
-              </Button>
-            </div>
-          </div>
-	        </div>
-	        )}
-
-	        {activeSection === 'yearEnd' && (
-	        <div className="bg-white border border-gray-200 rounded-2xl p-5 shadow-sm">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div>
-              <h2 className="text-2xl font-bold text-brand-brown">年度操作</h2>
-              <div className="text-sm text-gray-600 font-bold mt-1">
-                「升班」會封存本年度所有學生內容並清空（可在後端 data/year_archives 找到封存檔）。
-              </div>
-              {yearEndResult && (
-                <div className="text-xs text-gray-600 font-bold mt-2">
-                  最近一次封存：{yearEndResult.archiveId}（{yearEndResult.archivedAt}）
-                </div>
-              )}
-            </div>
-            <Button
-              className="bg-red-100 hover:bg-red-200 text-red-800 flex items-center gap-2"
-              onClick={() => void runYearEndArchive()}
-              disabled={yearEndLoading}
-            >
-              {yearEndLoading ? '封存中...' : '升班（封存本年度）'}
-            </Button>
-          </div>
-	        </div>
-	        )}
-
-	        {activeSection === 'assignments' && (
-	        <div className="bg-white border border-gray-200 rounded-2xl p-5 shadow-sm">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div>
-              <h2 className="text-2xl font-bold text-brand-brown">作業管理</h2>
-              <div className="text-sm text-gray-600 font-bold mt-1">
-                以「科目 → 班別 → 學段 → 課題 → 任務」瀏覽；管理員可查看、刪除及封存。
-              </div>
-            </div>
-            <Button
-              className="bg-[#B5D8F8] hover:bg-[#A1CCF0] flex items-center gap-2"
-              onClick={() => setShowAssignmentManager(true)}
-            >
-              開啟作業管理
-            </Button>
-          </div>
-	        </div>
-	        )}
-
-	        {activeSection === 'folders' && (
-	        <div className="bg-white border border-gray-200 rounded-2xl p-5 shadow-sm">
-          <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
-            <h2 className="text-2xl font-bold text-brand-brown">班級資料夾（封存）</h2>
-            <div className="flex items-center gap-3">
-	              <label className="font-bold text-gray-700">班別</label>
-		              <select
-		                className="px-4 py-2 border border-gray-300 rounded-xl bg-white font-bold"
-		                value={folderClassName}
-		                onChange={(e) => setFolderClassName(e.target.value)}
-		                disabled={classOptions.length === 0}
-		              >
-                {classOptions.length === 0 ? (
-                  <option value="">（未有班別）</option>
-                ) : (
-                  classOptions.map((c) => (
-                    <option key={c} value={c}>{c}</option>
-                  ))
-                )}
-              </select>
-              <Button
-                className="bg-[#E8F5E9] hover:bg-[#C8E6C9] flex items-center gap-2"
-                onClick={() => void loadClassFolders(folderClassName)}
-                disabled={!folderClassName || folderLoading}
-              >
-                <ArchiveRestore className="w-4 h-4" />
-                {folderLoading ? '載入中...' : '載入封存資料夾'}
-              </Button>
-            </div>
-          </div>
-
-          {folderError && (
-            <div className="mb-3 text-red-700 font-bold">{folderError}</div>
-          )}
-
-          {archivedFolders.length === 0 ? (
-            <div className="text-gray-600 font-bold">
-              目前沒有封存資料夾
-            </div>
-          ) : (
-            <div className="space-y-2">
-              {archivedFolders
-                .slice()
-                .sort((a, b) => {
-                  const la = Number(a.level) || 0;
-                  const lb = Number(b.level) || 0;
-                  if (la !== lb) return la - lb;
-                  return String(a.name || '').localeCompare(String(b.name || ''), 'zh-Hant');
-                })
-                .map((f: any) => {
-                  const level = Number(f.level);
-                  const label = level === 1 ? '學段' : level === 2 ? '課題' : level === 3 ? '子folder' : '資料夾';
-                  const path = getFolderPath(String(f.id));
-                  return (
-                    <div key={String(f.id)} className="flex flex-wrap items-center justify-between gap-3 p-3 rounded-2xl border-2 border-gray-200 bg-gray-50">
-                      <div className="min-w-0">
-                        <div className="font-black text-brand-brown">
-                          {label}：{String(f.name || '')}
-                        </div>
-                        <div className="text-xs text-gray-600 font-bold break-words">
-                          路徑：{path || String(f.name || '')}
-                        </div>
-                        <div className="text-xs text-gray-500 font-bold">
-                          封存時間：{String(f.archivedAt || '')}
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <Button
-                          className="bg-white hover:bg-gray-100 flex items-center gap-2 border-2 border-brand-brown text-brand-brown"
-                          onClick={() => void openArchivedFolderDetail(f)}
-                          disabled={folderLoading}
-                        >
-                          <Eye className="w-4 h-4" />
-                          查看
-                        </Button>
-                        <Button
-                          className="bg-[#B5D8F8] hover:bg-[#A1CCF0] flex items-center gap-2"
-                          onClick={async () => {
-                            if (!folderClassName) return;
-                            if (!window.confirm('確定要復原此資料夾及其子層嗎？')) return;
-                            try {
-                              setFolderLoading(true);
-                              await authService.restoreClassFolder(folderClassName, String(f.id));
-                              await loadClassFolders(folderClassName);
-                            } catch (e: any) {
-                              setFolderError(e?.message || '復原失敗');
-                            } finally {
-                              setFolderLoading(false);
-                            }
-                          }}
-                          disabled={folderLoading || !folderClassName}
-                        >
-                          <ArchiveRestore className="w-4 h-4" />
-                          復原
-                        </Button>
-                      </div>
-                    </div>
-                  );
-                })}
-            </div>
-          )}
-	        </div>
-	        )}
-
-	        {activeSection === 'users' && (
-	        <div className="bg-white border border-gray-200 rounded-2xl p-5 shadow-sm">
-          <div className="flex justify-between items-center mb-4">
-            <h3 className="text-xl font-bold text-brand-brown">
-              用戶列表 ({filteredUsers.length})
-            </h3>
-          </div>
-
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead>
-                <tr className="border-b-2 border-brand-brown">
-                  <th className="text-left py-3 px-4 font-bold text-brand-brown">用戶名</th>
-                  <th className="text-left py-3 px-4 font-bold text-brand-brown">角色</th>
-                  <th className="text-left py-3 px-4 font-bold text-brand-brown">姓名</th>
-                  <th className="text-left py-3 px-4 font-bold text-brand-brown">班級</th>
-                  <th className="text-left py-3 px-4 font-bold text-brand-brown">分組情況</th>
-                  <th className="text-left py-3 px-4 font-bold text-brand-brown">最後登入</th>
-                  <th className="text-left py-3 px-4 font-bold text-brand-brown">狀態</th>
-                  <th className="text-left py-3 px-4 font-bold text-brand-brown">操作</th>
-                </tr>
-              </thead>
-              <tbody>
-                {filteredUsers.map((user: AdminUser) => (
-                  <tr key={user.id} className="border-b border-gray-200 hover:bg-gray-50">
-                    <td className="py-3 px-4 font-mono text-sm">{user.username}</td>
-                    <td className="py-3 px-4">
-                      <span className={`px-2 py-1 rounded-full text-xs font-bold ${
-                        user.role === 'teacher'
-                          ? 'bg-blue-100 text-blue-800'
-                          : user.role === 'admin'
-                          ? 'bg-purple-100 text-purple-800'
-                          : 'bg-green-100 text-green-800'
-                      }`}>
-                        {user.role === 'teacher' ? '教師' : user.role === 'admin' ? '管理員' : '學生'}
-                      </span>
-                    </td>
-                    <td className="py-3 px-4 font-bold">{user.name}</td>
-                    <td className="py-3 px-4">
-                      {user.class || 'N/A'}
-                    </td>
-                    <td className="py-3 px-4 text-sm">
-                      {user.role === 'student' ? (
-                        <div className="space-y-1">
-                          {user.chineseGroup && <div>中文: {user.chineseGroup}</div>}
-                          {user.englishGroup && <div>英文: {user.englishGroup}</div>}
-                          {user.mathGroup && <div>數學: {user.mathGroup}</div>}
-                          {!user.chineseGroup && !user.englishGroup && !user.mathGroup && 'N/A'}
-                        </div>
-                      ) : 'N/A'}
-                    </td>
-                    <td className="py-3 px-4 text-sm text-gray-600">
-                      {user.lastLogin || '從未登入'}
-                    </td>
-                    <td className="py-3 px-4">
-                      <span className={`px-2 py-1 rounded-full text-xs font-bold ${
-                        user.isActive
-                          ? 'bg-green-100 text-green-800'
-                          : 'bg-red-100 text-red-800'
-                      }`}>
-                        {user.isActive ? '啟用' : '停用'}
-                      </span>
-                    </td>
-                    <td className="py-3 px-4">
-                      <div className="flex gap-2">
-                        <button
-                          className="p-1 hover:bg-gray-200 rounded"
-                          title="查看詳情"
-                        >
-                          <Eye className="w-4 h-4 text-gray-600" />
-                        </button>
-                        <button
-                          className="p-1 hover:bg-gray-200 rounded"
-                          title="編輯用戶"
-                        >
-                          <Edit3 className="w-4 h-4 text-blue-600" />
-                        </button>
-                        <button
-                          onClick={() => toggleUserStatus(user.id)}
-                          className="p-1 hover:bg-gray-200 rounded"
-                          title={user.isActive ? '停用用戶' : '啟用用戶'}
-                        >
-                          <Settings className={`w-4 h-4 ${user.isActive ? 'text-orange-600' : 'text-green-600'}`} />
-                        </button>
-                        <button
-                          onClick={() => deleteUser(user.id)}
-                          className="p-1 hover:bg-gray-200 rounded"
-                          title="刪除用戶"
-                        >
-                          <Trash2 className="w-4 h-4 text-red-600" />
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-
-          {filteredUsers.length === 0 && (
-            <div className="text-center py-12 text-gray-500">
-              沒有找到符合條件的用戶
-            </div>
-          )}
-	        </div>
-	        )}
-
-	      </div>
-
-      {/* Add User Modal */}
-      {showAddUser && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
-	          <div className="bg-white border border-gray-200 rounded-2xl p-6 w-full max-w-md shadow-lg">
-            <h3 className="text-xl font-bold text-brand-brown mb-4">新增用戶</h3>
-
-            {/* Error Message */}
-            {error && (
-              <div className="mb-4 p-3 bg-red-100 border border-red-400 text-red-700 rounded-lg">
-                {error}
-              </div>
-            )}
-
-            <div className="space-y-4">
-              <Input
-                placeholder="用戶名"
-                value={newUserForm.username}
-                onChange={(e) => setNewUserForm({...newUserForm, username: e.target.value})}
-              />
-              <Input
-                placeholder="密碼"
-                type="password"
-                value={newUserForm.password}
-                onChange={(e) => setNewUserForm({...newUserForm, password: e.target.value})}
-              />
-              <Input
-                placeholder="姓名"
-                value={newUserForm.name}
-                onChange={(e) => setNewUserForm({...newUserForm, name: e.target.value})}
-              />
-	              <select
-	                className="w-full px-4 py-2 border border-gray-300 rounded-xl bg-white font-bold"
-	                value={newUserForm.role}
-	                onChange={(e) => setNewUserForm({...newUserForm, role: e.target.value as 'teacher' | 'student'})}
-	              >
-                <option value="student">學生</option>
-                <option value="teacher">教師</option>
-              </select>
-              {newUserForm.role === 'student' && (
-                <>
-                  <Input
-                    placeholder="班級"
-                    value={newUserForm.class}
-                    onChange={(e) => setNewUserForm({...newUserForm, class: e.target.value})}
-                  />
-                  <Input
-                    placeholder="中文分組"
-                    value={newUserForm.chineseGroup}
-                    onChange={(e) => setNewUserForm({...newUserForm, chineseGroup: e.target.value})}
-                  />
-                  <Input
-                    placeholder="英文分組"
-                    value={newUserForm.englishGroup}
-                    onChange={(e) => setNewUserForm({...newUserForm, englishGroup: e.target.value})}
-                  />
-                  <Input
-                    placeholder="數學分組"
-                    value={newUserForm.mathGroup}
-                    onChange={(e) => setNewUserForm({...newUserForm, mathGroup: e.target.value})}
-                  />
-                </>
-              )}
-              {newUserForm.role === 'teacher' && (
-                <Input
-                  placeholder="教師代碼"
-                  value={newUserForm.teacherCode}
-                  onChange={(e) => setNewUserForm({...newUserForm, teacherCode: e.target.value})}
-                />
-              )}
-            </div>
-
-            <div className="flex gap-4 mt-6">
-              <Button
-                fullWidth
-                className="bg-gray-300 hover:bg-gray-400"
-                onClick={() => {
-                  resetForm();
-                  setShowAddUser(false);
-                }}
-                disabled={isLoading}
-              >
-                取消
-              </Button>
-              <Button
-                fullWidth
-                className="bg-[#B5F8CE] hover:bg-[#A1E5B8]"
-                onClick={handleAddUser}
-                disabled={isLoading}
-              >
-                {isLoading ? '新增中...' : '新增'}
-              </Button>
-            </div>
-          </div>
-        </div>
-      )}
-    </div>
-    </div>
+      <AdminAddUserModal
+        open={showAddUser}
+        isLoading={addUserLoading}
+        error={addUserError}
+        form={newUserForm}
+        setForm={setNewUserForm}
+        onClose={() => {
+          resetForm();
+          setShowAddUser(false);
+        }}
+        onSubmit={() => void handleAddUser()}
+      />
+    </>
   );
 };
 
