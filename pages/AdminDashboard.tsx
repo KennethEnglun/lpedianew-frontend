@@ -1,5 +1,5 @@
 import React, { useMemo, useState, useEffect } from 'react';
-import { Download, Upload, Users, UserPlus, Settings, Eye, Edit3, Trash2, LogOut, ArchiveRestore } from 'lucide-react';
+import { Download, Upload, Users, UserPlus, Settings, Eye, Edit3, Trash2, LogOut, ArchiveRestore, ClipboardList, FolderArchive, ShieldAlert } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { authService } from '../services/authService';
 import Button from '../components/Button';
@@ -84,6 +84,8 @@ const mockUsers: AdminUser[] = [
 const AdminDashboard: React.FC = () => {
   const navigate = useNavigate();
   const { logout } = useAuth();
+  type AdminSection = 'users' | 'assignments' | 'folders' | 'yearEnd';
+  const [activeSection, setActiveSection] = useState<AdminSection>('users');
   const [showUiSettings, setShowUiSettings] = useState(false);
   const [users, setUsers] = useState<AdminUser[]>([]);
   const [filterRole, setFilterRole] = useState<'all' | 'teacher' | 'student'>('all');
@@ -490,47 +492,97 @@ const AdminDashboard: React.FC = () => {
     setError('');
   };
 
-  return (
-    <div className="min-h-full bg-gray-50 font-sans">
-      {/* Background */}
-      <div 
-        className="absolute inset-0 z-0 pointer-events-none"
-        style={{
-          backgroundImage: `url('/teacherpagebg.png')`,
-          backgroundSize: 'cover',
-          backgroundPosition: 'center',
-          backgroundRepeat: 'no-repeat'
-        }}
-      />
+  const sectionTitle = useMemo(() => {
+    switch (activeSection) {
+      case 'users': return '帳號管理';
+      case 'assignments': return '作業管理';
+      case 'folders': return '班級資料夾';
+      case 'yearEnd': return '年度操作';
+    }
+  }, [activeSection]);
 
-      {/* Header */}
-      <header className="relative z-10 bg-[#A1D9AE] border-b-4 border-brand-brown py-4 px-6 flex justify-between items-center shadow-md">
-        <div className="flex items-center gap-4">
-          <h1 className="text-4xl font-black text-brand-brown font-rounded">LPedia Admin</h1>
+  const sidebarItems: Array<{ key: AdminSection; label: string; icon: React.ReactNode }> = [
+    { key: 'users', label: '帳號管理', icon: <Users className="w-5 h-5" /> },
+    { key: 'assignments', label: '作業管理', icon: <ClipboardList className="w-5 h-5" /> },
+    { key: 'folders', label: '班級資料夾', icon: <FolderArchive className="w-5 h-5" /> },
+    { key: 'yearEnd', label: '年度操作', icon: <ShieldAlert className="w-5 h-5" /> }
+  ];
+
+  return (
+    <div className="min-h-screen bg-gray-50 font-sans flex">
+      {/* Sidebar */}
+      <aside className="w-64 bg-white border-r border-gray-200 flex flex-col">
+        <div className="px-5 py-5 border-b border-gray-200">
+          <div className="text-2xl font-black text-brand-brown font-rounded leading-tight">LPedia Admin</div>
+          <div className="text-xs font-bold text-gray-500 mt-1">管理後台</div>
         </div>
-        <div className="flex gap-4">
+
+        <nav className="p-3 space-y-1">
+          {sidebarItems.map((it) => {
+            const active = it.key === activeSection;
+            return (
+              <button
+                key={it.key}
+                type="button"
+                onClick={() => setActiveSection(it.key)}
+                className={[
+                  'w-full flex items-center gap-3 px-3 py-2 rounded-xl font-black text-left transition-colors',
+                  active ? 'bg-[#E8F5E9] text-brand-brown' : 'bg-transparent text-gray-700 hover:bg-gray-100'
+                ].join(' ')}
+              >
+                <span className={active ? 'text-brand-brown' : 'text-gray-500'}>{it.icon}</span>
+                <span className="truncate">{it.label}</span>
+              </button>
+            );
+          })}
+        </nav>
+
+        <div className="mt-auto p-4 border-t border-gray-200 space-y-2">
           <button
+            type="button"
             onClick={() => setShowUiSettings(true)}
-            className="w-12 h-12 bg-white rounded-full border-2 border-brand-brown shadow-comic flex items-center justify-center hover:scale-105 transition-transform"
-            title="介面顯示設定"
+            className="w-full flex items-center gap-3 px-3 py-2 rounded-xl font-bold text-gray-700 hover:bg-gray-100"
           >
-            <Settings className="text-brand-brown w-6 h-6" />
+            <Settings className="w-5 h-5 text-gray-500" />
+            介面顯示設定
           </button>
           <button
+            type="button"
             onClick={() => navigate('/')}
-            className="w-12 h-12 bg-white rounded-full border-2 border-brand-brown shadow-comic flex items-center justify-center hover:scale-105 transition-transform"
+            className="w-full flex items-center gap-3 px-3 py-2 rounded-xl font-bold text-gray-700 hover:bg-gray-100"
           >
-            <Users className="text-brand-brown w-6 h-6" />
+            <Users className="w-5 h-5 text-gray-500" />
+            返回平台
           </button>
           <button
+            type="button"
             onClick={logout}
-            className="w-12 h-12 bg-white rounded-full border-2 border-brand-brown shadow-comic flex items-center justify-center hover:scale-105 transition-transform"
-            title="登出"
+            className="w-full flex items-center gap-3 px-3 py-2 rounded-xl font-bold text-red-700 hover:bg-red-50"
           >
-            <LogOut className="text-brand-brown w-6 h-6" />
+            <LogOut className="w-5 h-5 text-red-600" />
+            登出
           </button>
         </div>
-      </header>
+      </aside>
+
+      {/* Main */}
+      <div className="flex-1 min-w-0 flex flex-col">
+        <header className="sticky top-0 z-10 bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between">
+          <div className="min-w-0">
+            <div className="text-2xl font-black text-brand-brown truncate">{sectionTitle}</div>
+            <div className="text-xs font-bold text-gray-500 truncate">
+              {activeSection === 'users' && '新增/停用/刪除用戶，匯入匯出 CSV'}
+              {activeSection === 'assignments' && '以檔案總管方式查看/刪除/封存任務'}
+              {activeSection === 'folders' && '查看封存資料夾、詳細內容及復原'}
+              {activeSection === 'yearEnd' && '升班（封存本年度）'}
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            <Button className="bg-white hover:bg-gray-100 border border-gray-200 text-gray-800" onClick={() => setShowUiSettings(true)}>
+              <Settings className="w-4 h-4" />
+            </Button>
+          </div>
+        </header>
 
       <UiSettingsModal open={showUiSettings} onClose={() => setShowUiSettings(false)} />
       <AssignmentExplorerModal
@@ -567,12 +619,12 @@ const AdminDashboard: React.FC = () => {
         }}
       />
 
-      {/* Main Content */}
-      <div className="relative z-10 max-w-7xl mx-auto p-6">
+	      {/* Main Content */}
+	      <div className="p-6 space-y-4">
 
-        {/* Control Panel */}
-        <div className="bg-white border-4 border-brand-brown rounded-3xl p-6 mb-6 shadow-comic">
-          <h2 className="text-2xl font-bold text-brand-brown mb-4">帳號管理中心</h2>
+	        {activeSection === 'users' && (
+	        <div className="bg-white border border-gray-200 rounded-2xl p-5 shadow-sm">
+	          <div className="text-lg font-black text-brand-brown mb-3">帳號管理</div>
 
           <div className="flex flex-wrap gap-4 items-end">
             {/* Search */}
@@ -586,11 +638,11 @@ const AdminDashboard: React.FC = () => {
 
             {/* Role Filter */}
             <div>
-              <select
-                value={filterRole}
-                onChange={(e) => setFilterRole(e.target.value as any)}
-                className="px-4 py-2 border-4 border-brand-brown rounded-2xl bg-white font-bold"
-              >
+	              <select
+	                value={filterRole}
+	                onChange={(e) => setFilterRole(e.target.value as any)}
+	                className="px-4 py-2 border border-gray-300 rounded-xl bg-white font-bold"
+	              >
                 <option value="all">所有用戶</option>
                 <option value="teacher">教師</option>
                 <option value="student">學生</option>
@@ -627,10 +679,11 @@ const AdminDashboard: React.FC = () => {
               </Button>
             </div>
           </div>
-        </div>
+	        </div>
+	        )}
 
-        {/* Year End */}
-        <div className="bg-white border-4 border-brand-brown rounded-3xl p-6 mb-6 shadow-comic">
+	        {activeSection === 'yearEnd' && (
+	        <div className="bg-white border border-gray-200 rounded-2xl p-5 shadow-sm">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
               <h2 className="text-2xl font-bold text-brand-brown">年度操作</h2>
@@ -651,10 +704,11 @@ const AdminDashboard: React.FC = () => {
               {yearEndLoading ? '封存中...' : '升班（封存本年度）'}
             </Button>
           </div>
-        </div>
+	        </div>
+	        )}
 
-        {/* Assignment Management */}
-        <div className="bg-white border-4 border-brand-brown rounded-3xl p-6 mb-6 shadow-comic">
+	        {activeSection === 'assignments' && (
+	        <div className="bg-white border border-gray-200 rounded-2xl p-5 shadow-sm">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
               <h2 className="text-2xl font-bold text-brand-brown">作業管理</h2>
@@ -669,20 +723,21 @@ const AdminDashboard: React.FC = () => {
               開啟作業管理
             </Button>
           </div>
-        </div>
+	        </div>
+	        )}
 
-        {/* Archived Class Folders */}
-        <div className="bg-white border-4 border-brand-brown rounded-3xl p-6 mb-6 shadow-comic">
+	        {activeSection === 'folders' && (
+	        <div className="bg-white border border-gray-200 rounded-2xl p-5 shadow-sm">
           <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
             <h2 className="text-2xl font-bold text-brand-brown">班級資料夾（封存）</h2>
             <div className="flex items-center gap-3">
-              <label className="font-bold text-brand-brown">班別</label>
-              <select
-                className="px-4 py-2 border-4 border-brand-brown rounded-2xl bg-white font-bold"
-                value={folderClassName}
-                onChange={(e) => setFolderClassName(e.target.value)}
-                disabled={classOptions.length === 0}
-              >
+	              <label className="font-bold text-gray-700">班別</label>
+		              <select
+		                className="px-4 py-2 border border-gray-300 rounded-xl bg-white font-bold"
+		                value={folderClassName}
+		                onChange={(e) => setFolderClassName(e.target.value)}
+		                disabled={classOptions.length === 0}
+		              >
                 {classOptions.length === 0 ? (
                   <option value="">（未有班別）</option>
                 ) : (
@@ -772,10 +827,11 @@ const AdminDashboard: React.FC = () => {
                 })}
             </div>
           )}
-        </div>
+	        </div>
+	        )}
 
-        {/* Users Table */}
-        <div className="bg-white border-4 border-brand-brown rounded-3xl p-6 shadow-comic">
+	        {activeSection === 'users' && (
+	        <div className="bg-white border border-gray-200 rounded-2xl p-5 shadow-sm">
           <div className="flex justify-between items-center mb-4">
             <h3 className="text-xl font-bold text-brand-brown">
               用戶列表 ({filteredUsers.length})
@@ -878,14 +934,15 @@ const AdminDashboard: React.FC = () => {
               沒有找到符合條件的用戶
             </div>
           )}
-        </div>
+	        </div>
+	        )}
 
-      </div>
+	      </div>
 
       {/* Add User Modal */}
       {showAddUser && (
         <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
-          <div className="bg-white border-4 border-brand-brown rounded-3xl p-6 w-full max-w-md shadow-comic">
+	          <div className="bg-white border border-gray-200 rounded-2xl p-6 w-full max-w-md shadow-lg">
             <h3 className="text-xl font-bold text-brand-brown mb-4">新增用戶</h3>
 
             {/* Error Message */}
@@ -912,11 +969,11 @@ const AdminDashboard: React.FC = () => {
                 value={newUserForm.name}
                 onChange={(e) => setNewUserForm({...newUserForm, name: e.target.value})}
               />
-              <select
-                className="w-full px-4 py-2 border-4 border-brand-brown rounded-2xl bg-white font-bold"
-                value={newUserForm.role}
-                onChange={(e) => setNewUserForm({...newUserForm, role: e.target.value as 'teacher' | 'student'})}
-              >
+	              <select
+	                className="w-full px-4 py-2 border border-gray-300 rounded-xl bg-white font-bold"
+	                value={newUserForm.role}
+	                onChange={(e) => setNewUserForm({...newUserForm, role: e.target.value as 'teacher' | 'student'})}
+	              >
                 <option value="student">學生</option>
                 <option value="teacher">教師</option>
               </select>
@@ -977,6 +1034,7 @@ const AdminDashboard: React.FC = () => {
           </div>
         </div>
       )}
+    </div>
     </div>
   );
 };

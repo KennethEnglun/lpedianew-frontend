@@ -161,8 +161,8 @@ export default function ArchivedFolderDetailsModal(props: {
 
   return (
     <div className="fixed inset-0 bg-black/40 z-[80] flex items-center justify-center p-4">
-      <div className="w-full max-w-6xl bg-white rounded-3xl border-4 border-brand-brown shadow-comic overflow-hidden">
-        <div className="bg-[#A1D9AE] border-b-4 border-brand-brown px-5 py-4 flex items-center justify-between gap-3">
+      <div className="w-full max-w-6xl bg-white rounded-2xl border border-gray-200 shadow-xl overflow-hidden">
+        <div className="bg-[#A1D9AE] border-b border-gray-200 px-5 py-4 flex items-center justify-between gap-3">
           <div className="min-w-0">
             <div className="text-2xl font-black text-brand-brown truncate">封存資料夾詳情</div>
             <div className="text-sm font-bold text-brand-brown/80 truncate">
@@ -172,7 +172,7 @@ export default function ArchivedFolderDetailsModal(props: {
           <button
             type="button"
             onClick={onClose}
-            className="w-10 h-10 rounded-full bg-white border-2 border-brand-brown hover:bg-gray-100 flex items-center justify-center shrink-0"
+            className="w-10 h-10 rounded-full bg-white border border-gray-300 hover:bg-gray-100 flex items-center justify-center shrink-0"
             aria-label="Close"
           >
             <X className="w-5 h-5 text-brand-brown" />
@@ -299,4 +299,3 @@ export default function ArchivedFolderDetailsModal(props: {
     </div>
   );
 }
-
