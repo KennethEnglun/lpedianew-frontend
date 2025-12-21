@@ -29,6 +29,11 @@ interface Discussion {
   teacherName: string;
   createdAt: string;
   updatedAt: string;
+  classFolderId?: string;
+  folderSnapshot?: any;
+  sourceTemplateId?: string;
+  sourceTemplateVersionId?: string;
+  assignedAt?: string;
 }
 
 interface MatchingCard {
@@ -144,6 +149,11 @@ const StudentDashboard: React.FC = () => {
   const [showAppStudio, setShowAppStudio] = useState(false);
   const [showBotTaskChat, setShowBotTaskChat] = useState(false);
   const [selectedBotTaskId, setSelectedBotTaskId] = useState<string | null>(null);
+  const [classFolders, setClassFolders] = useState<any[]>([]);
+  const [hiddenFolderIds, setHiddenFolderIds] = useState<Set<string>>(() => new Set());
+  const [selectedStageId, setSelectedStageId] = useState<string>('');
+  const [selectedTopicId, setSelectedTopicId] = useState<string>('');
+  const [selectedSubfolderId, setSelectedSubfolderId] = useState<string>('');
 
   // 小测验相关状态
   const [showQuizModal, setShowQuizModal] = useState(false);
@@ -590,27 +600,35 @@ const StudentDashboard: React.FC = () => {
         }
       }
 
-      // 並行載入討論串、小測驗、遊戲和問答比賽
-      const [discussionResponse, quizResponse, gameResponse, botTaskResponse, contestResponse] = await Promise.all([
+      // 並行載入討論串、小測驗、遊戲、問答比賽，以及班級資料夾/隱藏偏好
+      const [discussionResponse, quizResponse, gameResponse, botTaskResponse, contestResponse, classFolderResp] = await Promise.all([
         authService.getStudentDiscussions(),
         authService.getStudentQuizzes(),
         authService.getStudentGames(),
         authService.getStudentBotTasks(),
-        authService.getStudentContests()
+        authService.getStudentContests(),
+        authService.getMyClassFolders().catch(() => ({ className: '', folders: [], hiddenFolderIds: [] }))
       ]);
 
       const discussionList = Array.isArray(discussionResponse.discussions) ? discussionResponse.discussions : [];
       setDiscussions(discussionList);
 
+      const folders = Array.isArray((classFolderResp as any)?.folders) ? (classFolderResp as any).folders : [];
+      setClassFolders(folders);
+      const hiddenIds = Array.isArray((classFolderResp as any)?.hiddenFolderIds) ? (classFolderResp as any).hiddenFolderIds : [];
+      setHiddenFolderIds(new Set(hiddenIds.map((x: any) => String(x))));
+
       // 轉換討論串為任務格式
-      const discussionTasks: Task[] = discussionList.map((discussion: Discussion) => ({
+      const discussionTasks: Task[] = discussionList.map((discussion: any) => ({
         id: discussion.id,
         title: discussion.title,
         type: 'discussion' as const,
         subject: discussion.subject,
         teacherName: discussion.teacherName,
         teacherAvatar: '/teacher_login.png',
-        createdAt: discussion.createdAt
+        createdAt: discussion.createdAt,
+        folderId: discussion.classFolderId || discussion.folderSnapshot?.folderId || null,
+        folderSnapshot: discussion.folderSnapshot || null
       }));
 
       // 轉換小測驗為任務格式
@@ -622,6 +640,8 @@ const StudentDashboard: React.FC = () => {
         teacherName: quiz.teacherName || '系統',
         teacherAvatar: '/teacher_login.png',
         createdAt: quiz.createdAt || quiz.updatedAt || quiz.assignedAt,
+        folderId: quiz.classFolderId || quiz.folderSnapshot?.folderId || null,
+        folderSnapshot: quiz.folderSnapshot || null,
         completed: quiz.completed || false,
         score: quiz.score || null
       }));
@@ -635,6 +655,8 @@ const StudentDashboard: React.FC = () => {
         teacherName: '系統',
         teacherAvatar: '/teacher_login.png',
         createdAt: game.createdAt || game.updatedAt || game.assignedAt,
+        folderId: game.classFolderId || game.folderSnapshot?.folderId || null,
+        folderSnapshot: game.folderSnapshot || null,
         completed: game.completed || false,
         score: game.bestScore || null
       }));
@@ -647,6 +669,8 @@ const StudentDashboard: React.FC = () => {
         teacherName: t.teacherName || '教師',
         teacherAvatar: '/teacher_login.png',
         createdAt: t.createdAt || t.updatedAt,
+        folderId: t.classFolderId || t.folderSnapshot?.folderId || null,
+        folderSnapshot: t.folderSnapshot || null,
         completed: !!t.completed
       }));
 
@@ -659,6 +683,8 @@ const StudentDashboard: React.FC = () => {
         teacherName: '系統',
         teacherAvatar: '/teacher_login.png',
         createdAt: contest.createdAt || contest.updatedAt,
+        folderId: contest.classFolderId || contest.folderSnapshot?.folderId || null,
+        folderSnapshot: contest.folderSnapshot || null,
         completed: false, // 問答比賽可重複參賽，不設為已完成
         score: contest.bestScore || null,
         attempts: contest.attempts || 0,
@@ -1027,25 +1053,93 @@ const StudentDashboard: React.FC = () => {
     return Date.now() - createdMs >= AUTO_HIDE_DAYS * 24 * 60 * 60 * 1000;
   };
 
-  const isTaskHidden = (task: Task) => {
+  const classFolderById = useMemo(() => {
+    const map = new Map<string, any>();
+    for (const f of classFolders) {
+      if (!f) continue;
+      map.set(String(f.id), f);
+    }
+    return map;
+  }, [classFolders]);
+
+  const isFolderEffectivelyHidden = useCallback((folderId: string) => {
+    const fid = String(folderId || '');
+    if (!fid) return false;
+    if (hiddenFolderIds.has(fid)) return true;
+    let cur = classFolderById.get(fid);
+    while (cur && cur.parentId) {
+      const pid = String(cur.parentId);
+      if (hiddenFolderIds.has(pid)) return true;
+      cur = classFolderById.get(pid);
+    }
+    return false;
+  }, [classFolderById, hiddenFolderIds]);
+
+  const isTaskHiddenByFolder = useCallback((task: any) => {
+    if (!task) return false;
+    const fid = task.folderId ? String(task.folderId) : '';
+    if (!fid) return false;
+    return isFolderEffectivelyHidden(fid);
+  }, [isFolderEffectivelyHidden]);
+
+  const isTaskHiddenByManualOrAuto = (task: Task) => {
     const key = makeTaskKey(task.type, task.id);
     return isAutoHidden(task.createdAt) || hiddenTaskKeys.has(key);
   };
 
+  const stageFolders = useMemo(
+    () => classFolders.filter((f) => f && f.level === 1 && !f.archivedAt),
+    [classFolders]
+  );
+
+  const topicFolders = useMemo(
+    () => classFolders.filter((f) => f && f.level === 2 && !f.archivedAt && String(f.parentId || '') === String(selectedStageId || '')),
+    [classFolders, selectedStageId]
+  );
+
+  const subFolders = useMemo(
+    () => classFolders.filter((f) => f && f.level === 3 && !f.archivedAt && String(f.parentId || '') === String(selectedTopicId || '')),
+    [classFolders, selectedTopicId]
+  );
+
+  useEffect(() => {
+    if (selectedStageId) return;
+    const first = stageFolders[0];
+    if (first) setSelectedStageId(String(first.id));
+  }, [selectedStageId, stageFolders]);
+
+  useEffect(() => {
+    if (!selectedStageId) return;
+    setSelectedTopicId('');
+    setSelectedSubfolderId('');
+  }, [selectedStageId]);
+
+  useEffect(() => {
+    setSelectedSubfolderId('');
+  }, [selectedTopicId]);
+
+  const folderFilteredTasks = useMemo(() => {
+    const fid = selectedSubfolderId || selectedTopicId || '';
+    if (!fid) return tasks;
+    return tasks.filter((t: any) => t && String(t.folderId || '') === String(fid));
+  }, [selectedSubfolderId, selectedTopicId, tasks]);
+
   const selectedSubjectTasks = useMemo(
-    () => tasks.filter(task => task.subject === selectedSubject),
-    [tasks, selectedSubject]
+    () => folderFilteredTasks.filter(task => task.subject === selectedSubject),
+    [folderFilteredTasks, selectedSubject]
   );
 
-  const visibleTasks = useMemo(
-    () => selectedSubjectTasks.filter(task => !isTaskHidden(task)),
-    [hiddenTaskKeys, selectedSubjectTasks]
-  );
+  const visibleTasks = useMemo(() => {
+    return selectedSubjectTasks
+      .filter((task: any) => !isTaskHiddenByFolder(task))
+      .filter((task) => !isTaskHiddenByManualOrAuto(task));
+  }, [hiddenFolderIds, hiddenTaskKeys, isTaskHiddenByFolder, selectedSubjectTasks]);
 
-  const hiddenTasks = useMemo(
-    () => selectedSubjectTasks.filter(task => isTaskHidden(task)),
-    [hiddenTaskKeys, selectedSubjectTasks]
-  );
+  const hiddenTasks = useMemo(() => {
+    return selectedSubjectTasks
+      .filter((task: any) => !isTaskHiddenByFolder(task))
+      .filter((task) => isTaskHiddenByManualOrAuto(task));
+  }, [hiddenFolderIds, hiddenTaskKeys, isTaskHiddenByFolder, selectedSubjectTasks]);
 
   const setManualHidden = (task: Task, hidden: boolean) => {
     if (!user?.id) return;
@@ -1067,7 +1161,70 @@ const StudentDashboard: React.FC = () => {
     return false;
   };
 
-  const visibleAllTasks = useMemo(() => tasks.filter(task => !isTaskHidden(task)), [hiddenTaskKeys, tasks]);
+  const visibleAllTasks = useMemo(() => {
+    return tasks
+      .filter((task: any) => !isTaskHiddenByFolder(task))
+      .filter(task => !isTaskHiddenByManualOrAuto(task));
+  }, [hiddenFolderIds, hiddenTaskKeys, isTaskHiddenByFolder, tasks]);
+
+  const folderPathLabel = useMemo(() => {
+    const fid = selectedSubfolderId || selectedTopicId || '';
+    if (!fid) return '';
+    const path = [];
+    let cur = classFolderById.get(String(fid));
+    while (cur) {
+      path.push(String(cur.name || ''));
+      if (!cur.parentId) break;
+      cur = classFolderById.get(String(cur.parentId));
+    }
+    path.reverse();
+    return path.join(' / ');
+  }, [classFolderById, selectedSubfolderId, selectedTopicId]);
+
+  const selectedFilterFolderId = selectedSubfolderId || selectedTopicId || '';
+  const selectedFilterFolderHidden = useMemo(() => {
+    if (!selectedFilterFolderId) return false;
+    return isFolderEffectivelyHidden(String(selectedFilterFolderId));
+  }, [isFolderEffectivelyHidden, selectedFilterFolderId]);
+
+  const setFolderHidden = async (folderId: string, hidden: boolean) => {
+    const fid = String(folderId || '').trim();
+    if (!fid) return;
+    try {
+      if (hidden) {
+        await authService.hideMyClassFolder(fid);
+        setHiddenFolderIds((prev) => {
+          const next = new Set(prev);
+          next.add(fid);
+          return next;
+        });
+      } else {
+        await authService.unhideMyClassFolder(fid);
+        setHiddenFolderIds((prev) => {
+          const next = new Set(prev);
+          next.delete(fid);
+          return next;
+        });
+      }
+    } catch (error) {
+      console.error('更新資料夾隱藏失敗:', error);
+      alert('更新資料夾隱藏失敗：' + (error instanceof Error ? error.message : '未知錯誤'));
+    }
+  };
+
+  const getFolderPathLabelById = useCallback((folderId: string) => {
+    const fid = String(folderId || '').trim();
+    if (!fid) return '';
+    const path = [];
+    let cur = classFolderById.get(fid);
+    while (cur) {
+      path.push(String(cur.name || ''));
+      if (!cur.parentId) break;
+      cur = classFolderById.get(String(cur.parentId));
+    }
+    path.reverse();
+    return path.join(' / ');
+  }, [classFolderById]);
 
   const overallProgress = useMemo(() => {
     const total = visibleAllTasks.length;
@@ -1262,6 +1419,122 @@ const StudentDashboard: React.FC = () => {
           </nav>
 
           <div className="mt-4 pt-4 border-t-4 border-brand-brown">
+            <div className="text-center mb-3 border-b-4 border-brand-brown pb-2">
+              <h3 className="text-xl font-bold text-brand-brown">我的資料夾</h3>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => { setSelectedTopicId(''); setSelectedSubfolderId(''); }}
+              className={`w-full px-4 py-2 rounded-2xl border-4 font-bold shadow-comic ${!selectedFilterFolderId ? 'bg-white border-brand-brown text-brand-brown' : 'bg-gray-50 border-brand-brown/40 text-brand-brown hover:bg-white'}`}
+              title="顯示全部任務（不按資料夾篩選）"
+            >
+              （全部任務）
+            </button>
+
+            <div className="mt-3 space-y-2">
+              <div className="flex items-center gap-2">
+                <div className="text-xs font-black text-gray-700 w-12">學段</div>
+                <select
+                  className="flex-1 px-3 py-2 rounded-xl border-2 border-gray-300 font-bold bg-white"
+                  value={selectedStageId}
+                  onChange={(e) => setSelectedStageId(e.target.value)}
+                  disabled={stageFolders.length === 0}
+                >
+                  <option value="" disabled>
+                    {stageFolders.length === 0 ? '（未有資料夾）' : '請選擇'}
+                  </option>
+                  {stageFolders.map((s: any) => (
+                    <option key={s.id} value={s.id}>
+                      {s.name}
+                    </option>
+                  ))}
+                </select>
+                <button
+                  type="button"
+                  onClick={() => selectedStageId && setFolderHidden(selectedStageId, !hiddenFolderIds.has(String(selectedStageId)))}
+                  className="w-10 h-10 rounded-2xl border-4 border-brand-brown bg-gray-100 hover:bg-gray-200 shadow-comic active:translate-y-1 active:shadow-none flex items-center justify-center"
+                  title={hiddenFolderIds.has(String(selectedStageId)) ? '顯示此學段' : '隱藏此學段'}
+                  disabled={!selectedStageId}
+                >
+                  {hiddenFolderIds.has(String(selectedStageId))
+                    ? <Eye className="w-5 h-5 text-brand-brown" />
+                    : <EyeOff className="w-5 h-5 text-brand-brown" />
+                  }
+                </button>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <div className="text-xs font-black text-gray-700 w-12">課題</div>
+                <select
+                  className="flex-1 px-3 py-2 rounded-xl border-2 border-gray-300 font-bold bg-white"
+                  value={selectedTopicId}
+                  onChange={(e) => setSelectedTopicId(e.target.value)}
+                  disabled={!selectedStageId || topicFolders.length === 0}
+                >
+                  <option value="">
+                    （不按資料夾）
+                  </option>
+                  {topicFolders.map((t: any) => (
+                    <option key={t.id} value={t.id}>
+                      {hiddenFolderIds.has(String(t.id)) ? `（已隱藏）${t.name}` : t.name}
+                    </option>
+                  ))}
+                </select>
+                <button
+                  type="button"
+                  onClick={() => selectedTopicId && setFolderHidden(selectedTopicId, !hiddenFolderIds.has(String(selectedTopicId)))}
+                  className="w-10 h-10 rounded-2xl border-4 border-brand-brown bg-gray-100 hover:bg-gray-200 shadow-comic active:translate-y-1 active:shadow-none flex items-center justify-center"
+                  title={!selectedTopicId ? '先選擇課題' : hiddenFolderIds.has(String(selectedTopicId)) ? '顯示此課題' : '隱藏此課題'}
+                  disabled={!selectedTopicId}
+                >
+                  {hiddenFolderIds.has(String(selectedTopicId))
+                    ? <Eye className="w-5 h-5 text-brand-brown" />
+                    : <EyeOff className="w-5 h-5 text-brand-brown" />
+                  }
+                </button>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <div className="text-xs font-black text-gray-700 w-12">子夾</div>
+                <select
+                  className="flex-1 px-3 py-2 rounded-xl border-2 border-gray-300 font-bold bg-white"
+                  value={selectedSubfolderId}
+                  onChange={(e) => setSelectedSubfolderId(e.target.value)}
+                  disabled={!selectedTopicId}
+                >
+                  <option value="">
+                    （不選，直接用課題）
+                  </option>
+                  {subFolders.map((sf: any) => (
+                    <option key={sf.id} value={sf.id}>
+                      {hiddenFolderIds.has(String(sf.id)) ? `（已隱藏）${sf.name}` : sf.name}
+                    </option>
+                  ))}
+                </select>
+                <button
+                  type="button"
+                  onClick={() => selectedSubfolderId && setFolderHidden(selectedSubfolderId, !hiddenFolderIds.has(String(selectedSubfolderId)))}
+                  className="w-10 h-10 rounded-2xl border-4 border-brand-brown bg-gray-100 hover:bg-gray-200 shadow-comic active:translate-y-1 active:shadow-none flex items-center justify-center"
+                  title={!selectedSubfolderId ? '先選擇子folder' : hiddenFolderIds.has(String(selectedSubfolderId)) ? '顯示此子folder' : '隱藏此子folder'}
+                  disabled={!selectedSubfolderId}
+                >
+                  {hiddenFolderIds.has(String(selectedSubfolderId))
+                    ? <Eye className="w-5 h-5 text-brand-brown" />
+                    : <EyeOff className="w-5 h-5 text-brand-brown" />
+                  }
+                </button>
+              </div>
+            </div>
+
+            {selectedFilterFolderId && selectedFilterFolderHidden && (
+              <div className="mt-2 text-xs font-bold text-red-700">
+                此資料夾已隱藏（請按 👁 顯示）
+              </div>
+            )}
+          </div>
+
+          <div className="mt-4 pt-4 border-t-4 border-brand-brown">
             <button onClick={() => navigate('/')} className="text-sm text-brand-brown font-bold hover:underline">← 返回登入</button>
           </div>
         </aside>
@@ -1290,6 +1563,11 @@ const StudentDashboard: React.FC = () => {
           <div className="flex items-center gap-3 mb-6">
             <span className="text-4xl">{subjectConfig.icon}</span>
             <h4 className="text-2xl font-bold text-brand-brown">{selectedSubject}</h4>
+            {selectedFilterFolderId && (
+              <span className="ml-2 text-sm font-black text-brand-brown bg-white/70 border-2 border-brand-brown rounded-xl px-3 py-2">
+                📁 {folderPathLabel || '已選資料夾'}
+              </span>
+            )}
           </div>
 
           <div className="space-y-4">
@@ -1382,6 +1660,11 @@ const StudentDashboard: React.FC = () => {
                         <h5 className="text-xl font-bold text-brand-brown">{task.title}</h5>
                       </div>
                       <p className="text-gray-500 text-sm">- {task.teacherName}</p>
+                      {!!(task as any).folderId && (
+                        <p className="text-gray-500 text-xs font-bold mt-1">
+                          📁 {((task as any).folderSnapshot?.path ? (task as any).folderSnapshot.path.map((p: any) => p?.name).filter(Boolean).join(' / ') : '') || getFolderPathLabelById(String((task as any).folderId))}
+                        </p>
+                      )}
                     </div>
                     <button
                       onClick={(e) => {

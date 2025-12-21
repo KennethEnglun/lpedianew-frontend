@@ -376,7 +376,7 @@ class AuthService {
   }
 
   // === Pedia 任務（派發自建 Pedia）===
-  async createBotTask(payload: { botId: string; subject: string; targetClasses?: string[]; targetGroups?: string[]; targetClass?: string }): Promise<{ task: any }> {
+  async createBotTask(payload: { botId: string; subject: string; targetClasses?: string[]; targetGroups?: string[]; targetClass?: string; classFolderId?: string }): Promise<{ task: any }> {
     const response = await fetch(`${this.API_BASE}/bot-tasks`, {
       method: 'POST',
       headers: this.getAuthHeaders(),
@@ -570,6 +570,7 @@ class AuthService {
     subject: string;
     targetClasses: string[];
     targetGroups?: string[];
+    classFolderId?: string;
   }): Promise<any> {
     const response = await fetch(`${this.API_BASE}/discussions`, {
       method: 'POST',
@@ -716,6 +717,246 @@ class AuthService {
     return this.handleResponse(response);
   }
 
+  // === 題目庫 / 模板 / 班級資料夾（新） ===
+
+  // 題目庫資料夾：私有
+  async listMyLibraryFolders(grade: string): Promise<{ scope: 'my'; grade: string; folders: any[] }> {
+    const params = new URLSearchParams();
+    params.append('grade', grade);
+    const response = await fetch(`${this.API_BASE}/library/my/folders?${params.toString()}`, {
+      headers: this.getAuthHeaders()
+    });
+    return this.handleResponse(response);
+  }
+
+  async createMyLibraryFolder(payload: { grade: string; name: string; parentId?: string | null; order?: number }): Promise<{ folder: any }> {
+    const response = await fetch(`${this.API_BASE}/library/my/folders`, {
+      method: 'POST',
+      headers: this.getAuthHeaders(),
+      body: JSON.stringify(payload)
+    });
+    return this.handleResponse(response);
+  }
+
+  async updateMyLibraryFolder(folderId: string, patch: { name?: string; order?: number; parentId?: string | null }): Promise<{ folder: any }> {
+    const response = await fetch(`${this.API_BASE}/library/my/folders/${folderId}`, {
+      method: 'PATCH',
+      headers: this.getAuthHeaders(),
+      body: JSON.stringify(patch)
+    });
+    return this.handleResponse(response);
+  }
+
+  async deleteMyLibraryFolder(folderId: string): Promise<{ folder: any }> {
+    const response = await fetch(`${this.API_BASE}/library/my/folders/${folderId}`, {
+      method: 'DELETE',
+      headers: this.getAuthHeaders()
+    });
+    return this.handleResponse(response);
+  }
+
+  // 題目庫資料夾：教師共用空間
+  async listSharedLibraryFolders(grade: string): Promise<{ scope: 'shared'; grade: string; folders: any[] }> {
+    const params = new URLSearchParams();
+    params.append('grade', grade);
+    const response = await fetch(`${this.API_BASE}/library/shared/folders?${params.toString()}`, {
+      headers: this.getAuthHeaders()
+    });
+    return this.handleResponse(response);
+  }
+
+  async createSharedLibraryFolder(payload: { grade: string; name: string; parentId?: string | null; order?: number }): Promise<{ folder: any }> {
+    const response = await fetch(`${this.API_BASE}/library/shared/folders`, {
+      method: 'POST',
+      headers: this.getAuthHeaders(),
+      body: JSON.stringify(payload)
+    });
+    return this.handleResponse(response);
+  }
+
+  async updateSharedLibraryFolder(folderId: string, patch: { name?: string; order?: number; parentId?: string | null }): Promise<{ folder: any }> {
+    const response = await fetch(`${this.API_BASE}/library/shared/folders/${folderId}`, {
+      method: 'PATCH',
+      headers: this.getAuthHeaders(),
+      body: JSON.stringify(patch)
+    });
+    return this.handleResponse(response);
+  }
+
+  async deleteSharedLibraryFolder(folderId: string): Promise<{ folder: any }> {
+    const response = await fetch(`${this.API_BASE}/library/shared/folders/${folderId}`, {
+      method: 'DELETE',
+      headers: this.getAuthHeaders()
+    });
+    return this.handleResponse(response);
+  }
+
+  // 模板：私有
+  async listMyTemplates(params: { grade: string; folderId?: string | null }): Promise<{ templates: any[]; total: number }> {
+    const search = new URLSearchParams();
+    search.append('grade', params.grade);
+    if (params.folderId !== undefined) search.append('folderId', params.folderId ? params.folderId : '');
+    const response = await fetch(`${this.API_BASE}/templates/my?${search.toString()}`, {
+      headers: this.getAuthHeaders()
+    });
+    return this.handleResponse(response);
+  }
+
+  async createMyTemplate(payload: {
+    grade: string;
+    subject: string;
+    title: string;
+    content: any;
+    folderId?: string | null;
+  }): Promise<{ template: any }> {
+    const response = await fetch(`${this.API_BASE}/templates/my`, {
+      method: 'POST',
+      headers: this.getAuthHeaders(),
+      body: JSON.stringify(payload)
+    });
+    return this.handleResponse(response);
+  }
+
+  // 模板：共用
+  async listSharedTemplates(params: { grade: string; folderId?: string | null }): Promise<{ templates: any[]; total: number }> {
+    const search = new URLSearchParams();
+    search.append('grade', params.grade);
+    if (params.folderId !== undefined) search.append('folderId', params.folderId ? params.folderId : '');
+    const response = await fetch(`${this.API_BASE}/templates/shared?${search.toString()}`, {
+      headers: this.getAuthHeaders()
+    });
+    return this.handleResponse(response);
+  }
+
+  async getTemplate(templateId: string, versionId?: string): Promise<{ template: any; version: any }> {
+    const search = new URLSearchParams();
+    if (versionId) search.append('versionId', versionId);
+    const qs = search.toString() ? `?${search.toString()}` : '';
+    const response = await fetch(`${this.API_BASE}/templates/${templateId}${qs}`, {
+      headers: this.getAuthHeaders()
+    });
+    return this.handleResponse(response);
+  }
+
+  async updateTemplateLocation(templateId: string, payload: { scope: 'my' | 'shared'; folderId: string | null }): Promise<{ template: any }> {
+    const response = await fetch(`${this.API_BASE}/templates/${templateId}/location`, {
+      method: 'PATCH',
+      headers: this.getAuthHeaders(),
+      body: JSON.stringify(payload)
+    });
+    return this.handleResponse(response);
+  }
+
+  async shareTemplate(templateId: string): Promise<{ template: any }> {
+    const response = await fetch(`${this.API_BASE}/templates/${templateId}/share`, {
+      method: 'POST',
+      headers: this.getAuthHeaders()
+    });
+    return this.handleResponse(response);
+  }
+
+  async unshareTemplate(templateId: string): Promise<{ template: any }> {
+    const response = await fetch(`${this.API_BASE}/templates/${templateId}/unshare`, {
+      method: 'POST',
+      headers: this.getAuthHeaders()
+    });
+    return this.handleResponse(response);
+  }
+
+  async createTemplateVersion(templateId: string, payload: { title?: string; content: any }): Promise<{ template: any; version: any }> {
+    const response = await fetch(`${this.API_BASE}/templates/${templateId}/versions`, {
+      method: 'POST',
+      headers: this.getAuthHeaders(),
+      body: JSON.stringify(payload)
+    });
+    return this.handleResponse(response);
+  }
+
+  async copyTemplateToMyLibrary(templateId: string, payload?: { versionId?: string; folderId?: string | null }): Promise<{ template: any }> {
+    const response = await fetch(`${this.API_BASE}/templates/${templateId}/copy`, {
+      method: 'POST',
+      headers: this.getAuthHeaders(),
+      body: JSON.stringify(payload || {})
+    });
+    return this.handleResponse(response);
+  }
+
+  async assignTemplateToClass(templateId: string, payload: { className: string; classFolderId: string; versionId?: string }): Promise<{ discussion: any }> {
+    const response = await fetch(`${this.API_BASE}/templates/${templateId}/assign`, {
+      method: 'POST',
+      headers: this.getAuthHeaders(),
+      body: JSON.stringify(payload)
+    });
+    return this.handleResponse(response);
+  }
+
+  // 班級資料夾：教師端管理
+  async getClassFolders(className: string): Promise<{ className: string; folders: any[] }> {
+    const response = await fetch(`${this.API_BASE}/class-folders/${encodeURIComponent(className)}`, {
+      headers: this.getAuthHeaders()
+    });
+    return this.handleResponse(response);
+  }
+
+  async createClassFolder(className: string, payload: { parentId: string; level: 2 | 3; name: string; order?: number }): Promise<{ folder: any }> {
+    const response = await fetch(`${this.API_BASE}/class-folders/${encodeURIComponent(className)}`, {
+      method: 'POST',
+      headers: this.getAuthHeaders(),
+      body: JSON.stringify(payload)
+    });
+    return this.handleResponse(response);
+  }
+
+  async batchCreateClassFolders(className: string, payload: { parentId: string; level: 2 | 3; names: string[] }): Promise<{ folders: any[]; total: number }> {
+    const response = await fetch(`${this.API_BASE}/class-folders/${encodeURIComponent(className)}/batch`, {
+      method: 'POST',
+      headers: this.getAuthHeaders(),
+      body: JSON.stringify(payload)
+    });
+    return this.handleResponse(response);
+  }
+
+  async updateClassFolder(className: string, folderId: string, patch: { name?: string; order?: number }): Promise<{ folder: any }> {
+    const response = await fetch(`${this.API_BASE}/class-folders/${encodeURIComponent(className)}/${encodeURIComponent(folderId)}`, {
+      method: 'PATCH',
+      headers: this.getAuthHeaders(),
+      body: JSON.stringify(patch)
+    });
+    return this.handleResponse(response);
+  }
+
+  async archiveClassFolder(className: string, folderId: string): Promise<{ result: any }> {
+    const response = await fetch(`${this.API_BASE}/class-folders/${encodeURIComponent(className)}/${encodeURIComponent(folderId)}`, {
+      method: 'DELETE',
+      headers: this.getAuthHeaders()
+    });
+    return this.handleResponse(response);
+  }
+
+  // 班級資料夾：學生端（只可隱藏）
+  async getMyClassFolders(): Promise<{ className: string; folders: any[]; hiddenFolderIds: string[] }> {
+    const response = await fetch(`${this.API_BASE}/class-folders/me`, {
+      headers: this.getAuthHeaders()
+    });
+    return this.handleResponse(response);
+  }
+
+  async hideMyClassFolder(folderId: string): Promise<{ hidden: boolean; pref: any }> {
+    const response = await fetch(`${this.API_BASE}/class-folders/me/${encodeURIComponent(folderId)}/hide`, {
+      method: 'POST',
+      headers: this.getAuthHeaders()
+    });
+    return this.handleResponse(response);
+  }
+
+  async unhideMyClassFolder(folderId: string): Promise<{ hidden: boolean; result: any }> {
+    const response = await fetch(`${this.API_BASE}/class-folders/me/${encodeURIComponent(folderId)}/hide`, {
+      method: 'DELETE',
+      headers: this.getAuthHeaders()
+    });
+    return this.handleResponse(response);
+  }
+
   // === 小測驗相關API ===
 
   // 創建小測驗（教師專用）
@@ -732,6 +973,7 @@ class AuthService {
       correctAnswer: number;
     }>;
     timeLimit?: number;
+    classFolderId?: string;
   }): Promise<{ message: string, quiz: any }> {
     const response = await fetch(`${this.API_BASE}/quizzes`, {
       method: 'POST',
@@ -850,6 +1092,7 @@ class AuthService {
     livesLimit?: number | null;
     math?: any;
     rangerTd?: any;
+    classFolderId?: string;
   }): Promise<{ message: string; game: any }> {
     const response = await fetch(`${this.API_BASE}/games`, {
       method: 'POST',
@@ -988,6 +1231,7 @@ class AuthService {
     timeLimitSeconds?: number | null;
     targetClasses: string[];
     targetGroups?: string[];
+    classFolderId?: string;
   }): Promise<{ message: string; contest: any }> {
     const response = await fetch(`${this.API_BASE}/contests`, {
       method: 'POST',

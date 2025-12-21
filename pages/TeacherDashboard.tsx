@@ -7,6 +7,9 @@ import AiQuestionGeneratorModal from '../components/AiQuestionGeneratorModal';
 import UiSettingsModal from '../components/UiSettingsModal';
 import AiChatModal from '../components/AiChatModal';
 import AppStudioModal from '../components/AppStudioModal';
+import ClassFolderManagerModal from '../components/ClassFolderManagerModal';
+import TemplateLibraryModal from '../components/TemplateLibraryModal';
+import ClassFolderSelectInline from '../components/ClassFolderSelectInline';
 import { MathExpressionBuilder, finalizeMathQuestions } from '../components/MathExpressionBuilder';
 import { MathEquationBuilder, finalizeMathEquationQuestions } from '../components/MathEquationBuilder';
 import { MathExpressionView, FractionView } from '../components/MathExpressionView';
@@ -97,6 +100,15 @@ const TeacherDashboard: React.FC = () => {
 
   // 作業管理相關狀態
   const [showAssignmentModal, setShowAssignmentModal] = useState(false);
+  const [showClassFolderManager, setShowClassFolderManager] = useState(false);
+  const [showTemplateLibrary, setShowTemplateLibrary] = useState(false);
+  const [discussionClassFolderId, setDiscussionClassFolderId] = useState('');
+  const [quizClassFolderId, setQuizClassFolderId] = useState('');
+  const [contestClassFolderId, setContestClassFolderId] = useState('');
+  const [botTaskClassFolderId, setBotTaskClassFolderId] = useState('');
+  const [gameClassFolderId, setGameClassFolderId] = useState('');
+  const [rangerClassFolderId, setRangerClassFolderId] = useState('');
+  const [mathClassFolderId, setMathClassFolderId] = useState('');
   const [assignments, setAssignments] = useState<any[]>([]);
   const [selectedAssignment, setSelectedAssignment] = useState<any>(null);
   const [assignmentResponses, setAssignmentResponses] = useState<any[]>([]);
@@ -630,6 +642,7 @@ const TeacherDashboard: React.FC = () => {
 	      targetClasses: filterClass ? [filterClass] : [],
 	      targetGroups: []
 	    });
+      setBotTaskClassFolderId('');
 	    loadClassesAndGroups(defaultSubject);
 	    setShowBotTaskAssignModal(true);
 	  };
@@ -639,11 +652,15 @@ const TeacherDashboard: React.FC = () => {
       if (!botTaskForm.botId) return alert('請選擇 Pedia');
       if (!botTaskForm.subject) return alert('請選擇科目');
       if (botTaskForm.targetClasses.length === 0) return alert('請選擇班級');
+      if (botTaskForm.targetClasses.length !== 1) return alert('請只選擇 1 個班級（資料夾屬於單一班別）');
+      if (GROUPS_ENABLED && botTaskForm.targetGroups.length > 0) return alert('使用資料夾分類時暫不支援分組派發，請取消分組');
+      if (!botTaskClassFolderId) return alert('請選擇資料夾（學段→課題→子folder可選）');
       await authService.createBotTask({
         botId: botTaskForm.botId,
         subject: botTaskForm.subject,
         targetClasses: botTaskForm.targetClasses,
-        targetGroups: GROUPS_ENABLED ? botTaskForm.targetGroups : []
+        targetGroups: GROUPS_ENABLED ? botTaskForm.targetGroups : [],
+        classFolderId: botTaskClassFolderId
       });
       alert('Pedia 任務已派發！');
       setShowBotTaskAssignModal(false);
@@ -890,6 +907,69 @@ const TeacherDashboard: React.FC = () => {
     } catch (error) {
       console.error(`刪除${itemType}失敗:`, error);
       alert(`刪除${itemType}失敗：` + (error instanceof Error ? error.message : '未知錯誤'));
+    }
+  };
+
+  const saveDiscussionAsTemplate = async (assignment: any) => {
+    try {
+      const isQuiz = assignment?.type === 'quiz';
+      const isGame = assignment?.type === 'game';
+      const isBot = assignment?.type === 'ai-bot';
+      const isContest = assignment?.type === 'contest';
+      if (isQuiz || isGame || isBot || isContest) {
+        alert('此類型暫不支援存為模板');
+        return;
+      }
+
+      const title = String(assignment?.title || '新模板').trim() || '新模板';
+      const subject = String(assignment?.subject || DEFAULT_SUBJECT).trim() || String(DEFAULT_SUBJECT);
+      const content = assignment?.content ?? [{ type: 'text', value: '' }];
+
+      const parseGradeFromClassNameLocal = (className?: string) => {
+        const match = String(className || '').match(/^(\d+)/);
+        return match ? match[1] : '';
+      };
+
+      const targetClasses = Array.isArray(assignment?.targetClasses) ? assignment.targetClasses : [];
+      const classCandidate = targetClasses.find((c: any) => c && String(c) !== '全部' && String(c) !== '全級') || targetClasses[0] || '';
+      let grade = parseGradeFromClassNameLocal(String(classCandidate || ''));
+      if (!grade) {
+        const profile: any = user?.profile || {};
+        grade = parseGradeFromClassNameLocal(profile?.homeroomClass);
+      }
+
+      const grades = Array.from(new Set(availableClasses.map((c) => parseGradeFromClassNameLocal(c)).filter(Boolean)))
+        .sort((a, b) => Number(a) - Number(b));
+
+      if (!grade) {
+        const input = prompt(`模板年級（輸入數字，例如 4）\n可選：${grades.join(', ')}`, grades[0] || '');
+        grade = String(input || '').trim();
+      }
+      if (!grade) return;
+
+      let folderId: string | null = null;
+      try {
+        const myFolders = await authService.listMyLibraryFolders(grade);
+        const list = (myFolders.folders || []).map((f: any) => `${f.id}:${f.name}`).join('\n');
+        const picked = prompt(`放入哪個 folder？（留空=未分類）\n可用 folder：\n${list}`, '');
+        folderId = picked && picked.trim() ? picked.trim().split(':')[0] : null;
+      } catch {
+        folderId = null;
+      }
+
+      await authService.createMyTemplate({
+        grade,
+        subject,
+        title,
+        content,
+        ...(folderId ? { folderId } : {})
+      });
+
+      alert('已存為模板（我的題庫）');
+      setShowTemplateLibrary(true);
+    } catch (error) {
+      console.error('存為模板失敗:', error);
+      alert('存為模板失敗：' + (error instanceof Error ? error.message : '未知錯誤'));
     }
   };
 
@@ -1436,6 +1516,7 @@ const TeacherDashboard: React.FC = () => {
   useEffect(() => {
     if (showDiscussionModal) {
       loadClassesAndGroups(discussionForm.subject);
+      setDiscussionClassFolderId('');
     }
   }, [showDiscussionModal]);
 
@@ -1443,6 +1524,7 @@ const TeacherDashboard: React.FC = () => {
   useEffect(() => {
     if (showQuizModal) {
       loadClassesAndGroups(quizForm.subject);
+      setQuizClassFolderId('');
     }
   }, [showQuizModal]);
 
@@ -1452,6 +1534,9 @@ const TeacherDashboard: React.FC = () => {
       if (gameType === 'math') loadClassesAndGroups(DEFAULT_SUBJECT);
       else if (gameType === 'ranger-td') loadClassesAndGroups(DEFAULT_SUBJECT);
       else loadClassesAndGroups(gameForm.subject);
+      setGameClassFolderId('');
+      setRangerClassFolderId('');
+      setMathClassFolderId('');
     }
   }, [showGameModal, gameType, rangerAnswerMode, rangerSubject]);
 
@@ -1459,6 +1544,7 @@ const TeacherDashboard: React.FC = () => {
   useEffect(() => {
     if (showContestModal) {
       loadClassesAndGroups(contestForm.subject);
+      setContestClassFolderId('');
     }
   }, [showContestModal]);
 
@@ -1820,6 +1906,18 @@ const TeacherDashboard: React.FC = () => {
       alert('請選擇班級');
       return;
     }
+    if (quizForm.targetClasses.length !== 1) {
+      alert('請只選擇 1 個班級（資料夾屬於單一班別）');
+      return;
+    }
+    if (GROUPS_ENABLED && quizForm.targetGroups.length > 0) {
+      alert('使用資料夾分類時暫不支援分組派發，請取消分組');
+      return;
+    }
+    if (!quizClassFolderId) {
+      alert('請選擇資料夾（學段→課題→子folder可選）');
+      return;
+    }
 
     if (quizForm.questions.length === 0) {
       alert('請至少新增一個問題');
@@ -1846,7 +1944,8 @@ const TeacherDashboard: React.FC = () => {
         targetClasses: quizForm.targetClasses,
         targetGroups: GROUPS_ENABLED ? quizForm.targetGroups : [],
         questions: quizForm.questions,
-        timeLimit: quizForm.timeLimit
+        timeLimit: quizForm.timeLimit,
+        classFolderId: quizClassFolderId
       });
 
       alert('小測驗創建成功！');
@@ -1860,6 +1959,7 @@ const TeacherDashboard: React.FC = () => {
         questions: [],
         timeLimit: 0
       });
+      setQuizClassFolderId('');
 
     } catch (error) {
       console.error('創建小測驗失敗:', error);
@@ -1885,6 +1985,18 @@ const TeacherDashboard: React.FC = () => {
       alert('請選擇至少一個班級');
       return;
     }
+    if (contestForm.targetClasses.length !== 1) {
+      alert('請只選擇 1 個班級（資料夾屬於單一班別）');
+      return;
+    }
+    if (GROUPS_ENABLED && contestForm.targetGroups.length > 0) {
+      alert('使用資料夾分類時暫不支援分組派發，請取消分組');
+      return;
+    }
+    if (!contestClassFolderId) {
+      alert('請選擇資料夾（學段→課題→子folder可選）');
+      return;
+    }
 
     try {
       await authService.createContest({
@@ -1897,7 +2009,8 @@ const TeacherDashboard: React.FC = () => {
         questionCount: contestForm.questionCount,
         timeLimitSeconds: contestForm.timeLimitSeconds,
         targetClasses: contestForm.targetClasses,
-        targetGroups: GROUPS_ENABLED ? contestForm.targetGroups : []
+        targetGroups: GROUPS_ENABLED ? contestForm.targetGroups : [],
+        classFolderId: contestClassFolderId
       });
       alert('問答比賽創建成功！');
       setShowContestModal(false);
@@ -1913,6 +2026,7 @@ const TeacherDashboard: React.FC = () => {
         targetClasses: [],
         targetGroups: []
       });
+      setContestClassFolderId('');
     } catch (error) {
       console.error('創建問答比賽失敗:', error);
       alert('創建問答比賽失敗：' + (error instanceof Error ? error.message : '未知錯誤'));
@@ -1927,6 +2041,18 @@ const TeacherDashboard: React.FC = () => {
 
     if (discussionForm.targetClasses.length === 0) {
       alert('請選擇班級');
+      return;
+    }
+    if (discussionForm.targetClasses.length !== 1) {
+      alert('請只選擇 1 個班級（資料夾屬於單一班別）');
+      return;
+    }
+    if (GROUPS_ENABLED && discussionForm.targetGroups.length > 0) {
+      alert('使用資料夾分類時暫不支援分組派發，請取消分組');
+      return;
+    }
+    if (!discussionClassFolderId) {
+      alert('請選擇資料夾（學段→課題→子folder可選）');
       return;
     }
 
@@ -1950,7 +2076,8 @@ const TeacherDashboard: React.FC = () => {
         content: contentBlocks,
         subject: discussionForm.subject,
         targetClasses: discussionForm.targetClasses,
-        targetGroups: GROUPS_ENABLED ? discussionForm.targetGroups : []
+        targetGroups: GROUPS_ENABLED ? discussionForm.targetGroups : [],
+        classFolderId: discussionClassFolderId
       });
 
       alert('討論串派發成功！');
@@ -1962,6 +2089,7 @@ const TeacherDashboard: React.FC = () => {
         targetGroups: [],
         content: ''
       });
+      setDiscussionClassFolderId('');
 
     } catch (error) {
       console.error('派發討論串失敗:', error);
@@ -2788,6 +2916,19 @@ const TeacherDashboard: React.FC = () => {
                 </div>
               </div>
 
+              {gameForm.targetClasses.length === 1 ? (
+                <ClassFolderSelectInline
+                  authService={authService}
+                  className={gameForm.targetClasses[0]}
+                  value={gameClassFolderId}
+                  onChange={setGameClassFolderId}
+                />
+              ) : (
+                <div className="p-4 bg-gray-50 border-2 border-gray-200 rounded-2xl text-sm text-gray-700 font-bold">
+                  請先只選擇 1 個班級，才可選擇資料夾（資料夾屬於單一班別）。
+                </div>
+              )}
+
               {/* Target Groups */}
               {availableGroups.length > 0 && (
                 <div>
@@ -2942,6 +3083,18 @@ const TeacherDashboard: React.FC = () => {
                         alert('請選擇至少一個班級');
                         return;
                       }
+                      if (gameForm.targetClasses.length !== 1) {
+                        alert('請只選擇 1 個班級（資料夾屬於單一班別）');
+                        return;
+                      }
+                      if (GROUPS_ENABLED && gameForm.targetGroups.length > 0) {
+                        alert('使用資料夾分類時暫不支援分組派發，請取消分組');
+                        return;
+                      }
+                      if (!gameClassFolderId) {
+                        alert('請選擇資料夾（學段→課題→子folder可選）');
+                        return;
+                      }
                       if (gameForm.questions.length === 0) {
                         alert('請至少新增一個題目');
                         return;
@@ -2955,7 +3108,8 @@ const TeacherDashboard: React.FC = () => {
                         targetClasses: gameForm.targetClasses,
                         targetGroups: GROUPS_ENABLED ? gameForm.targetGroups : [],
                         questions: gameForm.questions,
-                        difficulty: gameForm.difficulty
+                        difficulty: gameForm.difficulty,
+                        classFolderId: gameClassFolderId
                       });
 
                       alert('迷宮追逐遊戲創建成功！');
@@ -2970,6 +3124,7 @@ const TeacherDashboard: React.FC = () => {
                         questions: [],
                         difficulty: 'medium'
                       });
+                      setGameClassFolderId('');
                     } catch (error) {
                       alert('創建遊戲失敗：' + (error instanceof Error ? error.message : '未知錯誤'));
                     }
@@ -3040,6 +3195,7 @@ const TeacherDashboard: React.FC = () => {
 	                  onChange={(e) => {
 	                    const newSubject = e.target.value as Subject;
 	                    setGameForm(prev => ({ ...prev, subject: newSubject, targetClasses: [], targetGroups: [] }));
+                        setGameClassFolderId('');
 	                    loadClassesAndGroups(newSubject);
 	                  }}
 	                >
@@ -3075,6 +3231,19 @@ const TeacherDashboard: React.FC = () => {
 	                  ))}
 	                </div>
 	              </div>
+
+                {gameForm.targetClasses.length === 1 ? (
+                  <ClassFolderSelectInline
+                    authService={authService}
+                    className={gameForm.targetClasses[0]}
+                    value={gameClassFolderId}
+                    onChange={setGameClassFolderId}
+                  />
+                ) : (
+                  <div className="p-4 bg-gray-50 border-2 border-gray-200 rounded-2xl text-sm text-gray-700 font-bold">
+                    請先只選擇 1 個班級，才可選擇資料夾（資料夾屬於單一班別）。
+                  </div>
+                )}
 
 	              {/* Target Groups */}
 	              {availableGroups.length > 0 && (
@@ -3207,6 +3376,18 @@ const TeacherDashboard: React.FC = () => {
 	                          alert('請選擇至少一個班級');
 	                          return;
 	                        }
+                          if (gameForm.targetClasses.length !== 1) {
+                            alert('請只選擇 1 個班級（資料夾屬於單一班別）');
+                            return;
+                          }
+                          if (GROUPS_ENABLED && gameForm.targetGroups.length > 0) {
+                            alert('使用資料夾分類時暫不支援分組派發，請取消分組');
+                            return;
+                          }
+                          if (!gameClassFolderId) {
+                            alert('請選擇資料夾（學段→課題→子folder可選）');
+                            return;
+                          }
 
 	                        const requiredPairs = gameForm.difficulty === 'easy' ? 4 : gameForm.difficulty === 'medium' ? 6 : 8;
 	                        const cleanedPairs = gameForm.questions
@@ -3229,7 +3410,8 @@ const TeacherDashboard: React.FC = () => {
 	                          targetClasses: gameForm.targetClasses,
 	                          targetGroups: GROUPS_ENABLED ? gameForm.targetGroups : [],
 	                          questions: cleanedPairs.slice(0, requiredPairs),
-	                          difficulty: gameForm.difficulty
+	                          difficulty: gameForm.difficulty,
+                            classFolderId: gameClassFolderId
 	                        });
 
 	                        alert('翻牌記憶遊戲創建成功！');
@@ -3244,6 +3426,7 @@ const TeacherDashboard: React.FC = () => {
 	                          questions: [],
 	                          difficulty: 'medium'
 	                        });
+                          setGameClassFolderId('');
 	                      } catch (error) {
 	                        alert('創建遊戲失敗：' + (error instanceof Error ? error.message : '未知錯誤'));
 	                      }
@@ -3300,6 +3483,7 @@ const TeacherDashboard: React.FC = () => {
 	                  onChange={(e) => {
 	                    const newSubject = e.target.value as Subject;
 	                    setGameForm(prev => ({ ...prev, subject: newSubject, targetClasses: [], targetGroups: [] }));
+                        setGameClassFolderId('');
 	                    loadClassesAndGroups(newSubject);
 	                  }}
 	                >
@@ -3335,6 +3519,19 @@ const TeacherDashboard: React.FC = () => {
 	                  ))}
 	                </div>
 	              </div>
+
+                {gameForm.targetClasses.length === 1 ? (
+                  <ClassFolderSelectInline
+                    authService={authService}
+                    className={gameForm.targetClasses[0]}
+                    value={gameClassFolderId}
+                    onChange={setGameClassFolderId}
+                  />
+                ) : (
+                  <div className="p-4 bg-gray-50 border-2 border-gray-200 rounded-2xl text-sm text-gray-700 font-bold">
+                    請先只選擇 1 個班級，才可選擇資料夾（資料夾屬於單一班別）。
+                  </div>
+                )}
 
 	              {/* Target Groups */}
 	              {availableGroups.length > 0 && (
@@ -3592,6 +3789,18 @@ const TeacherDashboard: React.FC = () => {
 		                        alert('請選擇至少一個班級');
 		                        return;
 		                      }
+                          if (gameForm.targetClasses.length !== 1) {
+                            alert('請只選擇 1 個班級（資料夾屬於單一班別）');
+                            return;
+                          }
+                          if (GROUPS_ENABLED && gameForm.targetGroups.length > 0) {
+                            alert('使用資料夾分類時暫不支援分組派發，請取消分組');
+                            return;
+                          }
+                          if (!gameClassFolderId) {
+                            alert('請選擇資料夾（學段→課題→子folder可選）');
+                            return;
+                          }
 		                      const cleanedQuestions: TowerDefenseQuestionDraft[] = towerDefenseQuestions
 		                        .map((q) => {
 		                          const options = (q.options || []).map((o) => String(o || '').trim());
@@ -3622,7 +3831,8 @@ const TeacherDashboard: React.FC = () => {
 		                        questions: cleanedQuestions,
 		                        difficulty: gameForm.difficulty,
 		                        timeLimitSeconds: clampTowerDefenseTimeSeconds(towerDefenseTimeSecondsText, towerDefenseTimeSeconds),
-		                        livesLimit: towerDefenseLivesEnabled ? towerDefenseLivesLimit : null
+		                        livesLimit: towerDefenseLivesEnabled ? towerDefenseLivesLimit : null,
+                            classFolderId: gameClassFolderId
 		                      });
 
 		                      alert('答題塔防遊戲創建成功！');
@@ -3642,6 +3852,7 @@ const TeacherDashboard: React.FC = () => {
 			                        questions: [],
 			                        difficulty: 'medium'
 			                      });
+                            setGameClassFolderId('');
 	                    } catch (error) {
 	                      alert('創建遊戲失敗：' + (error instanceof Error ? error.message : '未知錯誤'));
 	                    }
@@ -4081,11 +4292,11 @@ const TeacherDashboard: React.FC = () => {
 
 	              {/* Target Classes */}
 		              {availableClasses.length > 0 && (
-		                <div>
-		                  <label className="block text-sm font-bold text-amber-900 mb-2">
-		                    {rangerAnswerMode === 'mcq' ? `派發至班級（${rangerSubject}）` : '選擇班級（數學）'}
-		                  </label>
-		                  <div className="flex flex-wrap gap-2">
+			                <div>
+			                  <label className="block text-sm font-bold text-amber-900 mb-2">
+			                    {rangerAnswerMode === 'mcq' ? `派發至班級（${rangerSubject}）` : '選擇班級（數學）'}
+			                  </label>
+			                  <div className="flex flex-wrap gap-2">
 	                    {availableClasses.map(className => (
 	                      <button
 	                        key={className}
@@ -4106,16 +4317,29 @@ const TeacherDashboard: React.FC = () => {
 	                        {className}
 	                      </button>
 	                    ))}
-	                  </div>
-	                </div>
-	              )}
+		                  </div>
+		                </div>
+		              )}
 
-	              {/* Target Groups */}
-		              {availableGroups.length > 0 && (
-		                <div>
-		                  <label className="block text-sm font-bold text-amber-900 mb-2">
-		                    {rangerAnswerMode === 'mcq' ? `選擇分組（${rangerSubject}）` : '選擇分組（數學）'}
-		                  </label>
+		              {rangerForm.targetClasses.length === 1 ? (
+		                <ClassFolderSelectInline
+		                  authService={authService}
+		                  className={rangerForm.targetClasses[0]}
+		                  value={rangerClassFolderId}
+		                  onChange={setRangerClassFolderId}
+		                />
+		              ) : (
+		                <div className="p-4 bg-gray-50 border-2 border-gray-200 rounded-2xl text-sm text-gray-700 font-bold">
+		                  請先只選擇 1 個班級，才可選擇資料夾（資料夾屬於單一班別）。
+		                </div>
+		              )}
+
+		              {/* Target Groups */}
+			              {availableGroups.length > 0 && (
+			                <div>
+			                  <label className="block text-sm font-bold text-amber-900 mb-2">
+			                    {rangerAnswerMode === 'mcq' ? `選擇分組（${rangerSubject}）` : '選擇分組（數學）'}
+			                  </label>
 		                  <div className="flex flex-wrap gap-2">
 	                    {availableGroups.map(groupName => (
 	                      <button
@@ -4172,15 +4396,32 @@ const TeacherDashboard: React.FC = () => {
 		                          })
 		                          .filter((q) => q.prompt && Array.isArray(q.options) && q.options.length === 4 && q.options.every((o) => String(o || '').trim()));
 		                      })();
-		                      if (isMcq && questionsPayload.length === 0) {
-		                        alert('請至少新增一個完整題目（四個選項都要填，且需選擇正確答案）');
-		                        return;
-		                      }
+			                      if (isMcq && questionsPayload.length === 0) {
+			                        alert('請至少新增一個完整題目（四個選項都要填，且需選擇正確答案）');
+			                        return;
+			                      }
 
-		                      if (!isMcq && rangerAllowedOps.length === 0) {
-		                        alert('請至少選擇一種運算（加/減/乘/除）');
-		                        return;
-		                      }
+			                      if (!rangerForm.targetClasses?.length) {
+			                        alert('請選擇至少一個目標班級');
+			                        return;
+			                      }
+			                      if (rangerForm.targetClasses.length !== 1) {
+			                        alert('請只選擇 1 個班級（資料夾屬於單一班別）');
+			                        return;
+			                      }
+			                      if (GROUPS_ENABLED && rangerForm.targetGroups.length > 0) {
+			                        alert('使用資料夾分類時暫不支援分組派發，請取消分組');
+			                        return;
+			                      }
+			                      if (!rangerClassFolderId) {
+			                        alert('請選擇資料夾（學段→課題→子folder可選）');
+			                        return;
+			                      }
+
+			                      if (!isMcq && rangerAllowedOps.length === 0) {
+			                        alert('請至少選擇一種運算（加/減/乘/除）');
+			                        return;
+			                      }
 
 		                      const rangerTdPayload: any = {
 		                        answerMode: rangerAnswerMode,
@@ -4200,27 +4441,29 @@ const TeacherDashboard: React.FC = () => {
 		                        rangerTdPayload.promptText = rangerPromptText;
 		                      }
 
-		                      await authService.createGame({
-		                        title: rangerForm.title,
-		                        description: rangerForm.description,
-		                        gameType: 'ranger-td',
-		                        subject,
-		                        targetClasses: rangerForm.targetClasses,
-		                        targetGroups: GROUPS_ENABLED ? rangerForm.targetGroups : [],
-		                        questions: questionsPayload,
-		                        difficulty: 'medium',
-		                        timeLimitSeconds: clampTowerDefenseTimeSeconds(rangerRunSecondsText, rangerRunSeconds),
-		                        livesLimit: null,
-		                        rangerTd: rangerTdPayload
-		                      });
+			                      await authService.createGame({
+			                        title: rangerForm.title,
+			                        description: rangerForm.description,
+			                        gameType: 'ranger-td',
+			                        subject,
+			                        targetClasses: rangerForm.targetClasses,
+			                        targetGroups: GROUPS_ENABLED ? rangerForm.targetGroups : [],
+			                        questions: questionsPayload,
+			                        difficulty: 'medium',
+			                        timeLimitSeconds: clampTowerDefenseTimeSeconds(rangerRunSecondsText, rangerRunSeconds),
+			                        livesLimit: null,
+			                        rangerTd: rangerTdPayload,
+			                        classFolderId: rangerClassFolderId
+			                      });
 
-		                      alert(isMcq ? 'Ranger 塔防（答題）創建成功！' : 'Ranger 塔防創建成功！');
-		                      setShowGameModal(false);
-		                      setGameType(null);
-		                    } catch (e: any) {
-		                      alert('創建遊戲失敗：' + (e?.message || '未知錯誤'));
-		                    }
-		                  }}
+			                      alert(isMcq ? 'Ranger 塔防（答題）創建成功！' : 'Ranger 塔防創建成功！');
+			                      setShowGameModal(false);
+			                      setGameType(null);
+			                      setRangerClassFolderId('');
+			                    } catch (e: any) {
+			                      alert('創建遊戲失敗：' + (e?.message || '未知錯誤'));
+			                    }
+			                  }}
 	                  className="px-6 py-3 rounded-2xl border-4 border-amber-600 bg-amber-600 text-white font-black hover:bg-amber-700"
 	                >
 	                  創建遊戲
@@ -4528,9 +4771,9 @@ const TeacherDashboard: React.FC = () => {
 	                )}
 	              </div>
 
-	              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-	                <div className="bg-white border-2 border-gray-200 rounded-2xl p-4">
-	                  <div className="flex items-center justify-between gap-3">
+		              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+		                <div className="bg-white border-2 border-gray-200 rounded-2xl p-4">
+		                  <div className="flex items-center justify-between gap-3">
 	                    <div>
 	                      <div className="text-sm font-black text-sky-900">限時（可選）</div>
 	                      <div className="text-xs text-gray-600">10–600 秒</div>
@@ -4560,11 +4803,11 @@ const TeacherDashboard: React.FC = () => {
 	                </div>
 	              </div>
 
-	              {/* Target Classes */}
-	              <div>
-	                <label className="block text-sm font-bold text-sky-900 mb-2">派發至班級</label>
-	                <div className="flex flex-wrap gap-2">
-	                  {availableClasses.map(className => (
+		              {/* Target Classes */}
+		              <div>
+		                <label className="block text-sm font-bold text-sky-900 mb-2">派發至班級</label>
+		                <div className="flex flex-wrap gap-2">
+		                  {availableClasses.map(className => (
 	                    <button
 	                      key={className}
 	                      type="button"
@@ -4584,13 +4827,26 @@ const TeacherDashboard: React.FC = () => {
 	                      {className}
 	                    </button>
 	                  ))}
-	                </div>
-	              </div>
+		                </div>
+		              </div>
 
-	              {/* Target Groups */}
-	              {availableGroups.length > 0 && (
-	                <div>
-	                  <label className="block text-sm font-bold text-sky-900 mb-2">
+		              {mathForm.targetClasses.length === 1 ? (
+		                <ClassFolderSelectInline
+		                  authService={authService}
+		                  className={mathForm.targetClasses[0]}
+		                  value={mathClassFolderId}
+		                  onChange={setMathClassFolderId}
+		                />
+		              ) : (
+		                <div className="p-4 bg-gray-50 border-2 border-gray-200 rounded-2xl text-sm text-gray-700 font-bold">
+		                  請先只選擇 1 個班級，才可選擇資料夾（資料夾屬於單一班別）。
+		                </div>
+		              )}
+
+		              {/* Target Groups */}
+		              {availableGroups.length > 0 && (
+		                <div>
+		                  <label className="block text-sm font-bold text-sky-900 mb-2">
 	                    選擇分組（數學）
 	                  </label>
 	                  <div className="flex flex-wrap gap-2">
@@ -4821,12 +5077,15 @@ const TeacherDashboard: React.FC = () => {
 	                  取消
 	                </button>
 	                <button
-	                  onClick={async () => {
-	                    try {
-	                      if (!mathForm.title.trim()) return alert('請輸入遊戲標題');
-	                      if (mathAllowedOps.length === 0 && mathQuestionType === 'calc') return alert('請至少選擇一種運算（加/減/乘/除）');
-	                      if (!mathForm.targetClasses?.length) return alert('請選擇至少一個目標班級');
-	                      if (!mathDrafts.length) return alert('請新增至少一題');
+		                  onClick={async () => {
+		                    try {
+		                      if (!mathForm.title.trim()) return alert('請輸入遊戲標題');
+		                      if (mathAllowedOps.length === 0 && mathQuestionType === 'calc') return alert('請至少選擇一種運算（加/減/乘/除）');
+		                      if (!mathForm.targetClasses?.length) return alert('請選擇至少一個目標班級');
+		                      if (mathForm.targetClasses.length !== 1) return alert('請只選擇 1 個班級（資料夾屬於單一班別）');
+		                      if (GROUPS_ENABLED && mathForm.targetGroups.length > 0) return alert('使用資料夾分類時暫不支援分組派發，請取消分組');
+		                      if (!mathClassFolderId) return alert('請選擇資料夾（學段→課題→子folder可選）');
+		                      if (!mathDrafts.length) return alert('請新增至少一題');
 
 	                      const questions = mathQuestionType === 'equation'
 	                        ? finalizeMathEquationQuestions(
@@ -4844,20 +5103,21 @@ const TeacherDashboard: React.FC = () => {
 	                          { answerMode: mathAnswerMode, allowedOps: mathAllowedOps, allowParentheses: mathOps.paren, constraints: mathConstraints }
 	                        );
 
-	                      await authService.createGame({
-	                        title: mathForm.title,
-	                        description: mathForm.description,
-	                        gameType: 'math',
-	                        subject: DEFAULT_SUBJECT,
-	                        targetClasses: mathForm.targetClasses,
-	                        targetGroups: GROUPS_ENABLED ? mathForm.targetGroups : [],
-	                        questions,
-	                        difficulty: 'medium',
-	                        timeLimitSeconds: mathTimeEnabled ? clampTowerDefenseTimeSeconds(mathTimeSecondsText, mathTimeSeconds) : undefined,
-	                        livesLimit: null,
-	                        math: {
-	                          answerMode: mathAnswerMode,
-	                          questionType: mathQuestionType,
+		                      await authService.createGame({
+		                        title: mathForm.title,
+		                        description: mathForm.description,
+		                        gameType: 'math',
+		                        subject: DEFAULT_SUBJECT,
+		                        targetClasses: mathForm.targetClasses,
+		                        targetGroups: GROUPS_ENABLED ? mathForm.targetGroups : [],
+		                        questions,
+		                        difficulty: 'medium',
+		                        timeLimitSeconds: mathTimeEnabled ? clampTowerDefenseTimeSeconds(mathTimeSecondsText, mathTimeSeconds) : undefined,
+		                        livesLimit: null,
+		                        classFolderId: mathClassFolderId,
+		                        math: {
+		                          answerMode: mathAnswerMode,
+		                          questionType: mathQuestionType,
 	                          numberMode: mathNumberMode,
 	                          allowedOps: mathAllowedOps,
 	                          allowParentheses: mathOps.paren,
@@ -4871,13 +5131,14 @@ const TeacherDashboard: React.FC = () => {
 	                        }
 	                      });
 
-	                      alert('數學測驗創建成功！');
-	                      setShowGameModal(false);
-	                      setGameType(null);
-	                    } catch (e: any) {
-	                      alert('創建遊戲失敗：' + (e?.message || '未知錯誤'));
-	                    }
-	                  }}
+		                      alert('數學測驗創建成功！');
+		                      setShowGameModal(false);
+		                      setGameType(null);
+		                      setMathClassFolderId('');
+		                    } catch (e: any) {
+		                      alert('創建遊戲失敗：' + (e?.message || '未知錯誤'));
+		                    }
+		                  }}
 	                  className="px-6 py-3 rounded-2xl border-4 border-sky-600 bg-sky-600 text-white font-black hover:bg-sky-700"
 	                >
 	                  創建遊戲
@@ -4922,6 +5183,7 @@ const TeacherDashboard: React.FC = () => {
                       onChange={(e) => {
                         const newSubject = e.target.value as Subject;
                         setDiscussionForm(prev => ({ ...prev, subject: newSubject, targetClasses: [], targetGroups: [] }));
+                        setDiscussionClassFolderId('');
                         loadClassesAndGroups(newSubject);
                       }}
                     >
@@ -4958,6 +5220,19 @@ const TeacherDashboard: React.FC = () => {
                     ))}
                   </div>
                 </div>
+
+                {discussionForm.targetClasses.length === 1 ? (
+                  <ClassFolderSelectInline
+                    authService={authService}
+                    className={discussionForm.targetClasses[0]}
+                    value={discussionClassFolderId}
+                    onChange={setDiscussionClassFolderId}
+                  />
+                ) : (
+                  <div className="p-4 bg-gray-50 border-2 border-gray-200 rounded-2xl text-sm text-gray-700 font-bold">
+                    請先只選擇 1 個班級，才可選擇資料夾（資料夾屬於單一班別）。
+                  </div>
+                )}
 
                 {/* Target Groups (show if groups are available for the subject) */}
                 {availableGroups.length > 0 && (
@@ -5151,16 +5426,32 @@ const TeacherDashboard: React.FC = () => {
               <div className="p-6 border-b-4 border-brand-brown bg-[#C0E2BE]">
                 <div className="flex justify-between items-center">
                   <h2 className="text-3xl font-black text-brand-brown">作業管理</h2>
-                  <button
-                    onClick={() => {
-                      setShowAssignmentModal(false);
-                      setSelectedAssignment(null);
-                      setAssignmentResponses([]);
-                    }}
-                    className="w-10 h-10 rounded-full bg-white border-2 border-brand-brown hover:bg-gray-100 flex items-center justify-center"
-                  >
-                    <X className="w-6 h-6 text-brand-brown" />
-                  </button>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => setShowTemplateLibrary(true)}
+                      className="px-4 py-2 rounded-xl bg-white border-2 border-brand-brown hover:bg-gray-100 font-black text-brand-brown"
+                      title="我的題庫 / 教師共用空間（模板）"
+                    >
+                      題目庫
+                    </button>
+                    <button
+                      onClick={() => setShowClassFolderManager(true)}
+                      className="px-4 py-2 rounded-xl bg-white border-2 border-brand-brown hover:bg-gray-100 font-black text-brand-brown"
+                      title="管理：班別 → 學段 → 課題 → 子folder(可選)"
+                    >
+                      班級資料夾
+                    </button>
+                    <button
+                      onClick={() => {
+                        setShowAssignmentModal(false);
+                        setSelectedAssignment(null);
+                        setAssignmentResponses([]);
+                      }}
+                      className="w-10 h-10 rounded-full bg-white border-2 border-brand-brown hover:bg-gray-100 flex items-center justify-center"
+                    >
+                      <X className="w-6 h-6 text-brand-brown" />
+                    </button>
+                  </div>
                 </div>
               </div>
 
@@ -5430,6 +5721,16 @@ const TeacherDashboard: React.FC = () => {
 		                                      <Eye className="w-4 h-4" />
 		                                      {isBot ? '查看對話' : (isQuiz || isGame || isContest) ? '查看結果' : '查看回應'}
 		                                    </button>
+                                    {!isSelectMode && !isQuiz && !isGame && !isBot && !isContest && (
+                                      <button
+                                        onClick={() => saveDiscussionAsTemplate(assignment)}
+                                        className="flex items-center gap-1 px-4 py-2 bg-green-100 text-green-800 rounded-xl hover:bg-green-200 font-bold"
+                                        title="把此討論串存到我的題庫（模板）"
+                                      >
+                                        <Plus className="w-4 h-4" />
+                                        存為模板
+                                      </button>
+                                    )}
                                     {!isSelectMode && (
                                       <button
                                         onClick={() => setManualHidden(assignment, true)}
@@ -5571,6 +5872,16 @@ const TeacherDashboard: React.FC = () => {
 	                                          <Eye className="w-4 h-4" />
 	                                          {isBot ? '查看對話' : (isQuiz || isGame || isContest) ? '查看結果' : '查看回應'}
 	                                        </button>
+                                        {!isSelectMode && !isQuiz && !isGame && !isBot && !isContest && (
+                                          <button
+                                            onClick={() => saveDiscussionAsTemplate(assignment)}
+                                            className="flex items-center gap-1 px-4 py-2 bg-green-100 text-green-800 rounded-xl hover:bg-green-200 font-bold"
+                                            title="把此討論串存到我的題庫（模板）"
+                                          >
+                                            <Plus className="w-4 h-4" />
+                                            存為模板
+                                          </button>
+                                        )}
                                         {manuallyHidden && !isSelectMode && (
                                           <button
                                             onClick={() => setManualHidden(assignment, false)}
@@ -6164,6 +6475,19 @@ const TeacherDashboard: React.FC = () => {
 	                  </div>
 	                </div>
 
+                  {botTaskForm.targetClasses.length === 1 ? (
+                    <ClassFolderSelectInline
+                      authService={authService}
+                      className={botTaskForm.targetClasses[0]}
+                      value={botTaskClassFolderId}
+                      onChange={setBotTaskClassFolderId}
+                    />
+                  ) : (
+                    <div className="p-4 bg-gray-50 border-2 border-gray-200 rounded-2xl text-sm text-gray-700 font-bold">
+                      請先只選擇 1 個班級，才可選擇資料夾（資料夾屬於單一班別）。
+                    </div>
+                  )}
+
 	                {availableGroups.length > 0 && (
 	                  <div>
 	                    <label className="block text-sm font-bold text-brand-brown mb-2">
@@ -6292,6 +6616,7 @@ const TeacherDashboard: React.FC = () => {
                       onChange={(e) => {
                         const newSubject = e.target.value as Subject;
                         setQuizForm(prev => ({ ...prev, subject: newSubject, targetClasses: [], targetGroups: [] }));
+                        setQuizClassFolderId('');
                         loadClassesAndGroups(newSubject);
                       }}
                     >
@@ -6352,6 +6677,19 @@ const TeacherDashboard: React.FC = () => {
                     ))}
                   </div>
                 </div>
+
+                {quizForm.targetClasses.length === 1 ? (
+                  <ClassFolderSelectInline
+                    authService={authService}
+                    className={quizForm.targetClasses[0]}
+                    value={quizClassFolderId}
+                    onChange={setQuizClassFolderId}
+                  />
+                ) : (
+                  <div className="p-4 bg-gray-50 border-2 border-gray-200 rounded-2xl text-sm text-gray-700 font-bold">
+                    請先只選擇 1 個班級，才可選擇資料夾（資料夾屬於單一班別）。
+                  </div>
+                )}
 
                 {/* Target Groups (show if groups are available for the subject) */}
                 {availableGroups.length > 0 && (
@@ -6558,6 +6896,21 @@ const TeacherDashboard: React.FC = () => {
 	          </div>
 	        )
 	      }
+
+      <ClassFolderManagerModal
+        open={showClassFolderManager}
+        onClose={() => setShowClassFolderManager(false)}
+        authService={authService}
+        availableClasses={availableClasses}
+      />
+
+      <TemplateLibraryModal
+        open={showTemplateLibrary}
+        onClose={() => setShowTemplateLibrary(false)}
+        authService={authService}
+        userId={String(user?.id || '')}
+        availableClasses={availableClasses}
+      />
 
 		      {/* Settings Modal */}
 		      {showSettingsModal && (
@@ -7025,7 +7378,12 @@ const TeacherDashboard: React.FC = () => {
                     <select
                       className="w-full px-4 py-2 border-4 border-gray-300 rounded-2xl bg-white font-bold"
                       value={contestForm.subject}
-                      onChange={(e) => setContestForm(prev => ({ ...prev, subject: e.target.value as Subject }))}
+                      onChange={(e) => {
+                        const newSubject = e.target.value as Subject;
+                        setContestForm(prev => ({ ...prev, subject: newSubject, targetClasses: [], targetGroups: [] }));
+                        setContestClassFolderId('');
+                        loadClassesAndGroups(newSubject);
+                      }}
                     >
                       {VISIBLE_SUBJECTS.map(subject => (
                         <option key={subject} value={subject}>{subject}</option>
@@ -7143,12 +7501,27 @@ const TeacherDashboard: React.FC = () => {
                                 targetClasses: prev.targetClasses.filter(c => c !== className)
                               }));
                             }
+                            setContestClassFolderId('');
                           }}
                           className="w-4 h-4"
                         />
                         <span className="font-bold text-gray-700">{className}</span>
                       </label>
                     ))}
+                  </div>
+                  <div className="mt-3">
+                    {contestForm.targetClasses.length === 1 ? (
+                      <ClassFolderSelectInline
+                        authService={authService}
+                        className={contestForm.targetClasses[0]}
+                        value={contestClassFolderId}
+                        onChange={setContestClassFolderId}
+                      />
+                    ) : (
+                      <div className="p-4 bg-gray-50 border-2 border-gray-200 rounded-2xl text-sm text-gray-700 font-bold">
+                        請先只選擇 1 個班級，才可選擇資料夾（資料夾屬於單一班別）。
+                      </div>
+                    )}
                   </div>
                 </div>
 

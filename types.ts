@@ -20,6 +20,8 @@ export interface Task {
   teacherName: string;
   teacherAvatar: string;
   createdAt?: string;
+  folderId?: string | null;
+  folderSnapshot?: any;
   completed?: boolean;
   score?: number | null;
 }
