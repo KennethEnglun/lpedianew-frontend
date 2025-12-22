@@ -57,6 +57,18 @@ const getA4Size = (orientation: PageOrientation) => {
   if (orientation === 'landscape') return { w: A4_PORTRAIT_H, h: A4_PORTRAIT_W };
   return { w: A4_PORTRAIT_W, h: A4_PORTRAIT_H };
 };
+
+const PAGE_GAP = 80;
+
+const getPageOffsetY = (pageIndex: number, pageH: number) => pageIndex * (pageH + PAGE_GAP);
+
+const clamp = (n: number, min: number, max: number) => Math.min(max, Math.max(min, n));
+
+const getPageIndexFromY = (y: number, pageH: number, pageCount: number) => {
+  if (pageCount <= 1) return 0;
+  const idx = Math.floor((Number.isFinite(y) ? y : 0) / (pageH + PAGE_GAP));
+  return clamp(idx, 0, pageCount - 1);
+};
 const LOCAL_KEY_PREFIX = 'lpedia_note_draft_v2_fabric';
 const buildLocalKey = (noteId: string, userId: string) => `${LOCAL_KEY_PREFIX}:${noteId}:${userId}`;
 
@@ -175,20 +187,20 @@ const canvasMoveToIndex = (canvas: fabric.Canvas, obj: fabric.Object, index: num
   if (typeof o.moveTo === 'function') return o.moveTo(index);
 };
 
-const getPaperObject = (canvas: fabric.Canvas) =>
-  canvas.getObjects().find((o) => Boolean((o as any).lpediaPaper)) as fabric.Object | undefined;
+const getPaperObjects = (canvas: fabric.Canvas) =>
+  canvas.getObjects().filter((o) => Boolean((o as any).lpediaPaper)) as fabric.Object[];
+
+const normalizePaperZOrder = (canvas: fabric.Canvas) => {
+  const papers = getPaperObjects(canvas);
+  papers.forEach((p, idx) => canvasMoveToIndex(canvas, p, idx));
+  papers.forEach((p, idx) => canvasMoveToIndex(canvas, p, idx));
+  return papers.length;
+};
 
 const sendToBackAbovePaper = (canvas: fabric.Canvas, obj: fabric.Object) => {
-  const paper = getPaperObject(canvas);
-  if (!paper) {
-    const c: any = canvas as any;
-    if (typeof c.sendObjectToBack === 'function') return c.sendObjectToBack(obj);
-    if (typeof c.sendToBack === 'function') return c.sendToBack(obj);
-    return canvasMoveToIndex(canvas, obj, 0);
-  }
-  canvasMoveToIndex(canvas, paper, 0);
-  canvasMoveToIndex(canvas, obj, 1);
-  canvasMoveToIndex(canvas, paper, 0);
+  const paperCount = normalizePaperZOrder(canvas);
+  canvasMoveToIndex(canvas, obj, paperCount);
+  normalizePaperZOrder(canvas);
 };
 
 const bringToFrontCompat = (canvas: fabric.Canvas, obj: fabric.Object) => {
@@ -198,33 +210,45 @@ const bringToFrontCompat = (canvas: fabric.Canvas, obj: fabric.Object) => {
   return canvasMoveToIndex(canvas, obj, canvas.getObjects().length - 1);
 };
 
-const ensurePaperRect = (canvas: fabric.Canvas, pageW: number, pageH: number) => {
-  const existing = canvas.getObjects().find((o) => Boolean((o as any).lpediaPaper)) as fabric.Rect | undefined;
-  if (existing) {
-    existing.set({ left: 0, top: 0, width: pageW, height: pageH, visible: true });
-    canvasMoveToIndex(canvas, existing, 0);
-    return existing;
+const ensurePaperPages = (canvas: fabric.Canvas, pageW: number, pageH: number, pageCount: number) => {
+  const existing = getPaperObjects(canvas);
+  const byPage = new Map<number, fabric.Rect>();
+  for (const o of existing) {
+    const idx = Number((o as any).lpediaPageIndex);
+    if (Number.isFinite(idx)) byPage.set(idx, o as any);
   }
-  const rect = new fabric.Rect({
-    left: 0,
-    top: 0,
-    width: pageW,
-    height: pageH,
-    fill: '#ffffff',
-    stroke: '#d1d5db',
-    strokeWidth: 2,
-    selectable: false,
-    evented: false,
-    hasControls: false,
-    hasBorders: false,
-    hoverCursor: 'default'
-  });
-  (rect as any).lpediaPaper = true;
-  (rect as any).lpediaLocked = true;
-  (rect as any).lpediaLayer = 'paper';
-  canvas.add(rect);
-  canvasMoveToIndex(canvas, rect, 0);
-  return rect;
+
+  for (let i = 0; i < pageCount; i += 1) {
+    const top = getPageOffsetY(i, pageH);
+    const rect = byPage.get(i) || new fabric.Rect({
+      left: 0,
+      top,
+      width: pageW,
+      height: pageH,
+      fill: '#ffffff',
+      stroke: '#d1d5db',
+      strokeWidth: 2,
+      selectable: false,
+      evented: false,
+      hasControls: false,
+      hasBorders: false,
+      hoverCursor: 'default'
+    });
+    rect.set({ left: 0, top, width: pageW, height: pageH, visible: true });
+    (rect as any).lpediaPaper = true;
+    (rect as any).lpediaLocked = true;
+    (rect as any).lpediaLayer = 'paper';
+    (rect as any).lpediaPageIndex = i;
+    if (!byPage.get(i)) canvas.add(rect);
+  }
+
+  // Remove extra paper rects (e.g. pages removed)
+  for (const o of existing) {
+    const idx = Number((o as any).lpediaPageIndex);
+    if (!Number.isFinite(idx) || idx < 0 || idx >= pageCount) canvas.remove(o);
+  }
+
+  normalizePaperZOrder(canvas);
 };
 
 const stripPaperFromCanvasJson = (json: any) => {
@@ -285,7 +309,8 @@ const insertMindmap = (
   canvas: fabric.Canvas,
   mindmap: { nodes: Array<{ id: string; label: string }>; edges: Array<{ from: string; to: string; label?: string }> },
   pageW: number,
-  pageH: number
+  pageH: number,
+  offsetY = 0
 ) => {
   const nodes = Array.isArray(mindmap?.nodes) ? mindmap.nodes : [];
   const edges = Array.isArray(mindmap?.edges) ? mindmap.edges : [];
@@ -302,7 +327,7 @@ const insertMindmap = (
   nodes.forEach((n, idx) => {
     const col = idx % cols;
     const row = Math.floor(idx / cols);
-    nodePos.set(n.id, { x: margin + col * (nodeW + gapX), y: margin + row * (nodeH + gapY) });
+    nodePos.set(n.id, { x: margin + col * (nodeW + gapX), y: offsetY + margin + row * (nodeH + gapY) });
   });
 
   edges.forEach((e) => {
@@ -442,12 +467,32 @@ const NoteEditorModal: React.FC<Props> = ({ open, onClose, authService, mode, no
     }
   };
 
-  const saveCurrentPageToDoc = () => {
+  const saveCanvasToDoc = () => {
     if (mode === 'teacher') return;
     const canvas = fabricRef.current;
     if (!canvas) return;
-    const json = canvas.toJSON(['lpediaLocked', 'lpediaLayer', 'crossOrigin', 'lpediaPaper']);
-    docRef.current.pages[docRef.current.currentPage] = stripPaperFromCanvasJson(json);
+    const { h: pageH } = pageSizeRef.current;
+    const pageCountNow = docRef.current.pages.length;
+    const json = canvas.toJSON(['lpediaLocked', 'lpediaLayer', 'crossOrigin', 'lpediaPaper', 'lpediaPageIndex']);
+    const objects = Array.isArray((json as any).objects) ? (json as any).objects : [];
+
+    const pages = Array.from({ length: pageCountNow }, () => ({ ...emptyPage(), objects: [] as any[] }));
+    for (const o of objects) {
+      if (o?.lpediaPaper || String(o?.lpediaLayer || '') === 'paper') continue;
+      const layer = String(o?.lpediaLayer || 'base');
+      if (layer === 'annotation') continue;
+      const rawTop = Number(o?.top) || 0;
+      const explicitIdx = Number(o?.lpediaPageIndex);
+      const idx = Number.isFinite(explicitIdx)
+        ? clamp(explicitIdx, 0, pageCountNow - 1)
+        : getPageIndexFromY(rawTop, pageH, pageCountNow);
+      const offsetY = getPageOffsetY(idx, pageH);
+      const normalized = { ...o, top: rawTop - offsetY, lpediaLayer: layer, lpediaPageIndex: idx };
+      pages[idx].objects.push(normalized);
+    }
+
+    docRef.current.pages = pages.map((p) => stripPaperFromCanvasJson(p));
+    docRef.current.currentPage = clamp(docRef.current.currentPage ?? 0, 0, docRef.current.pages.length - 1);
   };
 
   const scheduleStudentSave = async () => {
@@ -459,7 +504,7 @@ const NoteEditorModal: React.FC<Props> = ({ open, onClose, authService, mode, no
     if (saveTimerRef.current) window.clearTimeout(saveTimerRef.current);
     saveTimerRef.current = window.setTimeout(async () => {
       try {
-        saveCurrentPageToDoc();
+        saveCanvasToDoc();
         const doc = { ...docRef.current, currentPage: docRef.current.currentPage };
         await idbSet(buildLocalKey(noteId, viewerId), { savedAt: new Date().toISOString(), snapshot: doc });
 
@@ -472,61 +517,90 @@ const NoteEditorModal: React.FC<Props> = ({ open, onClose, authService, mode, no
     }, 1200);
   };
 
-  const saveCurrentAnnotationsToRef = () => {
+  const saveCanvasAnnotationsToRef = () => {
     if (mode !== 'teacher') return;
     const canvas = fabricRef.current;
     const ann = annotationDocRef.current;
     if (!canvas || !ann) return;
-    const json = canvas.toJSON(['lpediaLocked', 'lpediaLayer', 'crossOrigin', 'lpediaPaper']);
+    const { h: pageH } = pageSizeRef.current;
+    const pageCountNow = docRef.current.pages.length;
+    const json = canvas.toJSON(['lpediaLocked', 'lpediaLayer', 'crossOrigin', 'lpediaPaper', 'lpediaPageIndex']);
     const objects = Array.isArray((json as any).objects) ? (json as any).objects : [];
-    const only = objects.filter((o: any) => String(o.lpediaLayer || '') === 'annotation');
-    ann.pages[ann.currentPage] = stripPaperFromCanvasJson({ ...json, objects: only, background: '#ffffff' });
+    const pages = Array.from({ length: pageCountNow }, () => ({ ...emptyPage(), objects: [] as any[] }));
+    for (const o of objects) {
+      if (o?.lpediaPaper || String(o?.lpediaLayer || '') === 'paper') continue;
+      const layer = String(o?.lpediaLayer || '');
+      if (layer !== 'annotation') continue;
+      const rawTop = Number(o?.top) || 0;
+      const explicitIdx = Number(o?.lpediaPageIndex);
+      const idx = Number.isFinite(explicitIdx)
+        ? clamp(explicitIdx, 0, pageCountNow - 1)
+        : getPageIndexFromY(rawTop, pageH, pageCountNow);
+      const offsetY = getPageOffsetY(idx, pageH);
+      const normalized = { ...o, top: rawTop - offsetY, lpediaLayer: 'annotation', lpediaPageIndex: idx };
+      pages[idx].objects.push(normalized);
+    }
+    ann.pages = pages.map((p) => stripPaperFromCanvasJson(p));
+    ann.currentPage = clamp(ann.currentPage ?? 0, 0, ann.pages.length - 1);
   };
 
-  const loadPage = async (idx: number) => {
+  const reloadCanvas = async (opts?: { fit?: boolean }) => {
     const canvas = fabricRef.current;
     const container = containerRef.current;
     if (!canvas || !container) return;
     const { w: pageW, h: pageH } = pageSizeRef.current;
-    const next = Math.min(Math.max(0, idx), docRef.current.pages.length - 1);
+    const pageCountNow = docRef.current.pages.length;
     if (pendingLoadAbortRef.current) pendingLoadAbortRef.current.abort();
     const loadAbort = new AbortController();
     pendingLoadAbortRef.current = loadAbort;
     suppressSaveRef.current = true;
     try {
-      if (mode === 'teacher') saveCurrentAnnotationsToRef();
-      else saveCurrentPageToDoc();
-      docRef.current.currentPage = next;
-      setPageIndex(next);
-      setPageCount(docRef.current.pages.length);
-      if (mode === 'teacher' && annotationDocRef.current) {
-        annotationDocRef.current.currentPage = next;
-      }
+      if (mode === 'teacher') saveCanvasAnnotationsToRef();
+      else saveCanvasToDoc();
+
+      setPageCount(pageCountNow);
+      docRef.current.currentPage = clamp(docRef.current.currentPage ?? 0, 0, pageCountNow - 1);
+
+      const prevVpt = Array.isArray(canvas.viewportTransform) ? [...canvas.viewportTransform] : null;
 
       canvas.clear();
       canvas.backgroundColor = undefined;
-      const baseJson = docRef.current.pages[next] || emptyPage();
-      const pageJson =
-        mode !== 'teacher'
-          ? baseJson
-          : (() => {
-              const ann = annotationDocRef.current;
-              const annPage = ann ? ann.pages[next] : null;
-              const baseObjects = Array.isArray((baseJson as any).objects) ? (baseJson as any).objects : [];
-              const annObjects = Array.isArray((annPage as any)?.objects) ? (annPage as any).objects : [];
-              return {
-                ...baseJson,
-                objects: [
-                  ...baseObjects.map((o: any) => ({ ...o, lpediaLayer: o.lpediaLayer || 'base' })),
-                  ...annObjects.map((o: any) => ({ ...o, lpediaLayer: 'annotation' }))
-                ]
-              };
-            })();
 
-      await withTimeout(canvas.loadFromJSON(pageJson, undefined, { signal: loadAbort.signal } as any), 15000, '載入頁面超時', () => loadAbort.abort());
-      ensurePaperRect(canvas, pageW, pageH);
+      const merged = { ...emptyPage(), objects: [] as any[] };
+      for (let i = 0; i < pageCountNow; i += 1) {
+        const offsetY = getPageOffsetY(i, pageH);
+        const baseJson = docRef.current.pages[i] || emptyPage();
+        const baseObjects = Array.isArray((baseJson as any).objects) ? (baseJson as any).objects : [];
+        for (const o of baseObjects) {
+          if (o?.lpediaPaper || String(o?.lpediaLayer || '') === 'paper') continue;
+          const rawTop = Number(o?.top) || 0;
+          merged.objects.push({
+            ...o,
+            top: rawTop + offsetY,
+            lpediaLayer: String(o?.lpediaLayer || 'base'),
+            lpediaPageIndex: i
+          });
+        }
+        if (mode === 'teacher') {
+          const ann = annotationDocRef.current;
+          const annPage = ann ? ann.pages[i] : null;
+          const annObjects = Array.isArray((annPage as any)?.objects) ? (annPage as any).objects : [];
+          for (const o of annObjects) {
+            if (o?.lpediaPaper || String(o?.lpediaLayer || '') === 'paper') continue;
+            const rawTop = Number(o?.top) || 0;
+            merged.objects.push({ ...o, top: rawTop + offsetY, lpediaLayer: 'annotation', lpediaPageIndex: i });
+          }
+        }
+      }
+
+      await withTimeout(canvas.loadFromJSON(merged, undefined, { signal: loadAbort.signal } as any), 15000, '載入頁面超時', () => loadAbort.abort());
+      ensurePaperPages(canvas, pageW, pageH, pageCountNow);
       applyPermissionsToObjects(canvas);
-      fitPaperToContainer(canvas, container, pageW, pageH);
+      if (opts?.fit !== true && prevVpt) {
+        canvas.setViewportTransform(prevVpt as any);
+      } else {
+        fitPaperToContainer(canvas, container, pageW, pageH);
+      }
       setZoomPct(Math.round((canvas.getZoom() || 1) * 100));
       canvas.discardActiveObject();
       canvas.requestRenderAll();
@@ -540,6 +614,42 @@ const NoteEditorModal: React.FC<Props> = ({ open, onClose, authService, mode, no
     }
   };
 
+  const goToPage = (idx: number) => {
+    const canvas = fabricRef.current;
+    const container = containerRef.current;
+    if (!canvas || !container) return;
+    const pageCountNow = docRef.current.pages.length;
+    const { w: pageW, h: pageH } = pageSizeRef.current;
+    const next = clamp(idx, 0, pageCountNow - 1);
+    const s = canvas.getZoom() || 1;
+    const w = Math.max(1, container.clientWidth);
+    const padding = 48;
+    const tx = (w - pageW * s) / 2;
+    const offsetY = getPageOffsetY(next, pageH);
+    const ty = padding - offsetY * s;
+    canvas.setViewportTransform([s, 0, 0, s, tx, ty]);
+    docRef.current.currentPage = next;
+    setPageIndex(next);
+    canvas.requestRenderAll();
+  };
+
+  const syncCurrentPageFromViewport = () => {
+    const canvas = fabricRef.current;
+    if (!canvas) return;
+    const v = canvas.viewportTransform;
+    if (!Array.isArray(v)) return;
+    const s = v[0] || 1;
+    const ty = v[5] || 0;
+    const { h: pageH } = pageSizeRef.current;
+    const centerY = canvas.getHeight() / 2;
+    const worldY = (centerY - ty) / s;
+    const idx = getPageIndexFromY(worldY, pageH, docRef.current.pages.length);
+    if (idx !== pageIndex) {
+      docRef.current.currentPage = idx;
+      setPageIndex(idx);
+    }
+  };
+
   const resetToBlank = async () => {
     if (!window.confirm('這會清空現有內容並轉為新筆記格式（Fabric）。確定？')) return;
     docRef.current = emptyDoc();
@@ -548,18 +658,17 @@ const NoteEditorModal: React.FC<Props> = ({ open, onClose, authService, mode, no
     setPageCount(1);
     setPageOrientation('portrait');
     setZoomPct(100);
-    await loadPage(0);
+    await reloadCanvas({ fit: true });
+    goToPage(0);
     setError('');
   };
 
   const addPage = async () => {
     if (!canAddPage) return;
-    saveCurrentPageToDoc();
+    saveCanvasToDoc();
     docRef.current.pages.push(emptyPage());
-    const next = docRef.current.pages.length - 1;
-    docRef.current.currentPage = next;
     setPageCount(docRef.current.pages.length);
-    await loadPage(next);
+    await reloadCanvas();
     await scheduleStudentSave();
   };
 
@@ -571,7 +680,7 @@ const NoteEditorModal: React.FC<Props> = ({ open, onClose, authService, mode, no
     const container = containerRef.current;
     if (!canvas || !container) return;
     const { w: pageW, h: pageH } = pageSizeRef.current;
-    ensurePaperRect(canvas, pageW, pageH);
+    ensurePaperPages(canvas, pageW, pageH, docRef.current.pages.length);
     fitPaperToContainer(canvas, container, pageW, pageH);
     setZoomPct(Math.round((canvas.getZoom() || 1) * 100));
   };
@@ -579,7 +688,6 @@ const NoteEditorModal: React.FC<Props> = ({ open, onClose, authService, mode, no
   const zoomBy = (factor: number) => {
     const canvas = fabricRef.current;
     if (!canvas) return;
-    const clamp = (n: number, min: number, max: number) => Math.min(max, Math.max(min, n));
     const current = canvas.getZoom() || 1;
     const next = clamp(current * factor, 0.25, 4);
     const pt = new fabric.Point(canvas.getWidth() / 2, canvas.getHeight() / 2);
@@ -591,17 +699,12 @@ const NoteEditorModal: React.FC<Props> = ({ open, onClose, authService, mode, no
   const togglePageOrientation = () => {
     if (!canChangePageOrientation) return;
     const next: PageOrientation = pageOrientation === 'portrait' ? 'landscape' : 'portrait';
+    saveCanvasToDoc();
     docRef.current.page = { ...(docRef.current.page || {}), orientation: next };
     setPageOrientation(next);
-    const canvas = fabricRef.current;
-    const container = containerRef.current;
-    if (canvas && container) {
-      const { w: pageW, h: pageH } = getA4Size(next);
-      ensurePaperRect(canvas, pageW, pageH);
-      fitPaperToContainer(canvas, container, pageW, pageH);
-      setZoomPct(Math.round((canvas.getZoom() || 1) * 100));
-      canvas.requestRenderAll();
-    }
+    void reloadCanvas({ fit: true }).then(() => {
+      goToPage(docRef.current.currentPage);
+    });
   };
 
   const insertTextBox = () => {
@@ -611,9 +714,18 @@ const NoteEditorModal: React.FC<Props> = ({ open, onClose, authService, mode, no
     if (mode === 'student' && submittedAt) return;
     if (mode === 'teacher' && !annotationMode) return;
 
+    const v = canvas.viewportTransform || [1, 0, 0, 1, 0, 0];
+    const s = v[0] || 1;
+    const tx = v[4] || 0;
+    const ty = v[5] || 0;
+    const centerX = canvas.getWidth() / 2;
+    const centerY = canvas.getHeight() / 2;
+    const worldX = (centerX - tx) / s;
+    const worldY = (centerY - ty) / s;
+
     const tb = new fabric.Textbox('雙擊編輯文字', {
-      left: 60,
-      top: 80,
+      left: worldX - 210,
+      top: worldY - 40,
       width: 420,
       fontSize: 22,
       fill: activeTextColor,
@@ -796,7 +908,13 @@ const NoteEditorModal: React.FC<Props> = ({ open, onClose, authService, mode, no
       // Insert immediately (no network dependency)
       const localImg: any = await (fabric.Image as any).fromURL(localSrc, { crossOrigin: undefined });
       if (!localImg) throw new Error('載入圖片失敗');
-      localImg.set({ left: 80, top: 120, selectable: true });
+      const v = canvas.viewportTransform || [1, 0, 0, 1, 0, 0];
+      const s = v[0] || 1;
+      const tx = v[4] || 0;
+      const ty = v[5] || 0;
+      const worldX = (canvas.getWidth() / 2 - tx) / s;
+      const worldY = (canvas.getHeight() / 2 - ty) / s;
+      localImg.set({ left: worldX - 160, top: worldY - 120, selectable: true });
       if (mode === 'teacher') (localImg as any).lpediaLayer = 'annotation';
       canvas.add(localImg);
       canvas.setActiveObject(localImg);
@@ -1005,14 +1123,12 @@ const NoteEditorModal: React.FC<Props> = ({ open, onClose, authService, mode, no
 
     const onResize = () => {
       const { w: pageW, h: pageH } = pageSizeRef.current;
-      ensurePaperRect(canvas, pageW, pageH);
+      ensurePaperPages(canvas, pageW, pageH, docRef.current.pages.length);
       fitPaperToContainer(canvas, container, pageW, pageH);
       setZoomPct(Math.round((canvas.getZoom() || 1) * 100));
     };
     window.addEventListener('resize', onResize);
     onResize();
-
-    const clamp = (n: number, min: number, max: number) => Math.min(max, Math.max(min, n));
 
     const onWheel = (opt: any) => {
       const e = opt?.e as WheelEvent | undefined;
@@ -1027,11 +1143,13 @@ const NoteEditorModal: React.FC<Props> = ({ open, onClose, authService, mode, no
         canvas.zoomToPoint(pt, next);
         setZoomPct(Math.round((canvas.getZoom() || 1) * 100));
         canvas.requestRenderAll();
+        syncCurrentPageFromViewport();
         return;
       }
       // Pan (scroll up/down or trackpad)
       canvas.relativePan(new fabric.Point(-e.deltaX, -e.deltaY));
       canvas.requestRenderAll();
+      syncCurrentPageFromViewport();
     };
     canvas.on('mouse:wheel', onWheel);
 
@@ -1064,6 +1182,7 @@ const NoteEditorModal: React.FC<Props> = ({ open, onClose, authService, mode, no
       canvas.selection = true;
       canvas.defaultCursor = 'default';
       canvas.requestRenderAll();
+      syncCurrentPageFromViewport();
     };
     canvas.on('mouse:down', onMouseDown);
     canvas.on('mouse:move', onMouseMove);
@@ -1107,19 +1226,27 @@ const NoteEditorModal: React.FC<Props> = ({ open, onClose, authService, mode, no
     const onAdded = (e: any) => {
       const obj = e?.target as fabric.Object | undefined;
       if (!obj) return;
+      if ((obj as any).lpediaPaper) return;
       if (suppressSaveRef.current) return;
       if (!allowEdit()) {
         canvas.remove(obj);
         return;
       }
+      const { h: pageH } = pageSizeRef.current;
+      (obj as any).lpediaPageIndex = getPageIndexFromY(Number((obj as any).top) || 0, pageH, docRef.current.pages.length);
       markNewObjectLayer(obj);
       applyPermissionsToObjects(canvas);
       setLayersVersion((v) => v + 1);
       void scheduleStudentSave();
     };
-    const onModified = () => {
+    const onModified = (e: any) => {
       if (suppressSaveRef.current) return;
       if (!allowEdit()) return;
+      const obj = e?.target as fabric.Object | undefined;
+      if (obj && !(obj as any).lpediaPaper) {
+        const { h: pageH } = pageSizeRef.current;
+        (obj as any).lpediaPageIndex = getPageIndexFromY(Number((obj as any).top) || 0, pageH, docRef.current.pages.length);
+      }
       setLayersVersion((v) => v + 1);
       void scheduleStudentSave();
     };
@@ -1129,7 +1256,18 @@ const NoteEditorModal: React.FC<Props> = ({ open, onClose, authService, mode, no
     canvas.on('object:removed', onModified);
     canvas.on('text:changed', onModified as any);
 
-    const bumpSelection = () => setSelectionVersion((v) => v + 1);
+    const bumpSelection = () => {
+      setSelectionVersion((v) => v + 1);
+      const active = canvas.getActiveObject() as any;
+      if (active && !active.lpediaPaper) {
+        const { h: pageH } = pageSizeRef.current;
+        const idx = getPageIndexFromY(Number(active.top) || 0, pageH, docRef.current.pages.length);
+        docRef.current.currentPage = idx;
+        setPageIndex(idx);
+      } else {
+        syncCurrentPageFromViewport();
+      }
+    };
     canvas.on('selection:created', bumpSelection);
     canvas.on('selection:updated', bumpSelection);
     canvas.on('selection:cleared', bumpSelection);
@@ -1164,7 +1302,9 @@ const NoteEditorModal: React.FC<Props> = ({ open, onClose, authService, mode, no
     window.addEventListener('keydown', onKeyDown);
     window.addEventListener('keyup', onKeyUp);
 
-    void loadPage(docRef.current.currentPage);
+    void reloadCanvas({ fit: true }).then(() => {
+      goToPage(docRef.current.currentPage);
+    });
 
     return () => {
       window.removeEventListener('keydown', onKeyDown);
@@ -1193,7 +1333,7 @@ const NoteEditorModal: React.FC<Props> = ({ open, onClose, authService, mode, no
     const container = containerRef.current;
     if (!canvas || !container) return;
     const { w: pageW, h: pageH } = pageSizeRef.current;
-    ensurePaperRect(canvas, pageW, pageH);
+    ensurePaperPages(canvas, pageW, pageH, docRef.current.pages.length);
     fitPaperToContainer(canvas, container, pageW, pageH);
     setZoomPct(Math.round((canvas.getZoom() || 1) * 100));
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -1228,9 +1368,13 @@ const NoteEditorModal: React.FC<Props> = ({ open, onClose, authService, mode, no
     const canvas = fabricRef.current;
     if (!canvas) return;
     suppressSaveRef.current = true;
-    void loadPage(docRef.current.currentPage).finally(() => {
-      suppressSaveRef.current = false;
-    });
+    void reloadCanvas({ fit: true })
+      .then(() => {
+        goToPage(docRef.current.currentPage);
+      })
+      .finally(() => {
+        suppressSaveRef.current = false;
+      });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, docLoadedToken]);
 
@@ -1331,7 +1475,7 @@ const NoteEditorModal: React.FC<Props> = ({ open, onClose, authService, mode, no
               <button
                 type="button"
                 onClick={() => {
-                  saveCurrentPageToDoc();
+                  saveCanvasToDoc();
                   const doc = docRef.current;
                   void exportPdfFromDoc(doc);
                 }}
@@ -1403,7 +1547,7 @@ const NoteEditorModal: React.FC<Props> = ({ open, onClose, authService, mode, no
                 type="button"
                 className="p-1 rounded-lg hover:bg-gray-100 disabled:opacity-40"
                 disabled={pageIndex <= 0 || loading}
-                onClick={() => void loadPage(pageIndex - 1)}
+                onClick={() => goToPage(pageIndex - 1)}
                 title="上一頁"
               >
                 <ArrowLeft className="w-4 h-4" />
@@ -1413,7 +1557,7 @@ const NoteEditorModal: React.FC<Props> = ({ open, onClose, authService, mode, no
                 type="button"
                 className="p-1 rounded-lg hover:bg-gray-100 disabled:opacity-40"
                 disabled={pageIndex >= pageCount - 1 || loading}
-                onClick={() => void loadPage(pageIndex + 1)}
+                onClick={() => goToPage(pageIndex + 1)}
                 title="下一頁"
               >
                 <ArrowRight className="w-4 h-4" />
@@ -1604,7 +1748,8 @@ const NoteEditorModal: React.FC<Props> = ({ open, onClose, authService, mode, no
                     try {
                       const resp = await authService.generateMindmap({ prompt: prompt.trim() });
                       const { w: pageW, h: pageH } = pageSizeRef.current;
-                      insertMindmap(canvas, resp, pageW, pageH);
+                      const offsetY = getPageOffsetY(docRef.current.currentPage ?? 0, pageH);
+                      insertMindmap(canvas, resp, pageW, pageH, offsetY);
                       await scheduleStudentSave();
                     } catch (e: any) {
                       setError(e?.message || '生成失敗');
@@ -1653,7 +1798,7 @@ const NoteEditorModal: React.FC<Props> = ({ open, onClose, authService, mode, no
                   setLoading(true);
                   setError('');
                   try {
-                    saveCurrentPageToDoc();
+                    saveCanvasToDoc();
                     await authService.updateNoteTemplate(noteId, docRef.current);
                     alert('已保存模板');
                   } catch (e: any) {
@@ -1678,7 +1823,7 @@ const NoteEditorModal: React.FC<Props> = ({ open, onClose, authService, mode, no
                   setLoading(true);
                   setError('');
                   try {
-                    saveCurrentPageToDoc();
+                    saveCanvasToDoc();
                     await authService.updateNoteTemplate(noteId, docRef.current);
                     await authService.publishNote(noteId);
                     alert('派發成功！');
@@ -1741,7 +1886,7 @@ const NoteEditorModal: React.FC<Props> = ({ open, onClose, authService, mode, no
 	                        pages: docRef.current.pages.map(() => emptyPage())
 	                      };
 	                    }
-	                    saveCurrentAnnotationsToRef();
+	                    saveCanvasAnnotationsToRef();
 	                    await authService.saveNoteAnnotations(noteId, sid, annotationDocRef.current);
 	                    alert('已保存批改');
 	                    setAnnotationMode(false);
@@ -1769,7 +1914,7 @@ const NoteEditorModal: React.FC<Props> = ({ open, onClose, authService, mode, no
                   setLoading(true);
                   setError('');
                   try {
-                    saveCurrentPageToDoc();
+                    saveCanvasToDoc();
                     await authService.saveMyNoteDraft(noteId, docRef.current);
                     const resp = await authService.submitMyNote(noteId);
                     setSubmittedAt(resp?.submission?.submittedAt || new Date().toISOString());
