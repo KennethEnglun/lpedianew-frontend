@@ -11,6 +11,8 @@ import ClassFolderManagerModal from '../components/ClassFolderManagerModal';
 import TemplateLibraryModal from '../components/TemplateLibraryModal';
 import ClassFolderSelectInline from '../components/ClassFolderSelectInline';
 import AssignmentExplorerModal from '../components/AssignmentExplorerModal';
+import NoteCreateModal from '../components/NoteCreateModal';
+import NoteEditorModal from '../components/NoteEditorModal';
 import { MathExpressionBuilder, finalizeMathQuestions } from '../components/MathExpressionBuilder';
 import { MathEquationBuilder, finalizeMathEquationQuestions } from '../components/MathEquationBuilder';
 import { MathExpressionView, FractionView } from '../components/MathExpressionView';
@@ -100,14 +102,17 @@ const TeacherDashboard: React.FC = () => {
   const [currentTextColor, setCurrentTextColor] = useState('#000000');
 
   // 作業管理相關狀態
-  const [showAssignmentModal, setShowAssignmentModal] = useState(false);
-  const [showClassFolderManager, setShowClassFolderManager] = useState(false);
-  const [showTemplateLibrary, setShowTemplateLibrary] = useState(false);
-  const [discussionClassFolderId, setDiscussionClassFolderId] = useState('');
-  const [quizClassFolderId, setQuizClassFolderId] = useState('');
-  const [contestClassFolderId, setContestClassFolderId] = useState('');
-  const [botTaskClassFolderId, setBotTaskClassFolderId] = useState('');
-  const [gameClassFolderId, setGameClassFolderId] = useState('');
+	  const [showAssignmentModal, setShowAssignmentModal] = useState(false);
+	  const [showClassFolderManager, setShowClassFolderManager] = useState(false);
+	  const [showTemplateLibrary, setShowTemplateLibrary] = useState(false);
+	  const [showNoteCreateModal, setShowNoteCreateModal] = useState(false);
+	  const [showNoteEditorModal, setShowNoteEditorModal] = useState(false);
+	  const [noteEditorNoteId, setNoteEditorNoteId] = useState('');
+	  const [discussionClassFolderId, setDiscussionClassFolderId] = useState('');
+	  const [quizClassFolderId, setQuizClassFolderId] = useState('');
+	  const [contestClassFolderId, setContestClassFolderId] = useState('');
+	  const [botTaskClassFolderId, setBotTaskClassFolderId] = useState('');
+	  const [gameClassFolderId, setGameClassFolderId] = useState('');
   const [rangerClassFolderId, setRangerClassFolderId] = useState('');
   const [mathClassFolderId, setMathClassFolderId] = useState('');
   const [assignments, setAssignments] = useState<any[]>([]);
@@ -2622,22 +2627,32 @@ const TeacherDashboard: React.FC = () => {
                   <MessageSquare className="w-5 h-5" />
                   派發討論串
                 </Button>
-                <Button
-                  fullWidth
-                  className="bg-[#FDEEAD] hover:bg-[#FCE690] flex items-center justify-center gap-2"
-                  onClick={() => {
-                    setShowQuizModal(true);
-                    closeSidebar();
-                  }}
-                >
-                  <HelpCircle className="w-5 h-5" />
-                  派發小測驗
-                </Button>
-                <Button
-                  fullWidth
-                  className="bg-[#DFF6FF] hover:bg-[#CDEFFF] flex items-center justify-center gap-2"
-                  onClick={() => {
-                    openMathQuizCreator();
+	                <Button
+	                  fullWidth
+	                  className="bg-[#FDEEAD] hover:bg-[#FCE690] flex items-center justify-center gap-2"
+	                  onClick={() => {
+	                    setShowQuizModal(true);
+	                    closeSidebar();
+	                  }}
+	                >
+	                  <HelpCircle className="w-5 h-5" />
+	                  派發小測驗
+	                </Button>
+	                <Button
+	                  fullWidth
+	                  className="bg-[#E9E6FF] hover:bg-[#DCD6FF] flex items-center justify-center gap-2"
+	                  onClick={() => {
+	                    setShowNoteCreateModal(true);
+	                    closeSidebar();
+	                  }}
+	                >
+	                  📝 派發筆記
+	                </Button>
+	                <Button
+	                  fullWidth
+	                  className="bg-[#DFF6FF] hover:bg-[#CDEFFF] flex items-center justify-center gap-2"
+	                  onClick={() => {
+	                    openMathQuizCreator();
                     closeSidebar();
                   }}
                 >
@@ -2741,19 +2756,26 @@ const TeacherDashboard: React.FC = () => {
             <MessageSquare className="w-5 h-5" />
             派發討論串
           </Button>
-          <Button
-            fullWidth
-            className="bg-[#FDEEAD] hover:bg-[#FCE690] text-lg flex items-center justify-center gap-2"
-            onClick={() => setShowQuizModal(true)}
-          >
-            <HelpCircle className="w-5 h-5" />
-            派發小測驗
-          </Button>
-          <Button
-            fullWidth
-            className="bg-[#DFF6FF] hover:bg-[#CDEFFF] text-lg flex items-center justify-center gap-2"
-            onClick={openMathQuizCreator}
-          >
+	          <Button
+	            fullWidth
+	            className="bg-[#FDEEAD] hover:bg-[#FCE690] text-lg flex items-center justify-center gap-2"
+	            onClick={() => setShowQuizModal(true)}
+	          >
+	            <HelpCircle className="w-5 h-5" />
+	            派發小測驗
+	          </Button>
+	          <Button
+	            fullWidth
+	            className="bg-[#E9E6FF] hover:bg-[#DCD6FF] text-lg flex items-center justify-center gap-2"
+	            onClick={() => setShowNoteCreateModal(true)}
+	          >
+	            📝 派發筆記
+	          </Button>
+	          <Button
+	            fullWidth
+	            className="bg-[#DFF6FF] hover:bg-[#CDEFFF] text-lg flex items-center justify-center gap-2"
+	            onClick={openMathQuizCreator}
+	          >
             🧮 創建數學測驗
           </Button>
 	          <Button
@@ -5423,21 +5445,48 @@ const TeacherDashboard: React.FC = () => {
         )
       }
 
-	      {/* Assignment Management Modal */}
-          {showAssignmentModal && (
-            <AssignmentExplorerModal
-              open={showAssignmentModal}
-              onClose={() => setShowAssignmentModal(false)}
-              authService={authService}
-              viewerRole="teacher"
-              viewerId={String(user?.id || '')}
-            />
-          )}
+		      {/* Assignment Management Modal */}
+	          {showAssignmentModal && (
+	            <AssignmentExplorerModal
+	              open={showAssignmentModal}
+	              onClose={() => setShowAssignmentModal(false)}
+	              authService={authService}
+	              viewerRole="teacher"
+	              viewerId={String(user?.id || '')}
+	            />
+	          )}
 
-		      {
-		        showAssignmentModal && false && (
-		          <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
-	            <div className="bg-white border-4 border-brand-brown rounded-3xl w-full max-w-6xl max-h-[90vh] overflow-y-auto shadow-comic">
+	          {showNoteCreateModal && (
+	            <NoteCreateModal
+	              open={showNoteCreateModal}
+	              onClose={() => setShowNoteCreateModal(false)}
+	              authService={authService}
+	              onCreated={(noteId) => {
+	                setNoteEditorNoteId(noteId);
+	                setShowNoteEditorModal(true);
+	              }}
+	            />
+	          )}
+
+	          {showNoteEditorModal && !!noteEditorNoteId && (
+	            <NoteEditorModal
+	              open={showNoteEditorModal}
+	              onClose={() => {
+	                setShowNoteEditorModal(false);
+	                setNoteEditorNoteId('');
+	              }}
+	              authService={authService}
+	              mode="template"
+	              noteId={noteEditorNoteId}
+	              viewerId={String(user?.id || '')}
+	              viewerRole="teacher"
+	            />
+	          )}
+	
+			      {
+			        showAssignmentModal && false && (
+			          <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
+		            <div className="bg-white border-4 border-brand-brown rounded-3xl w-full max-w-6xl max-h-[90vh] overflow-y-auto shadow-comic">
 	              <div className="p-6 border-b-4 border-brand-brown bg-[#C0E2BE]">
                 <div className="flex justify-between items-center">
                   <h2 className="text-3xl font-black text-brand-brown">作業管理</h2>

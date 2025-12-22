@@ -46,6 +46,12 @@ const findA4FrameIdOnCurrentPage = (editor: Editor): string | null => {
   return null;
 };
 
+const ensureAtLeastOnePage = (editor: Editor) => {
+  const pages = editor.getPages();
+  if (pages.length > 0) return;
+  editor.createPage({ name: '第1頁' } as any);
+};
+
 const ensureA4FrameOnCurrentPage = (editor: Editor) => {
   const existing = findA4FrameIdOnCurrentPage(editor);
   if (existing) return existing;
@@ -63,6 +69,7 @@ const ensureA4FrameOnCurrentPage = (editor: Editor) => {
 };
 
 const ensureA4FramesForAllPages = (editor: Editor) => {
+  ensureAtLeastOnePage(editor);
   const current = editor.getCurrentPageId();
   for (const p of editor.getPages()) {
     editor.setCurrentPage(p.id);
@@ -496,6 +503,7 @@ const NoteEditorModal: React.FC<Props> = ({ open, onClose, authService, mode, no
 
   const canTemplateEdit = mode === 'template' && canEdit;
   const canAnnotate = mode === 'teacher' && (viewerRole === 'teacher' || viewerRole === 'admin');
+  const canAddPage = (mode === 'template' && canEdit) || (mode === 'student' && canEdit && !submittedAt);
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 z-[80] flex items-center justify-center p-4">
@@ -627,22 +635,27 @@ const NoteEditorModal: React.FC<Props> = ({ open, onClose, authService, mode, no
               匯出PDF
             </button>
 
-            <button
-              type="button"
-              onClick={() => {
-                const editor = editorRef.current;
-                if (!editor) return;
-                const count = editor.getPages().length;
-                const p = editor.createPage({ name: `第${count + 1}頁` } as any);
-                editor.setCurrentPage(p.id);
-                const frameId = ensureA4FrameOnCurrentPage(editor);
-                const bounds = editor.getShapePageBounds(frameId as any);
-                if (bounds) editor.zoomToBounds(bounds, { immediate: true, inset: 64 } as any);
-              }}
-              className="px-3 py-2 rounded-2xl border-4 border-brand-brown bg-white text-brand-brown font-black shadow-comic hover:bg-gray-50 flex items-center gap-2"
-              disabled={loading || (!canEdit && mode !== 'student')}
-              title="新增一頁"
-            >
+	            <button
+	              type="button"
+	              onClick={() => {
+	                const editor = editorRef.current;
+	                if (!editor) return;
+	                const count = editor.getPages().length;
+	                const before = new Set(editor.getPages().map((p) => String(p.id)));
+	                editor.createPage({ name: `第${count + 1}頁` } as any);
+	                requestAnimationFrame(() => {
+	                  const after = editor.getPages();
+	                  const nextPage = after.find((p) => !before.has(String(p.id))) || after[after.length - 1];
+	                  if (nextPage) editor.setCurrentPage(nextPage.id);
+	                  const frameId = ensureA4FrameOnCurrentPage(editor);
+	                  const bounds = editor.getShapePageBounds(frameId as any);
+	                  if (bounds) editor.zoomToBounds(bounds, { immediate: true, inset: 64 } as any);
+	                });
+	              }}
+	              className="px-3 py-2 rounded-2xl border-4 border-brand-brown bg-white text-brand-brown font-black shadow-comic hover:bg-gray-50 flex items-center gap-2"
+	              disabled={loading || !canAddPage}
+	              title="新增一頁"
+	            >
               <Plus className="w-4 h-4" />
               加頁
             </button>
