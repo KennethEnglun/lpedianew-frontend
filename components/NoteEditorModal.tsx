@@ -910,6 +910,18 @@ const NoteEditorModal: React.FC<Props> = ({ open, onClose, authService, mode, no
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, canEdit, submittedAt, annotationMode]);
 
+  const activeTextTools = useMemo(() => {
+    if (!open) return { hasText: false, bold: false };
+    const canvas = fabricRef.current;
+    if (!canvas) return { hasText: false, bold: false };
+    const obj: any = canvas.getActiveObject();
+    if (!obj) return { hasText: false, bold: false };
+    const isText = obj.type === 'textbox' || obj.type === 'i-text' || obj.type === 'text';
+    if (!isText) return { hasText: false, bold: false };
+    const fw = String(obj.fontWeight || 'normal');
+    return { hasText: true, bold: fw === 'bold' || fw === '700' };
+  }, [activeTextColor, pageIndex, tool, annotationMode, selectionVersion]);
+
   if (!open) return null;
 
   const statusText =
@@ -924,17 +936,6 @@ const NoteEditorModal: React.FC<Props> = ({ open, onClose, authService, mode, no
         : '模板編輯';
 
   const showLegacyConvert = mode === 'template' && error.includes('舊版格式');
-
-  const activeTextTools = useMemo(() => {
-    const canvas = fabricRef.current;
-    if (!canvas) return { hasText: false, bold: false };
-    const obj: any = canvas.getActiveObject();
-    if (!obj) return { hasText: false, bold: false };
-    const isText = obj.type === 'textbox' || obj.type === 'i-text' || obj.type === 'text';
-    if (!isText) return { hasText: false, bold: false };
-    const fw = String(obj.fontWeight || 'normal');
-    return { hasText: true, bold: fw === 'bold' || fw === '700' };
-  }, [activeTextColor, pageIndex, tool, annotationMode, selectionVersion]);
 
   return (
     <div className={`fixed inset-0 bg-black bg-opacity-50 z-[80] flex items-center justify-center ${fullscreen ? 'p-0' : 'p-4'}`}>
