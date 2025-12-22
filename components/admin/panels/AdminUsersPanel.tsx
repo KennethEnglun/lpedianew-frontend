@@ -4,6 +4,36 @@ import Button from '../../Button';
 import Input from '../../Input';
 import type { AdminUser, UserRoleFilter } from '../types';
 
+const renderStudentGroups = (user: AdminUser) => {
+  const items = [
+    user.chineseGroup ? `中文：${user.chineseGroup}` : '',
+    user.englishGroup ? `英文：${user.englishGroup}` : '',
+    user.mathGroup ? `數學：${user.mathGroup}` : ''
+  ].filter(Boolean);
+  if (items.length === 0) return 'N/A';
+  return (
+    <div className="space-y-1">
+      {items.map((t) => <div key={t}>{t}</div>)}
+    </div>
+  );
+};
+
+const renderTeachingSummary = (user: AdminUser) => {
+  const subjectsTaught = Array.isArray(user.subjectsTaught) ? user.subjectsTaught : [];
+  const subjectClasses = user.subjectClasses && typeof user.subjectClasses === 'object' ? user.subjectClasses : {};
+  const subjects = subjectsTaught.length > 0 ? subjectsTaught : Object.keys(subjectClasses || {});
+  if (subjects.length === 0) return '（未設定）';
+  return (
+    <div className="space-y-1">
+      {subjects.map((s) => {
+        const classes = Array.isArray(subjectClasses?.[s]) ? subjectClasses[s] : [];
+        const label = classes.length > 0 ? classes.join('、') : '（未選班別）';
+        return <div key={s} className="break-words">{s}：{label}</div>;
+      })}
+    </div>
+  );
+};
+
 export default function AdminUsersPanel(props: {
   searchTerm: string;
   setSearchTerm: (v: string) => void;
@@ -103,7 +133,7 @@ export default function AdminUsersPanel(props: {
                 <th className="text-left py-3 px-4 font-bold text-gray-700">角色</th>
                 <th className="text-left py-3 px-4 font-bold text-gray-700">姓名</th>
                 <th className="text-left py-3 px-4 font-bold text-gray-700">班級</th>
-                <th className="text-left py-3 px-4 font-bold text-gray-700">分組情況</th>
+                <th className="text-left py-3 px-4 font-bold text-gray-700">分組 / 任教</th>
                 <th className="text-left py-3 px-4 font-bold text-gray-700">最後登入</th>
                 <th className="text-left py-3 px-4 font-bold text-gray-700">狀態</th>
                 <th className="text-left py-3 px-4 font-bold text-gray-700">操作</th>
@@ -127,14 +157,7 @@ export default function AdminUsersPanel(props: {
                   <td className="py-3 px-4 font-bold">{user.name}</td>
                   <td className="py-3 px-4">{user.class || 'N/A'}</td>
                   <td className="py-3 px-4 text-sm">
-                    {user.role === 'student' ? (
-                      <div className="space-y-1">
-                        {user.chineseGroup && <div>中文: {user.chineseGroup}</div>}
-                        {user.englishGroup && <div>英文: {user.englishGroup}</div>}
-                        {user.mathGroup && <div>數學: {user.mathGroup}</div>}
-                        {!user.chineseGroup && !user.englishGroup && !user.mathGroup && 'N/A'}
-                      </div>
-                    ) : 'N/A'}
+                    {user.role === 'student' ? renderStudentGroups(user) : renderTeachingSummary(user)}
                   </td>
                   <td className="py-3 px-4 text-sm text-gray-600">{user.lastLogin || '從未登入'}</td>
                   <td className="py-3 px-4">
@@ -191,4 +214,3 @@ export default function AdminUsersPanel(props: {
     </div>
   );
 }
-

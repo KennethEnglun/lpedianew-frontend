@@ -96,7 +96,9 @@ const AdminDashboard: React.FC = () => {
         isActive: user.isActive,
         chineseGroup: user.profile.chineseGroup,
         englishGroup: user.profile.englishGroup,
-        mathGroup: user.profile.mathGroup
+        mathGroup: user.profile.mathGroup,
+        subjectsTaught: Array.isArray((user.profile as any)?.subjectsTaught) ? (user.profile as any).subjectsTaught : undefined,
+        subjectClasses: (user.profile as any)?.subjectClasses && typeof (user.profile as any).subjectClasses === 'object' ? (user.profile as any).subjectClasses : undefined
       }));
 
       setUsers(adminUsers);

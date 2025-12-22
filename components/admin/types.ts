@@ -17,7 +17,8 @@ export interface AdminUser {
   chineseGroup?: string;
   englishGroup?: string;
   mathGroup?: string;
+  subjectsTaught?: string[];
+  subjectClasses?: Record<string, string[]>;
 }
 
 export type SidebarItem = { key: AdminSection; label: string; icon: React.ReactNode };
-
