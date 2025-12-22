@@ -2595,16 +2595,26 @@ const TeacherDashboard: React.FC = () => {
                 >
                   學生進度
                 </Button>
-	                <Button
-	                  fullWidth
-	                  className="bg-[#C0E2BE] hover:bg-[#A9D8A7]"
-	                  onClick={() => {
-	                    openAssignmentManagement();
+                <Button
+                  fullWidth
+                  className="bg-[#C0E2BE] hover:bg-[#A9D8A7]"
+                  onClick={() => {
+                    openAssignmentManagement();
 	                    closeSidebar();
 	                  }}
 	                >
 	                  作業管理
 	                </Button>
+                <Button
+                  fullWidth
+                  className="bg-[#D2EFFF] hover:bg-[#BCE0FF]"
+                  onClick={() => {
+                    setShowTemplateLibrary(true);
+                    closeSidebar();
+                  }}
+                >
+                  教師資料夾
+                </Button>
 	                <Button
 	                  fullWidth
 	                  className="bg-[#D2EFFF] hover:bg-[#BCE0FF] flex items-center justify-center gap-2"
@@ -2737,9 +2747,16 @@ const TeacherDashboard: React.FC = () => {
           >
             學生進度
           </Button>
-	          <Button fullWidth className="bg-[#C0E2BE] hover:bg-[#A9D8A7] text-lg" onClick={openAssignmentManagement}>
-	            作業管理
-	          </Button>
+          <Button fullWidth className="bg-[#C0E2BE] hover:bg-[#A9D8A7] text-lg" onClick={openAssignmentManagement}>
+            作業管理
+          </Button>
+          <Button
+            fullWidth
+            className="bg-[#D2EFFF] hover:bg-[#BCE0FF] text-lg"
+            onClick={() => setShowTemplateLibrary(true)}
+          >
+            教師資料夾
+          </Button>
 	          <Button
 	            fullWidth
 	            className="bg-[#D2EFFF] hover:bg-[#BCE0FF] text-lg flex items-center justify-center gap-2"

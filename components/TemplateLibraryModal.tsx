@@ -198,7 +198,7 @@ const TemplateLibraryModal: React.FC<Props> = ({ open, onClose, authService, use
       <div className="bg-white border-4 border-brand-brown rounded-3xl w-full max-w-6xl max-h-[90vh] overflow-y-auto shadow-comic">
         <div className="p-6 border-b-4 border-brand-brown bg-[#C0E2BE] flex items-center justify-between">
           <div>
-            <div className="text-3xl font-black text-brand-brown">題目庫（模板）</div>
+            <div className="text-3xl font-black text-brand-brown">教師資料夾（模板）</div>
             <div className="text-sm text-brand-brown/80 font-bold">按年級 + folder 整理；共用模板可直接派送但不可改（要改先複製）</div>
           </div>
           <button

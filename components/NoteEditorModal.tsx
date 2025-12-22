@@ -499,6 +499,13 @@ const NoteEditorModal: React.FC<Props> = ({ open, onClose, authService, mode, no
         o.visible = true;
         o.selectable = false;
         o.evented = false;
+        (o as any).hasControls = false;
+        (o as any).hasBorders = false;
+        (o as any).lockMovementX = true;
+        (o as any).lockMovementY = true;
+        (o as any).lockScalingX = true;
+        (o as any).lockScalingY = true;
+        (o as any).lockRotation = true;
         continue;
       }
       const locked = Boolean((o as any).lpediaLocked);
@@ -517,9 +524,23 @@ const NoteEditorModal: React.FC<Props> = ({ open, onClose, authService, mode, no
         if (locked) {
           o.selectable = false;
           o.evented = false;
+          (o as any).hasControls = false;
+          (o as any).hasBorders = false;
+          (o as any).lockMovementX = true;
+          (o as any).lockMovementY = true;
+          (o as any).lockScalingX = true;
+          (o as any).lockScalingY = true;
+          (o as any).lockRotation = true;
         } else {
           o.selectable = true;
           o.evented = true;
+          (o as any).hasControls = true;
+          (o as any).hasBorders = true;
+          (o as any).lockMovementX = false;
+          (o as any).lockMovementY = false;
+          (o as any).lockScalingX = false;
+          (o as any).lockScalingY = false;
+          (o as any).lockRotation = false;
         }
         continue;
       }
@@ -527,6 +548,14 @@ const NoteEditorModal: React.FC<Props> = ({ open, onClose, authService, mode, no
       // template
       o.selectable = true;
       o.evented = true;
+      (o as any).hasBorders = true;
+      (o as any).hasControls = !locked;
+      (o as any).lockMovementX = locked;
+      (o as any).lockMovementY = locked;
+      (o as any).lockScalingX = locked;
+      (o as any).lockScalingY = locked;
+      (o as any).lockRotation = locked;
+      o.opacity = locked ? 0.95 : 1;
     }
   };
 
@@ -944,8 +973,16 @@ const NoteEditorModal: React.FC<Props> = ({ open, onClose, authService, mode, no
     if (objs.length === 0) return alert('請先選擇要鎖定的物件');
     const willLock = objs.some((o) => !(o as any).lpediaLocked);
     for (const o of objs) {
+      if ((o as any).lpediaPaper) continue;
       (o as any).lpediaLocked = willLock;
       o.opacity = willLock ? 0.95 : 1;
+      (o as any).lockMovementX = willLock;
+      (o as any).lockMovementY = willLock;
+      (o as any).lockScalingX = willLock;
+      (o as any).lockScalingY = willLock;
+      (o as any).lockRotation = willLock;
+      (o as any).hasControls = !willLock;
+      (o as any).hasBorders = true;
     }
     applyPermissionsToObjects(canvas);
     canvas.requestRenderAll();
