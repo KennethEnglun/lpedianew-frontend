@@ -221,7 +221,9 @@ const canvasMoveToIndex = (canvas: fabric.Canvas, obj: fabric.Object, index: num
 };
 
 const getPaperObjects = (canvas: fabric.Canvas) =>
-  canvas.getObjects().filter((o) => Boolean((o as any).lpediaPaper)) as fabric.Object[];
+  canvas
+    .getObjects()
+    .filter((o) => Boolean((o as any).lpediaPaper) || String((o as any).lpediaLayer || '') === 'paper') as fabric.Object[];
 
 const normalizePaperZOrder = (canvas: fabric.Canvas) => {
   const papers = getPaperObjects(canvas);
@@ -244,16 +246,43 @@ const bringToFrontCompat = (canvas: fabric.Canvas, obj: fabric.Object) => {
 };
 
 const ensurePaperPages = (canvas: fabric.Canvas, pageW: number, pageH: number, pageCount: number) => {
-  const existing = getPaperObjects(canvas);
-  const byPage = new Map<number, fabric.Rect>();
+  const near = (a: number, b: number, tol: number) => Number.isFinite(a) && Number.isFinite(b) && Math.abs(a - b) <= tol;
+  const isPaperRectLike = (o: any) => {
+    if (!o || typeof o !== 'object') return false;
+    if (o.lpediaPaper) return true;
+    if (String(o.lpediaLayer || '') === 'paper') return true;
+    if (String(o.type || '') !== 'rect') return false;
+    const fill = String(o.fill || '').toLowerCase();
+    const stroke = String(o.stroke || '').toLowerCase();
+    const w = Number(o.width);
+    const h = Number(o.height);
+    const left = Number(o.left);
+    const top = Number(o.top);
+    const scaleX = Number(o.scaleX ?? 1);
+    const scaleY = Number(o.scaleY ?? 1);
+    const effW = Number.isFinite(w) && Number.isFinite(scaleX) ? w * scaleX : w;
+    const effH = Number.isFinite(h) && Number.isFinite(scaleY) ? h * scaleY : h;
+    const fillOk = fill === '#fff' || fill === '#ffffff' || fill === 'white';
+    const strokeOk = stroke === '#d1d5db' || stroke.includes('209') || stroke === 'rgb(209,213,219)';
+    const sizeOk = near(effW, pageW, 6) && near(effH, pageH, 6);
+    const leftOk = near(left, 0, 6);
+    if (!(fillOk && strokeOk && sizeOk && leftOk)) return false;
+    // Top must match a page position (stacked layout)
+    for (let i = 0; i < pageCount; i += 1) {
+      if (near(top, getPageOffsetY(i, pageH), 8)) return true;
+    }
+    return false;
+  };
+
+  // Always remove any existing paper-like rects (prevents duplicates growing on addPage)
+  const existing = canvas.getObjects().slice();
   for (const o of existing) {
-    const idx = Number((o as any).lpediaPageIndex);
-    if (Number.isFinite(idx)) byPage.set(idx, o as any);
+    if (isPaperRectLike(o as any)) canvas.remove(o);
   }
 
   for (let i = 0; i < pageCount; i += 1) {
     const top = getPageOffsetY(i, pageH);
-    const rect = byPage.get(i) || new fabric.Rect({
+    const rect = new fabric.Rect({
       left: 0,
       top,
       width: pageW,
@@ -267,18 +296,19 @@ const ensurePaperPages = (canvas: fabric.Canvas, pageW: number, pageH: number, p
       hasBorders: false,
       hoverCursor: 'default'
     });
-    rect.set({ left: 0, top, width: pageW, height: pageH, visible: true });
     (rect as any).lpediaPaper = true;
     (rect as any).lpediaLocked = true;
     (rect as any).lpediaLayer = 'paper';
     (rect as any).lpediaPageIndex = i;
-    if (!byPage.get(i)) canvas.add(rect);
-  }
-
-  // Remove extra paper rects (e.g. pages removed)
-  for (const o of existing) {
-    const idx = Number((o as any).lpediaPageIndex);
-    if (!Number.isFinite(idx) || idx < 0 || idx >= pageCount) canvas.remove(o);
+    rect.set({
+      selectable: false,
+      evented: false,
+      hasControls: false,
+      hasBorders: false,
+      lockMovementX: true,
+      lockMovementY: true
+    } as any);
+    canvas.add(rect);
   }
 
   normalizePaperZOrder(canvas);
