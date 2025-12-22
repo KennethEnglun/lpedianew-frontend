@@ -11,6 +11,7 @@ import {
   MousePointer2,
   Pencil,
   Plus,
+  RotateCw,
   Save,
   Send,
   Sparkles,
@@ -37,14 +38,24 @@ type Props = {
   onPublished?: () => void;
 };
 
-const A4_W = 595;
-const A4_H = 842;
+const A4_PORTRAIT_W = 595;
+const A4_PORTRAIT_H = 842;
+
+type PageOrientation = 'portrait' | 'landscape';
+
+const getA4Size = (orientation: PageOrientation) => {
+  if (orientation === 'landscape') return { w: A4_PORTRAIT_H, h: A4_PORTRAIT_W };
+  return { w: A4_PORTRAIT_W, h: A4_PORTRAIT_H };
+};
 const LOCAL_KEY_PREFIX = 'lpedia_note_draft_v2_fabric';
 const buildLocalKey = (noteId: string, userId: string) => `${LOCAL_KEY_PREFIX}:${noteId}:${userId}`;
 
 type FabricDocSnapshot = {
   format: 'fabric-v1';
   version: 1;
+  page?: {
+    orientation?: PageOrientation;
+  };
   currentPage: number;
   pages: any[]; // Fabric canvas JSON
 };
@@ -69,17 +80,27 @@ const emptyPage = (): any => ({
 const emptyDoc = (): FabricDocSnapshot => ({
   format: 'fabric-v1',
   version: 1,
+  page: { orientation: 'portrait' },
   currentPage: 0,
   pages: [emptyPage()]
 });
 
 const normalizeDoc = (snap: any): FabricDocSnapshot => {
   if (isFabricDocSnapshot(snap)) {
+    const orientation: PageOrientation = snap?.page?.orientation === 'landscape' ? 'landscape' : 'portrait';
     const pages = snap.pages.length > 0 ? snap.pages : [emptyPage()];
     const currentPage = Math.min(Math.max(0, snap.currentPage ?? 0), pages.length - 1);
-    return { format: 'fabric-v1', version: 1, currentPage, pages };
+    return { format: 'fabric-v1', version: 1, page: { orientation }, currentPage, pages };
   }
   return emptyDoc();
+};
+
+const isBlankDocSnapshot = (snap: any) => {
+  if (!isFabricDocSnapshot(snap)) return false;
+  return snap.pages.every((p) => {
+    const objs = Array.isArray((p as any)?.objects) ? (p as any).objects : [];
+    return objs.length === 0;
+  });
 };
 
 const toDataUrl = (file: File) =>
@@ -122,35 +143,37 @@ const toggleNumberedList = (text: string) => {
     .join('\n');
 };
 
-const fitPaperToContainer = (canvas: fabric.Canvas, container: HTMLDivElement) => {
+const fitPaperToContainer = (canvas: fabric.Canvas, container: HTMLDivElement, pageW: number, pageH: number) => {
   const w = Math.max(1, container.clientWidth);
   const h = Math.max(1, container.clientHeight);
   canvas.setWidth(w);
   canvas.setHeight(h);
   const padding = 48;
-  const scale = Math.min((w - padding * 2) / A4_W, (h - padding * 2) / A4_H);
+  const scale = Math.min((w - padding * 2) / pageW, (h - padding * 2) / pageH);
   const s = Number.isFinite(scale) && scale > 0 ? Math.min(scale, 2) : 1;
-  const tx = (w - A4_W * s) / 2;
-  const ty = (h - A4_H * s) / 2;
+  const tx = (w - pageW * s) / 2;
+  const ty = (h - pageH * s) / 2;
   canvas.setViewportTransform([s, 0, 0, s, tx, ty]);
   canvas.requestRenderAll();
 };
 
 const exportPdfFromDoc = async (doc: FabricDocSnapshot) => {
+  const orientation: PageOrientation = doc?.page?.orientation === 'landscape' ? 'landscape' : 'portrait';
+  const { w: pageW, h: pageH } = getA4Size(orientation);
   const pdf = await PDFDocument.create();
   for (const pageJson of doc.pages) {
     const canvasEl = document.createElement('canvas');
-    canvasEl.width = A4_W;
-    canvasEl.height = A4_H;
-    const sc = new fabric.StaticCanvas(canvasEl as any, { width: A4_W, height: A4_H });
+    canvasEl.width = pageW;
+    canvasEl.height = pageH;
+    const sc = new fabric.StaticCanvas(canvasEl as any, { width: pageW, height: pageH });
     sc.backgroundColor = '#ffffff';
     await withTimeout(sc.loadFromJSON(pageJson), 15000, 'PDF 匯出時載入頁面超時');
     sc.renderAll();
     const dataUrl = sc.toDataURL({ format: 'png', multiplier: 2 });
     const bytes = Uint8Array.from(atob(dataUrl.split(',')[1] || ''), (c) => c.charCodeAt(0));
     const png = await pdf.embedPng(bytes);
-    const page = pdf.addPage([A4_W, A4_H]);
-    page.drawImage(png, { x: 0, y: 0, width: A4_W, height: A4_H });
+    const page = pdf.addPage([pageW, pageH]);
+    page.drawImage(png, { x: 0, y: 0, width: pageW, height: pageH });
     sc.dispose();
   }
   const out = await pdf.save();
@@ -181,7 +204,12 @@ const withTimeout = async <T,>(promise: Promise<T>, ms: number, message: string,
   }
 };
 
-const insertMindmap = (canvas: fabric.Canvas, mindmap: { nodes: Array<{ id: string; label: string }>; edges: Array<{ from: string; to: string; label?: string }> }) => {
+const insertMindmap = (
+  canvas: fabric.Canvas,
+  mindmap: { nodes: Array<{ id: string; label: string }>; edges: Array<{ from: string; to: string; label?: string }> },
+  pageW: number,
+  pageH: number
+) => {
   const nodes = Array.isArray(mindmap?.nodes) ? mindmap.nodes : [];
   const edges = Array.isArray(mindmap?.edges) ? mindmap.edges : [];
   if (nodes.length === 0) return;
@@ -255,6 +283,7 @@ const NoteEditorModal: React.FC<Props> = ({ open, onClose, authService, mode, no
   const [tool, setTool] = useState<'select' | 'pen'>('select');
   const [pageIndex, setPageIndex] = useState(0);
   const [pageCount, setPageCount] = useState(1);
+  const [pageOrientation, setPageOrientation] = useState<PageOrientation>('portrait');
   const [activeTextColor, setActiveTextColor] = useState('#111827');
   const [docLoadedToken, setDocLoadedToken] = useState(0);
   const [selectionVersion, setSelectionVersion] = useState(0);
@@ -269,11 +298,24 @@ const NoteEditorModal: React.FC<Props> = ({ open, onClose, authService, mode, no
   const annotationDocRef = useRef<FabricDocSnapshot | null>(null);
   const pendingImgAbortRef = useRef<AbortController | null>(null);
   const pendingLoadAbortRef = useRef<AbortController | null>(null);
+  const pageSizeRef = useRef(getA4Size('portrait'));
+
+  const latestStateRef = useRef({
+    open,
+    mode,
+    canEdit,
+    submittedAt,
+    annotationMode,
+    canTemplateEdit: false
+  });
 
   const canTemplateEdit = mode === 'template' && canEdit;
   const canAddPage = (mode === 'template' && canEdit) || (mode === 'student' && canEdit && !submittedAt);
   const canSubmit = mode === 'student' && canEdit && !submittedAt;
   const canAnnotate = mode === 'teacher' && (viewerRole === 'teacher' || viewerRole === 'admin');
+
+  pageSizeRef.current = getA4Size(pageOrientation);
+  latestStateRef.current = { open, mode, canEdit, submittedAt, annotationMode, canTemplateEdit };
 
   const applyPermissionsToObjects = (canvas: fabric.Canvas) => {
     const objs = canvas.getObjects();
@@ -352,6 +394,7 @@ const NoteEditorModal: React.FC<Props> = ({ open, onClose, authService, mode, no
     const canvas = fabricRef.current;
     const container = containerRef.current;
     if (!canvas || !container) return;
+    const { w: pageW, h: pageH } = pageSizeRef.current;
     const next = Math.min(Math.max(0, idx), docRef.current.pages.length - 1);
     if (pendingLoadAbortRef.current) pendingLoadAbortRef.current.abort();
     const loadAbort = new AbortController();
@@ -388,7 +431,7 @@ const NoteEditorModal: React.FC<Props> = ({ open, onClose, authService, mode, no
 
       await withTimeout(canvas.loadFromJSON(pageJson, undefined, { signal: loadAbort.signal } as any), 15000, '載入頁面超時', () => loadAbort.abort());
       applyPermissionsToObjects(canvas);
-      fitPaperToContainer(canvas, container);
+      fitPaperToContainer(canvas, container, pageW, pageH);
       canvas.discardActiveObject();
       canvas.requestRenderAll();
       setError('');
@@ -407,6 +450,7 @@ const NoteEditorModal: React.FC<Props> = ({ open, onClose, authService, mode, no
     annotationDocRef.current = null;
     setPageIndex(0);
     setPageCount(1);
+    setPageOrientation('portrait');
     await loadPage(0);
     setError('');
   };
@@ -420,6 +464,23 @@ const NoteEditorModal: React.FC<Props> = ({ open, onClose, authService, mode, no
     setPageCount(docRef.current.pages.length);
     await loadPage(next);
     await scheduleStudentSave();
+  };
+
+  const canChangePageOrientation =
+    (mode === 'template' && canTemplateEdit) || (mode === 'student' && canEdit && !submittedAt);
+
+  const togglePageOrientation = () => {
+    if (!canChangePageOrientation) return;
+    const next: PageOrientation = pageOrientation === 'portrait' ? 'landscape' : 'portrait';
+    docRef.current.page = { ...(docRef.current.page || {}), orientation: next };
+    setPageOrientation(next);
+    const canvas = fabricRef.current;
+    const container = containerRef.current;
+    if (canvas && container) {
+      const { w: pageW, h: pageH } = getA4Size(next);
+      fitPaperToContainer(canvas, container, pageW, pageH);
+      canvas.requestRenderAll();
+    }
   };
 
   const insertTextBox = () => {
@@ -628,7 +689,20 @@ const NoteEditorModal: React.FC<Props> = ({ open, onClose, authService, mode, no
       const local = (await idbGet(buildLocalKey(noteId, viewerId)).catch(() => null)) as any;
       const serverSnap = server?.submission?.snapshot;
       const localSnap = local?.snapshot;
-      const chosen = localSnap || serverSnap;
+      const localSavedAt = Date.parse(String(local?.savedAt || ''));
+      const serverUpdatedAt = Date.parse(String(server?.submission?.updatedAt || ''));
+      let chosen = serverSnap;
+      if (localSnap && !serverSnap) chosen = localSnap;
+      else if (localSnap && serverSnap) {
+        if (isBlankDocSnapshot(localSnap) && !isBlankDocSnapshot(serverSnap)) {
+          chosen = serverSnap;
+        } else
+        if (Number.isFinite(localSavedAt) && Number.isFinite(serverUpdatedAt)) {
+          chosen = localSavedAt >= serverUpdatedAt ? localSnap : serverSnap;
+        } else {
+          chosen = serverSnap;
+        }
+      }
 
       if (looksLikeLegacyTldrawSnapshot(chosen)) {
         docRef.current = emptyDoc();
@@ -640,6 +714,7 @@ const NoteEditorModal: React.FC<Props> = ({ open, onClose, authService, mode, no
       setSubmittedAt(server?.submission?.submittedAt || null);
       setNoteTitle(String(server?.note?.title || '筆記'));
       setCanEdit(!server?.submission?.submittedAt);
+      setPageOrientation(docRef.current?.page?.orientation === 'landscape' ? 'landscape' : 'portrait');
       setPageIndex(docRef.current.currentPage);
       setPageCount(docRef.current.pages.length);
       setDocLoadedToken(Date.now());
@@ -665,6 +740,7 @@ const NoteEditorModal: React.FC<Props> = ({ open, onClose, authService, mode, no
       } else {
         docRef.current = normalizeDoc(snap);
       }
+      setPageOrientation(docRef.current?.page?.orientation === 'landscape' ? 'landscape' : 'portrait');
       setPageIndex(docRef.current.currentPage);
       setPageCount(docRef.current.pages.length);
       setDocLoadedToken(Date.now());
@@ -695,6 +771,7 @@ const NoteEditorModal: React.FC<Props> = ({ open, onClose, authService, mode, no
       const aligned: FabricDocSnapshot = {
         format: 'fabric-v1',
         version: 1,
+        page: { orientation: docRef.current?.page?.orientation === 'landscape' ? 'landscape' : 'portrait' },
         currentPage: docRef.current.currentPage,
         pages: docRef.current.pages.map((_, idx) => annDoc.pages[idx] || emptyPage())
       };
@@ -704,6 +781,7 @@ const NoteEditorModal: React.FC<Props> = ({ open, onClose, authService, mode, no
       setCanEdit(true);
       setAnnotationMode(false);
       setAnnotationsVisible(true);
+      setPageOrientation(docRef.current?.page?.orientation === 'landscape' ? 'landscape' : 'portrait');
       setPageIndex(docRef.current.currentPage);
       setPageCount(docRef.current.pages.length);
       setDocLoadedToken(Date.now());
@@ -753,28 +831,33 @@ const NoteEditorModal: React.FC<Props> = ({ open, onClose, authService, mode, no
     const drawPaper = () => {
       const ctx = canvas.getContext();
       if (!ctx) return;
+      const { w: pageW, h: pageH } = pageSizeRef.current;
       const v = canvas.viewportTransform || [1, 0, 0, 1, 0, 0];
       const s = v[0] || 1;
       ctx.save();
       ctx.setTransform(v[0], v[1], v[2], v[3], v[4], v[5]);
       ctx.fillStyle = '#ffffff';
-      ctx.fillRect(0, 0, A4_W, A4_H);
+      ctx.fillRect(0, 0, pageW, pageH);
       ctx.strokeStyle = '#d1d5db';
       ctx.lineWidth = 2 / s;
-      ctx.strokeRect(0, 0, A4_W, A4_H);
+      ctx.strokeRect(0, 0, pageW, pageH);
       ctx.restore();
     };
     canvas.on('before:render', drawPaper);
 
-    const onResize = () => fitPaperToContainer(canvas, container);
+    const onResize = () => {
+      const { w: pageW, h: pageH } = pageSizeRef.current;
+      fitPaperToContainer(canvas, container, pageW, pageH);
+    };
     window.addEventListener('resize', onResize);
     onResize();
 
     const allowEdit = () => {
-      if (!canEdit) return false;
-      if (mode === 'student' && submittedAt) return false;
-      if (mode === 'teacher' && !annotationMode) return false;
-      if (mode === 'template' && !canTemplateEdit) return false;
+      const st = latestStateRef.current;
+      if (!st.canEdit) return false;
+      if (st.mode === 'student' && st.submittedAt) return false;
+      if (st.mode === 'teacher' && !st.annotationMode) return false;
+      if (st.mode === 'template' && !st.canTemplateEdit) return false;
       return true;
     };
 
@@ -797,7 +880,7 @@ const NoteEditorModal: React.FC<Props> = ({ open, onClose, authService, mode, no
     setDrawingMode();
 
     const markNewObjectLayer = (obj: fabric.Object) => {
-      if (mode === 'teacher') {
+      if (latestStateRef.current.mode === 'teacher') {
         (obj as any).lpediaLayer = 'annotation';
       } else {
         (obj as any).lpediaLayer = 'base';
@@ -867,7 +950,8 @@ const NoteEditorModal: React.FC<Props> = ({ open, onClose, authService, mode, no
     const canvas = fabricRef.current;
     const container = containerRef.current;
     if (!canvas || !container) return;
-    fitPaperToContainer(canvas, container);
+    const { w: pageW, h: pageH } = pageSizeRef.current;
+    fitPaperToContainer(canvas, container, pageW, pageH);
     applyPermissionsToObjects(canvas);
     const allowEdit =
       canEdit &&
@@ -938,7 +1022,7 @@ const NoteEditorModal: React.FC<Props> = ({ open, onClose, authService, mode, no
           ? '自動保存中'
           : '離線模式（只保存到本機）'
       : mode === 'teacher'
-        ? '查看 / 批註'
+        ? '查看 / 批改'
         : '模板編輯';
 
   const showLegacyConvert = mode === 'template' && error.includes('舊版格式');
@@ -978,6 +1062,17 @@ const NoteEditorModal: React.FC<Props> = ({ open, onClose, authService, mode, no
             >
               {fullscreen ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
               {fullscreen ? '退出全螢幕' : '全螢幕'}
+            </button>
+
+            <button
+              type="button"
+              onClick={togglePageOrientation}
+              className="px-3 py-2 rounded-2xl border-4 border-brand-brown bg-white text-brand-brown font-black shadow-comic hover:bg-gray-50 flex items-center gap-2"
+              disabled={loading || !canChangePageOrientation}
+              title="切換紙張方向"
+            >
+              <RotateCw className="w-4 h-4" />
+              {pageOrientation === 'portrait' ? '橫放' : '直放'}
             </button>
 
             <div className="px-3 py-2 rounded-2xl border-4 border-brand-brown bg-white text-brand-brown font-black shadow-comic flex items-center gap-2">
@@ -1134,7 +1229,8 @@ const NoteEditorModal: React.FC<Props> = ({ open, onClose, authService, mode, no
                     setError('');
                     try {
                       const resp = await authService.generateMindmap({ prompt: prompt.trim() });
-                      insertMindmap(canvas, resp);
+                      const { w: pageW, h: pageH } = pageSizeRef.current;
+                      insertMindmap(canvas, resp, pageW, pageH);
                       await scheduleStudentSave();
                     } catch (e: any) {
                       setError(e?.message || '生成失敗');
@@ -1235,9 +1331,9 @@ const NoteEditorModal: React.FC<Props> = ({ open, onClose, authService, mode, no
                   onClick={() => setAnnotationsVisible((v) => !v)}
                   className="px-3 py-2 rounded-2xl border-4 border-brand-brown bg-white text-brand-brown font-black shadow-comic hover:bg-gray-50 flex items-center gap-2"
                   disabled={loading || !canAnnotate}
-                  title="顯示/隱藏批註層"
+                  title="顯示/隱藏批改層"
                 >
-                  {annotationsVisible ? '隱藏批註' : '顯示批註'}
+                  {annotationsVisible ? '隱藏批改' : '顯示批改'}
                 </button>
                 <button
                   type="button"
@@ -1247,10 +1343,10 @@ const NoteEditorModal: React.FC<Props> = ({ open, onClose, authService, mode, no
                   }}
                   className="px-3 py-2 rounded-2xl border-4 border-brand-brown bg-white text-brand-brown font-black shadow-comic hover:bg-gray-50 flex items-center gap-2"
                   disabled={loading || !canAnnotate}
-                  title="批註模式（只會保存批註層，不會改動學生內容）"
+                  title="批改模式（只會保存批改層，不會改動學生內容）"
                 >
                   <Lock className="w-4 h-4" />
-                  {annotationMode ? '退出批註' : '批註模式'}
+                  {annotationMode ? '退出批改' : '批改模式'}
                 </button>
                 <button
                   type="button"
@@ -1273,7 +1369,7 @@ const NoteEditorModal: React.FC<Props> = ({ open, onClose, authService, mode, no
 	                    }
 	                    saveCurrentAnnotationsToRef();
 	                    await authService.saveNoteAnnotations(noteId, sid, annotationDocRef.current);
-	                    alert('已保存批註');
+	                    alert('已保存批改');
 	                    setAnnotationMode(false);
 	                  } catch (e: any) {
                       setError(e?.message || '保存失敗');
@@ -1285,7 +1381,7 @@ const NoteEditorModal: React.FC<Props> = ({ open, onClose, authService, mode, no
                   disabled={loading || !canAnnotate}
                 >
                   <Save className="w-4 h-4" />
-                  保存批註
+                  保存批改
                 </button>
               </>
             )}
