@@ -167,11 +167,42 @@ const fitPaperToContainer = (canvas: fabric.Canvas, container: HTMLDivElement, p
   canvas.requestRenderAll();
 };
 
+const canvasMoveToIndex = (canvas: fabric.Canvas, obj: fabric.Object, index: number) => {
+  const c: any = canvas as any;
+  if (typeof c.moveObjectTo === 'function') return c.moveObjectTo(obj, index);
+  if (typeof c.moveTo === 'function') return c.moveTo(obj, index);
+  const o: any = obj as any;
+  if (typeof o.moveTo === 'function') return o.moveTo(index);
+};
+
+const getPaperObject = (canvas: fabric.Canvas) =>
+  canvas.getObjects().find((o) => Boolean((o as any).lpediaPaper)) as fabric.Object | undefined;
+
+const sendToBackAbovePaper = (canvas: fabric.Canvas, obj: fabric.Object) => {
+  const paper = getPaperObject(canvas);
+  if (!paper) {
+    const c: any = canvas as any;
+    if (typeof c.sendObjectToBack === 'function') return c.sendObjectToBack(obj);
+    if (typeof c.sendToBack === 'function') return c.sendToBack(obj);
+    return canvasMoveToIndex(canvas, obj, 0);
+  }
+  canvasMoveToIndex(canvas, paper, 0);
+  canvasMoveToIndex(canvas, obj, 1);
+  canvasMoveToIndex(canvas, paper, 0);
+};
+
+const bringToFrontCompat = (canvas: fabric.Canvas, obj: fabric.Object) => {
+  const c: any = canvas as any;
+  if (typeof c.bringObjectToFront === 'function') return c.bringObjectToFront(obj);
+  if (typeof c.bringToFront === 'function') return c.bringToFront(obj);
+  return canvasMoveToIndex(canvas, obj, canvas.getObjects().length - 1);
+};
+
 const ensurePaperRect = (canvas: fabric.Canvas, pageW: number, pageH: number) => {
   const existing = canvas.getObjects().find((o) => Boolean((o as any).lpediaPaper)) as fabric.Rect | undefined;
   if (existing) {
     existing.set({ left: 0, top: 0, width: pageW, height: pageH, visible: true });
-    canvas.sendToBack(existing);
+    canvasMoveToIndex(canvas, existing, 0);
     return existing;
   }
   const rect = new fabric.Rect({
@@ -192,7 +223,7 @@ const ensurePaperRect = (canvas: fabric.Canvas, pageW: number, pageH: number) =>
   (rect as any).lpediaLocked = true;
   (rect as any).lpediaLayer = 'paper';
   canvas.add(rect);
-  canvas.sendToBack(rect);
+  canvasMoveToIndex(canvas, rect, 0);
   return rect;
 };
 
@@ -284,7 +315,7 @@ const insertMindmap = (
     );
     (line as any).lpediaLayer = 'base';
     canvas.add(line);
-    canvas.sendToBack(line);
+    sendToBackAbovePaper(canvas, line);
   });
 
   nodes.forEach((n) => {
@@ -679,7 +710,7 @@ const NoteEditorModal: React.FC<Props> = ({ open, onClose, authService, mode, no
     if (mode === 'student' && (locked || submittedAt)) return;
     if (mode === 'template' && !canTemplateEdit) return;
     if (mode === 'teacher' && (!annotationMode || layer !== 'annotation')) return;
-    canvas.bringToFront(obj);
+    bringToFrontCompat(canvas, obj);
     canvas.requestRenderAll();
     setLayersVersion((v) => v + 1);
     void scheduleStudentSave();
@@ -695,7 +726,7 @@ const NoteEditorModal: React.FC<Props> = ({ open, onClose, authService, mode, no
     if (mode === 'student' && (locked || submittedAt)) return;
     if (mode === 'template' && !canTemplateEdit) return;
     if (mode === 'teacher' && (!annotationMode || layer !== 'annotation')) return;
-    canvas.sendToBack(obj);
+    sendToBackAbovePaper(canvas, obj);
     canvas.requestRenderAll();
     setLayersVersion((v) => v + 1);
     void scheduleStudentSave();
