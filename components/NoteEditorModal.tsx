@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { FileDown, Lock, Plus, Sparkles, Save, Send, X } from 'lucide-react';
+import { FileDown, Lock, Maximize2, Minimize2, Plus, Sparkles, Save, Send, X } from 'lucide-react';
 import { PDFDocument } from 'pdf-lib';
 import { get as idbGet, set as idbSet } from 'idb-keyval';
 import {
@@ -227,6 +227,7 @@ const NoteEditorModal: React.FC<Props> = ({ open, onClose, authService, mode, no
   const [noteTitle, setNoteTitle] = useState('筆記');
   const [submittedAt, setSubmittedAt] = useState<string | null>(null);
   const [canEdit, setCanEdit] = useState(true);
+  const [fullscreen, setFullscreen] = useState(false);
   const [annotationMode, setAnnotationMode] = useState(false);
   const [annotationsVisible, setAnnotationsVisible] = useState(true);
   const [teacherAnnotations, setTeacherAnnotations] = useState<any | null>(null);
@@ -420,19 +421,20 @@ const NoteEditorModal: React.FC<Props> = ({ open, onClose, authService, mode, no
     }
   };
 
-  useEffect(() => {
-    if (!open) return;
-    editorRef.current = null;
-    lockedTemplateIdsRef.current = new Set();
-    baseShapeIdsRef.current = new Set();
-    annotationShapeIdsRef.current = new Set();
-    setSubmittedAt(null);
-    setCanEdit(true);
-    setAnnotationMode(false);
-    setAnnotationsVisible(true);
-    setTeacherAnnotations(null);
-    setError('');
-    if (mode === 'student') void loadForStudent();
+	  useEffect(() => {
+	    if (!open) return;
+	    editorRef.current = null;
+	    lockedTemplateIdsRef.current = new Set();
+	    baseShapeIdsRef.current = new Set();
+	    annotationShapeIdsRef.current = new Set();
+	    setSubmittedAt(null);
+	    setCanEdit(true);
+	    setFullscreen(false);
+	    setAnnotationMode(false);
+	    setAnnotationsVisible(true);
+	    setTeacherAnnotations(null);
+	    setError('');
+	    if (mode === 'student') void loadForStudent();
     else if (mode === 'template') void loadForTemplate();
     else if (mode === 'teacher') void loadForTeacher();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -506,8 +508,8 @@ const NoteEditorModal: React.FC<Props> = ({ open, onClose, authService, mode, no
   const canAddPage = (mode === 'template' && canEdit) || (mode === 'student' && canEdit && !submittedAt);
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 z-[80] flex items-center justify-center p-4">
-      <div className="bg-white border-4 border-brand-brown rounded-3xl w-full max-w-6xl max-h-[90vh] overflow-hidden shadow-comic flex flex-col">
+    <div className={`fixed inset-0 bg-black bg-opacity-50 z-[80] flex items-center justify-center ${fullscreen ? 'p-0' : 'p-4'}`}>
+      <div className={`bg-white border-4 border-brand-brown w-full overflow-hidden shadow-comic flex flex-col ${fullscreen ? 'max-w-none h-full rounded-none' : 'max-w-6xl h-[90vh] rounded-3xl'}`}>
         <div className="p-4 border-b-4 border-brand-brown bg-[#C0E2BE] flex items-center justify-between gap-3">
           <div className="min-w-0">
             <div className="text-xl font-black text-brand-brown truncate">{noteTitle}</div>
@@ -631,9 +633,20 @@ const NoteEditorModal: React.FC<Props> = ({ open, onClose, authService, mode, no
               disabled={loading}
               title="匯出 PDF"
             >
-              <FileDown className="w-4 h-4" />
-              匯出PDF
-            </button>
+	                  <FileDown className="w-4 h-4" />
+	                  匯出PDF
+	                </button>
+
+	            <button
+	              type="button"
+	              onClick={() => setFullscreen((v) => !v)}
+	              className="px-3 py-2 rounded-2xl border-4 border-brand-brown bg-white text-brand-brown font-black shadow-comic hover:bg-gray-50 flex items-center gap-2"
+	              disabled={loading}
+	              title="全螢幕"
+	            >
+	              {fullscreen ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
+	              {fullscreen ? '退出全螢幕' : '全螢幕'}
+	            </button>
 
 	            <button
 	              type="button"
@@ -772,21 +785,21 @@ const NoteEditorModal: React.FC<Props> = ({ open, onClose, authService, mode, no
             >
               <X className="w-6 h-6 text-brand-brown" />
             </button>
-          </div>
-        </div>
+	          </div>
+	        </div>
 
-        {error && (
-          <div className="p-3 border-b-2 border-red-200 bg-red-50 text-red-700 font-bold">
-            {error}
-          </div>
-        )}
+	        {error && (
+	          <div className="p-3 border-b-2 border-red-200 bg-red-50 text-red-700 font-bold">
+	            {error}
+	          </div>
+	        )}
 
-        <div className="flex-1 min-h-0">
-          <Tldraw
-            store={store as any}
-            onMount={(editor) => {
-              editorRef.current = editor;
-              ensureA4FramesForAllPages(editor);
+	        <div className="flex-1 min-h-0 relative">
+	          <Tldraw
+	            store={store as any}
+	            onMount={(editor) => {
+	              editorRef.current = editor;
+	              ensureA4FramesForAllPages(editor);
               const frameId = ensureA4FrameOnCurrentPage(editor);
               const bounds = editor.getShapePageBounds(frameId as any);
               if (bounds) editor.zoomToBounds(bounds, { immediate: true, inset: 64 } as any);
