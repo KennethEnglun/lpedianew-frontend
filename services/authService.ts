@@ -20,6 +20,7 @@ interface User {
     homeroomClass?: string;
     subjectsTaught?: string[];
     subjectGroups?: Record<string, string[]>;
+    subjectClasses?: Record<string, string[]>;
   };
   lastLogin?: string;
   isActive: boolean;
@@ -479,6 +480,8 @@ class AuthService {
       chineseGroup?: string;
       englishGroup?: string;
       mathGroup?: string;
+      subjectsTaught?: string[];
+      subjectClasses?: Record<string, string[]>;
     };
   }): Promise<User> {
     const response = await fetch(`${this.API_BASE}/users`, {
@@ -497,6 +500,18 @@ class AuthService {
       method: 'PUT',
       headers: this.getAuthHeaders(),
       body: JSON.stringify(updateData)
+    });
+
+    const result = await this.handleResponse<{ user: User }>(response);
+    return result.user;
+  }
+
+  // 重設用戶密碼（管理員專用）
+  async resetUserPassword(userId: string, password: string): Promise<User> {
+    const response = await fetch(`${this.API_BASE}/users/${userId}/password`, {
+      method: 'PUT',
+      headers: this.getAuthHeaders(),
+      body: JSON.stringify({ password })
     });
 
     const result = await this.handleResponse<{ user: User }>(response);

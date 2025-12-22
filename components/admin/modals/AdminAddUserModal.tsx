@@ -7,23 +7,46 @@ export default function AdminAddUserModal(props: {
   open: boolean;
   isLoading?: boolean;
   error?: string;
+  availableSubjects: string[];
+  availableClasses: string[];
   form: {
     username: string;
     password: string;
     name: string;
     role: 'teacher' | 'student';
     class: string;
-    teacherCode: string;
     chineseGroup: string;
     englishGroup: string;
     mathGroup: string;
+    subjectsTaught: string[];
+    subjectClasses: Record<string, string[]>;
   };
   setForm: (next: any) => void;
   onClose: () => void;
   onSubmit: () => void;
 }) {
-  const { open, isLoading, error, form, setForm, onClose, onSubmit } = props;
+  const { open, isLoading, error, availableSubjects, availableClasses, form, setForm, onClose, onSubmit } = props;
   if (!open) return null;
+
+  const toggleSubject = (subject: string) => {
+    const cur = Array.isArray(form.subjectsTaught) ? form.subjectsTaught : [];
+    const nextSubjects = cur.includes(subject) ? cur.filter((s) => s !== subject) : [...cur, subject];
+    const nextSubjectClasses = { ...(form.subjectClasses || {}) };
+    if (!nextSubjects.includes(subject)) {
+      delete nextSubjectClasses[subject];
+    } else {
+      if (!Array.isArray(nextSubjectClasses[subject])) nextSubjectClasses[subject] = [];
+    }
+    setForm({ ...form, subjectsTaught: nextSubjects, subjectClasses: nextSubjectClasses });
+  };
+
+  const toggleSubjectClass = (subject: string, className: string) => {
+    const map = { ...(form.subjectClasses || {}) };
+    const cur = Array.isArray(map[subject]) ? map[subject] : [];
+    const next = cur.includes(className) ? cur.filter((c) => c !== className) : [...cur, className];
+    map[subject] = next;
+    setForm({ ...form, subjectClasses: map });
+  };
 
   return (
     <div className="fixed inset-0 bg-black/40 z-[90] flex items-center justify-center p-4">
@@ -99,11 +122,67 @@ export default function AdminAddUserModal(props: {
           )}
 
           {form.role === 'teacher' && (
-            <Input
-              placeholder="教師代碼"
-              value={form.teacherCode}
-              onChange={(e) => setForm({ ...form, teacherCode: e.target.value })}
-            />
+            <div className="space-y-3">
+              <div className="border border-gray-200 rounded-2xl p-3 bg-gray-50">
+                <div className="text-xs font-black text-brand-brown mb-2">任教科目</div>
+                <div className="flex flex-wrap gap-2">
+                  {availableSubjects.map((s) => {
+                    const active = Array.isArray(form.subjectsTaught) && form.subjectsTaught.includes(s);
+                    return (
+                      <button
+                        key={s}
+                        type="button"
+                        onClick={() => toggleSubject(s)}
+                        className={[
+                          'px-3 py-1 rounded-xl border font-black',
+                          active ? 'bg-[#B5D8F8] border-brand-brown text-brand-brown' : 'bg-white border-gray-300 text-gray-800 hover:bg-gray-100'
+                        ].join(' ')}
+                      >
+                        {s}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {Array.isArray(form.subjectsTaught) && form.subjectsTaught.length > 0 && (
+                <div className="border border-gray-200 rounded-2xl p-3 bg-gray-50">
+                  <div className="text-xs font-black text-brand-brown mb-2">任教班別（按科目）</div>
+                  <div className="space-y-3">
+                    {form.subjectsTaught.map((subject) => {
+                      const selected = new Set<string>(Array.isArray(form.subjectClasses?.[subject]) ? form.subjectClasses[subject] : []);
+                      return (
+                        <div key={subject} className="bg-white border border-gray-200 rounded-2xl p-3">
+                          <div className="font-black text-gray-800 mb-2">{subject}</div>
+                          {availableClasses.length === 0 ? (
+                            <div className="text-xs text-gray-600 font-bold">（未有班別資料，請先建立學生或從 CSV 匯入）</div>
+                          ) : (
+                            <div className="flex flex-wrap gap-2">
+                              {availableClasses.map((cls) => {
+                                const active = selected.has(cls);
+                                return (
+                                  <button
+                                    key={cls}
+                                    type="button"
+                                    onClick={() => toggleSubjectClass(subject, cls)}
+                                    className={[
+                                      'px-3 py-1 rounded-xl border font-black',
+                                      active ? 'bg-[#B5F8CE] border-brand-brown text-brand-brown' : 'bg-white border-gray-300 text-gray-800 hover:bg-gray-100'
+                                    ].join(' ')}
+                                  >
+                                    {cls}
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+            </div>
           )}
         </div>
 
@@ -129,4 +208,3 @@ export default function AdminAddUserModal(props: {
     </div>
   );
 }
-

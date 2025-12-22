@@ -14,6 +14,7 @@ import AdminFoldersPanel from '../components/admin/panels/AdminFoldersPanel';
 import AdminUsersPanel from '../components/admin/panels/AdminUsersPanel';
 import AdminYearEndPanel from '../components/admin/panels/AdminYearEndPanel';
 import type { AdminSection, AdminUser, SidebarItem, UserRoleFilter } from '../components/admin/types';
+import { VISIBLE_SUBJECTS } from '../platform';
 
 const AdminDashboard: React.FC = () => {
   const navigate = useNavigate();
@@ -39,10 +40,11 @@ const AdminDashboard: React.FC = () => {
     name: '',
     role: 'student' as 'teacher' | 'student',
     class: '',
-    teacherCode: '',
     chineseGroup: '',
     englishGroup: '',
-    mathGroup: ''
+    mathGroup: '',
+    subjectsTaught: [...VISIBLE_SUBJECTS],
+    subjectClasses: {} as Record<string, string[]>
   });
 
   // Assignments explorer modal
@@ -206,27 +208,7 @@ const AdminDashboard: React.FC = () => {
 
   const exportToCSV = useCallback(async () => {
     try {
-      const headers = ['用戶名', '密碼', '角色', '姓名', '班級', '教師代碼', '中文分組', '英文分組', '數學分組', '狀態'];
-
-      const csvData = users.map((user) => [
-        user.username,
-        '******',
-        user.role === 'teacher' ? '教師' : user.role === 'student' ? '學生' : '管理員',
-        user.name,
-        user.class || '',
-        '',
-        user.chineseGroup || '',
-        user.englishGroup || '',
-        user.mathGroup || '',
-        user.isActive ? '啟用' : '停用'
-      ]);
-
-      const csvContent = [headers, ...csvData]
-        .map((row) => row.map((field) => `"${field}"`).join(','))
-        .join('\n');
-
-      const bom = '\uFEFF';
-      const blob = new Blob([bom + csvContent], { type: 'text/csv;charset=utf-8;' });
+      const blob = await authService.exportUsersCSV();
       const link = document.createElement('a');
       link.href = URL.createObjectURL(blob);
       link.download = `lpedia_users_${new Date().toISOString().split('T')[0]}.csv`;
@@ -235,88 +217,14 @@ const AdminDashboard: React.FC = () => {
       setUsersError('匯出CSV失敗');
       console.error(error);
     }
-  }, [users]);
+  }, []);
 
   const importUsersFromCsvFile = useCallback(async (file: File) => {
     try {
       setUsersLoading(true);
-
-      const text = await new Promise<string>((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = (e) => resolve(e.target?.result as string);
-        reader.onerror = reject;
-        reader.readAsText(file, 'utf-8');
-      });
-
-      const cleanText = text.replace(/^\uFEFF/, '');
-      const lines = cleanText.split('\n').filter((line) => line.trim());
-      if (lines.length < 2) throw new Error('CSV 文件格式無效');
-
-      const dataLines = lines.slice(1);
-      let imported = 0;
-      const errors: string[] = [];
-
-      for (let i = 0; i < dataLines.length; i++) {
-        const line = dataLines[i].trim();
-        if (!line) continue;
-
-        try {
-          const values: string[] = [];
-          let currentValue = '';
-          let inQuotes = false;
-          let j = 0;
-
-          while (j < line.length) {
-            const char = line[j];
-            if (char === '"') inQuotes = !inQuotes;
-            else if (char === ',' && !inQuotes) {
-              values.push(currentValue.trim());
-              currentValue = '';
-            } else currentValue += char;
-            j++;
-          }
-          values.push(currentValue.trim());
-
-          if (values.length < 9) {
-            errors.push(`第${i + 2}行：欄位數量不足`);
-            continue;
-          }
-
-          const [username, password, roleText, name, className, teacherCode, chineseGroup, englishGroup, mathGroup] = values;
-
-          if (!username || !name) {
-            errors.push(`第${i + 2}行：用戶名和姓名不能為空`);
-            continue;
-          }
-
-          const role: 'teacher' | 'student' | null = roleText === '教師' ? 'teacher' : roleText === '學生' ? 'student' : null;
-          if (!role) {
-            errors.push(`第${i + 2}行：無效的角色 "${roleText}"`);
-            continue;
-          }
-
-          const userData = {
-            username,
-            password: password || 'temp123456',
-            role,
-            profile: {
-              name,
-              ...(className && { class: className }),
-              ...(teacherCode && { teacherCode }),
-              ...(chineseGroup && { chineseGroup }),
-              ...(englishGroup && { englishGroup }),
-              ...(mathGroup && { mathGroup })
-            }
-          };
-
-          await authService.createUser(userData);
-          imported++;
-        } catch (error) {
-          errors.push(`第${i + 2}行：${error instanceof Error ? error.message : '處理失敗'}`);
-        }
-      }
-
-      alert(`成功導入 ${imported} 個用戶${errors.length > 0 ? '\\n錯誤：\\n' + errors.slice(0, 5).join('\\n') + (errors.length > 5 ? '\\n...' : '') : ''}`);
+      const resp = await authService.importUsersCSV(file);
+      const errors = Array.isArray(resp.errors) ? resp.errors : [];
+      alert(`成功導入 ${resp.imported} 個用戶${errors.length > 0 ? '\\n錯誤：\\n' + errors.slice(0, 8).join('\\n') + (errors.length > 8 ? '\\n...' : '') : ''}`);
       await loadUsers();
     } catch (error) {
       setUsersError('CSV導入失敗');
@@ -359,10 +267,11 @@ const AdminDashboard: React.FC = () => {
       name: '',
       role: 'student',
       class: '',
-      teacherCode: '',
       chineseGroup: '',
       englishGroup: '',
-      mathGroup: ''
+      mathGroup: '',
+      subjectsTaught: [...VISIBLE_SUBJECTS],
+      subjectClasses: {}
     });
     setAddUserError('');
   }, []);
@@ -383,11 +292,20 @@ const AdminDashboard: React.FC = () => {
         role: newUserForm.role,
         profile: {
           name: newUserForm.name,
-          ...(newUserForm.class && { class: newUserForm.class }),
-          ...(newUserForm.teacherCode && { teacherCode: newUserForm.teacherCode }),
-          ...(newUserForm.chineseGroup && { chineseGroup: newUserForm.chineseGroup }),
-          ...(newUserForm.englishGroup && { englishGroup: newUserForm.englishGroup }),
-          ...(newUserForm.mathGroup && { mathGroup: newUserForm.mathGroup })
+          ...(newUserForm.role === 'student'
+            ? {
+                ...(newUserForm.class && { class: newUserForm.class }),
+                ...(newUserForm.chineseGroup && { chineseGroup: newUserForm.chineseGroup }),
+                ...(newUserForm.englishGroup && { englishGroup: newUserForm.englishGroup }),
+                ...(newUserForm.mathGroup && { mathGroup: newUserForm.mathGroup })
+              }
+            : {}),
+          ...(newUserForm.role === 'teacher'
+            ? {
+                subjectsTaught: Array.isArray(newUserForm.subjectsTaught) && newUserForm.subjectsTaught.length > 0 ? newUserForm.subjectsTaught : [...VISIBLE_SUBJECTS],
+                subjectClasses: newUserForm.subjectClasses && typeof newUserForm.subjectClasses === 'object' ? newUserForm.subjectClasses : {}
+              }
+            : {})
         }
       };
 
@@ -423,11 +341,14 @@ const AdminDashboard: React.FC = () => {
     }
   }, []);
 
-  const saveUserModal = useCallback(async (payload: { username: string; role: 'teacher' | 'student'; isActive: boolean; profile: Record<string, any> }) => {
+  const saveUserModal = useCallback(async (payload: { username: string; role: 'teacher' | 'student'; isActive: boolean; profile: Record<string, any>; newPassword?: string }) => {
     if (!userModalUserId) return;
     try {
       setUserModalSaving(true);
       setUserModalError('');
+      if (payload.newPassword) {
+        await authService.resetUserPassword(userModalUserId, payload.newPassword);
+      }
       const updated = await authService.updateUser(userModalUserId, payload as any);
       setUserModalUser(updated);
       setUserModalMode('view');
@@ -586,6 +507,8 @@ const AdminDashboard: React.FC = () => {
         error={userModalError}
         user={userModalUser}
         learningStats={userModalStats}
+        availableSubjects={VISIBLE_SUBJECTS}
+        availableClasses={classOptions}
         onClose={() => {
           setUserModalOpen(false);
           setUserModalUserId(null);
@@ -604,6 +527,8 @@ const AdminDashboard: React.FC = () => {
         error={addUserError}
         form={newUserForm}
         setForm={setNewUserForm}
+        availableSubjects={VISIBLE_SUBJECTS}
+        availableClasses={classOptions}
         onClose={() => {
           resetForm();
           setShowAddUser(false);

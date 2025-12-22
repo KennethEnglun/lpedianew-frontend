@@ -20,37 +20,77 @@ export default function AdminUserModal(props: {
   error?: string;
   user: UserDetails | null;
   learningStats?: any;
+  availableSubjects: string[];
+  availableClasses: string[];
   onClose: () => void;
   onRequestEdit: () => void;
-  onSave: (payload: { username: string; role: 'teacher' | 'student'; isActive: boolean; profile: Record<string, any> }) => Promise<void> | void;
+  onSave: (payload: { username: string; role: 'teacher' | 'student'; isActive: boolean; profile: Record<string, any>; newPassword?: string }) => Promise<void> | void;
 }) {
-  const { open, mode, loading, saving, error, user, learningStats, onClose, onRequestEdit, onSave } = props;
+  const { open, mode, loading, saving, error, user, learningStats, availableSubjects, availableClasses, onClose, onRequestEdit, onSave } = props;
   const isEdit = mode === 'edit';
+  const isAdminUser = user?.role === 'admin';
 
   const initial = useMemo(() => {
     const profile = (user?.profile && typeof user.profile === 'object') ? user.profile : {};
+    const subjects = Array.isArray(profile.subjectsTaught) ? profile.subjectsTaught.filter((s: any) => typeof s === 'string' && s.trim()).map((s: any) => s.trim()) : [];
+    const subjectClasses = profile.subjectClasses && typeof profile.subjectClasses === 'object' ? profile.subjectClasses : {};
     return {
       username: String(user?.username || ''),
       role: (user?.role === 'teacher' || user?.role === 'student') ? user.role : 'student',
       isActive: !!user?.isActive,
       name: String(profile.name || ''),
       className: String(profile.class || ''),
-      teacherCode: String(profile.teacherCode || ''),
       chineseGroup: String(profile.chineseGroup || ''),
       englishGroup: String(profile.englishGroup || ''),
       mathGroup: String(profile.mathGroup || ''),
-      homeroomClass: String(profile.homeroomClass || '')
+      subjectsTaught: subjects,
+      subjectClasses: subjectClasses && typeof subjectClasses === 'object' ? subjectClasses : {},
+      newPassword: '',
+      newPasswordConfirm: ''
     };
   }, [user]);
 
   const [form, setForm] = useState(initial);
+  const [localError, setLocalError] = useState('');
 
   useEffect(() => {
     if (!open) return;
     setForm(initial);
+    setLocalError('');
   }, [initial, open]);
 
   if (!open) return null;
+
+  const toggleSubject = (subject: string) => {
+    const cur = Array.isArray(form.subjectsTaught) ? form.subjectsTaught : [];
+    const nextSubjects = cur.includes(subject) ? cur.filter((s) => s !== subject) : [...cur, subject];
+    const nextSubjectClasses = { ...(form.subjectClasses || {}) };
+    if (!nextSubjects.includes(subject)) {
+      delete nextSubjectClasses[subject];
+    } else {
+      if (!Array.isArray(nextSubjectClasses[subject])) nextSubjectClasses[subject] = [];
+    }
+    setForm((s) => ({ ...s, subjectsTaught: nextSubjects, subjectClasses: nextSubjectClasses }));
+  };
+
+  const toggleSubjectClass = (subject: string, className: string) => {
+    const map = { ...(form.subjectClasses || {}) };
+    const cur = Array.isArray(map[subject]) ? map[subject] : [];
+    const next = cur.includes(className) ? cur.filter((c) => c !== className) : [...cur, className];
+    map[subject] = next;
+    setForm((s) => ({ ...s, subjectClasses: map }));
+  };
+
+  const teacherSummary = (profile: any) => {
+    const subjects = Array.isArray(profile?.subjectsTaught) ? profile.subjectsTaught : [];
+    const subjectClasses = profile?.subjectClasses && typeof profile.subjectClasses === 'object' ? profile.subjectClasses : {};
+    if (subjects.length === 0) return '（未設定）';
+    const parts = subjects.map((s: string) => {
+      const classes = Array.isArray(subjectClasses?.[s]) ? subjectClasses[s] : [];
+      return `${s}${classes.length > 0 ? `：${classes.join('、')}` : ''}`;
+    });
+    return parts.join('；');
+  };
 
   return (
     <div className="fixed inset-0 bg-black/40 z-[90] flex items-center justify-center p-4">
@@ -79,6 +119,7 @@ export default function AdminUserModal(props: {
         <div className="p-5 space-y-4">
           {loading && <div className="text-gray-700 font-bold">載入中…</div>}
           {!loading && error && <div className="text-red-700 font-bold">{error}</div>}
+          {!loading && !error && localError && <div className="text-red-700 font-bold">{localError}</div>}
 
           {!loading && user && (
             <>
@@ -98,7 +139,7 @@ export default function AdminUserModal(props: {
                       className="w-full px-4 py-2 border border-gray-300 rounded-xl bg-white font-bold"
                       value={form.role}
                       onChange={(e) => setForm((s) => ({ ...s, role: e.target.value as any }))}
-                      disabled={user.role === 'admin'}
+                      disabled={isAdminUser}
                     >
                       <option value="student">學生</option>
                       <option value="teacher">教師</option>
@@ -161,24 +202,97 @@ export default function AdminUserModal(props: {
                 {(form.role === 'teacher' || user.role === 'teacher') && (
                   <>
                     <div>
-                      <div className="text-xs font-bold text-gray-600 mb-1">教師代碼</div>
+                      <div className="text-xs font-bold text-gray-600 mb-1">任教設定</div>
                       {isEdit ? (
-                        <Input value={form.teacherCode} onChange={(e) => setForm((s) => ({ ...s, teacherCode: e.target.value }))} />
+                        <div className="border border-gray-200 rounded-2xl p-3 bg-gray-50 space-y-3">
+                          <div>
+                            <div className="text-xs font-bold text-gray-600 mb-2">任教科目</div>
+                            <div className="flex flex-wrap gap-2">
+                              {availableSubjects.map((s) => {
+                                const active = Array.isArray(form.subjectsTaught) && form.subjectsTaught.includes(s);
+                                return (
+                                  <button
+                                    key={s}
+                                    type="button"
+                                    onClick={() => toggleSubject(s)}
+                                    className={[
+                                      'px-3 py-1 rounded-xl border font-black',
+                                      active ? 'bg-[#B5D8F8] border-brand-brown text-brand-brown' : 'bg-white border-gray-300 text-gray-800 hover:bg-gray-100'
+                                    ].join(' ')}
+                                  >
+                                    {s}
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          </div>
+
+                          {Array.isArray(form.subjectsTaught) && form.subjectsTaught.length > 0 && (
+                            <div>
+                              <div className="text-xs font-bold text-gray-600 mb-2">任教班別（按科目）</div>
+                              <div className="space-y-2">
+                                {form.subjectsTaught.map((subject) => {
+                                  const selected = new Set<string>(Array.isArray(form.subjectClasses?.[subject]) ? form.subjectClasses[subject] : []);
+                                  return (
+                                    <div key={subject} className="bg-white border border-gray-200 rounded-2xl p-3">
+                                      <div className="font-black text-gray-800 mb-2">{subject}</div>
+                                      {availableClasses.length === 0 ? (
+                                        <div className="text-xs text-gray-600 font-bold">（未有班別資料，請先建立學生或從 CSV 匯入）</div>
+                                      ) : (
+                                        <div className="flex flex-wrap gap-2">
+                                          {availableClasses.map((cls) => {
+                                            const active = selected.has(cls);
+                                            return (
+                                              <button
+                                                key={cls}
+                                                type="button"
+                                                onClick={() => toggleSubjectClass(subject, cls)}
+                                                className={[
+                                                  'px-3 py-1 rounded-xl border font-black',
+                                                  active ? 'bg-[#B5F8CE] border-brand-brown text-brand-brown' : 'bg-white border-gray-300 text-gray-800 hover:bg-gray-100'
+                                                ].join(' ')}
+                                              >
+                                                {cls}
+                                              </button>
+                                            );
+                                          })}
+                                        </div>
+                                      )}
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            </div>
+                          )}
+                        </div>
                       ) : (
-                        <div className="font-bold text-gray-800">{String(user.profile?.teacherCode || '')}</div>
-                      )}
-                    </div>
-                    <div>
-                      <div className="text-xs font-bold text-gray-600 mb-1">班主任班別</div>
-                      {isEdit ? (
-                        <Input value={form.homeroomClass} onChange={(e) => setForm((s) => ({ ...s, homeroomClass: e.target.value }))} />
-                      ) : (
-                        <div className="font-bold text-gray-800">{String(user.profile?.homeroomClass || '')}</div>
+                        <div className="text-sm font-bold text-gray-800">{teacherSummary(user.profile)}</div>
                       )}
                     </div>
                   </>
                 )}
               </div>
+
+              {isEdit && !isAdminUser && (
+                <div className="border border-gray-200 rounded-2xl p-4 bg-gray-50">
+                  <div className="text-sm font-black text-brand-brown mb-2">重設密碼（選填）</div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <Input
+                      placeholder="新密碼（至少 6 個字元）"
+                      type="password"
+                      value={form.newPassword}
+                      onChange={(e) => setForm((s) => ({ ...s, newPassword: e.target.value }))}
+                    />
+                    <Input
+                      placeholder="確認新密碼"
+                      type="password"
+                      value={form.newPasswordConfirm}
+                      onChange={(e) => setForm((s) => ({ ...s, newPasswordConfirm: e.target.value }))}
+                    />
+                  </div>
+                  <div className="text-xs text-gray-600 font-bold mt-2">如留空則不更改密碼。</div>
+                </div>
+              )}
 
               {learningStats && !isEdit && (
                 <div className="border border-gray-200 rounded-2xl p-3 bg-gray-50">
@@ -188,7 +302,7 @@ export default function AdminUserModal(props: {
               )}
 
               <div className="flex items-center justify-end gap-2 pt-2">
-                {!isEdit && (
+                {!isEdit && !isAdminUser && (
                   <Button className="bg-[#B5D8F8] hover:bg-[#A1CCF0]" onClick={onRequestEdit}>
                     編輯
                   </Button>
@@ -201,13 +315,38 @@ export default function AdminUserModal(props: {
                     <Button
                       className="bg-[#B5F8CE] hover:bg-[#A1E5B8]"
                       onClick={() => {
+                        setLocalError('');
+                        const pw = String(form.newPassword || '');
+                        const pw2 = String(form.newPasswordConfirm || '');
+                        if ((pw || pw2) && pw.length < 6) {
+                          setLocalError('新密碼至少 6 個字元');
+                          return;
+                        }
+                        if (pw || pw2) {
+                          if (pw !== pw2) {
+                            setLocalError('兩次輸入的新密碼不一致');
+                            return;
+                          }
+                        }
+
                         const profile = {
                           ...(user.profile || {}),
                           name: form.name,
                           ...(form.role === 'student' ? { class: form.className, chineseGroup: form.chineseGroup, englishGroup: form.englishGroup, mathGroup: form.mathGroup } : {}),
-                          ...(form.role === 'teacher' ? { teacherCode: form.teacherCode, homeroomClass: form.homeroomClass } : {})
+                          ...(form.role === 'teacher'
+                            ? {
+                                subjectsTaught: Array.isArray(form.subjectsTaught) && form.subjectsTaught.length > 0 ? form.subjectsTaught : availableSubjects,
+                                subjectClasses: form.subjectClasses && typeof form.subjectClasses === 'object' ? form.subjectClasses : {}
+                              }
+                            : {})
                         };
-                        void onSave({ username: form.username, role: form.role, isActive: form.isActive, profile });
+                        void onSave({
+                          username: form.username,
+                          role: form.role,
+                          isActive: form.isActive,
+                          profile,
+                          ...(pw ? { newPassword: pw } : {})
+                        });
                       }}
                       disabled={!!saving}
                     >
@@ -223,4 +362,3 @@ export default function AdminUserModal(props: {
     </div>
   );
 }
-
