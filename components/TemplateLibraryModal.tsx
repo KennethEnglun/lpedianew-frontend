@@ -219,7 +219,7 @@ const TemplateLibraryModal: React.FC<Props> = ({ open, onClose, authService, use
         <div className="p-6 border-b-4 border-brand-brown bg-[#C0E2BE] flex items-center justify-between">
           <div>
             <div className="text-3xl font-black text-brand-brown">教師資料夾（模板）</div>
-            <div className="text-sm text-brand-brown/80 font-bold">按年級 + folder 整理；共用模板可直接派送但不可改（要改先複製）</div>
+            <div className="text-sm text-brand-brown/80 font-bold">按年級 + folder 整理；共用模板可直接派送（筆記會先開啟草稿再派發）；要改模板本身先複製</div>
           </div>
           <button
             onClick={onClose}
@@ -389,6 +389,7 @@ const TemplateLibraryModal: React.FC<Props> = ({ open, onClose, authService, use
                   const canShare = isMy && isOwner;
                   const canMoveMy = isMy && isOwner;
                   const canMoveShared = !isMy && isOwner && t.visibility === 'shared';
+                  const isNote = normalizeTemplateTaskType(t.type) === 'note';
                   return (
                     <div key={t.id} className="p-4 rounded-2xl border-2 border-gray-200 bg-gray-50">
                       <div className="flex items-start justify-between gap-3">
@@ -412,29 +413,30 @@ const TemplateLibraryModal: React.FC<Props> = ({ open, onClose, authService, use
                           >
                             查看
                           </button>
-                          <button
-                            onClick={() => {
-                              setAssignTemplate(t);
-                              setAssignDraftOnly(false);
-                              setAssignOpen(true);
-                            }}
-                            className="px-3 py-2 rounded-xl bg-blue-600 text-white border-2 border-blue-700 hover:bg-blue-700 font-black flex items-center gap-2"
-                          >
-                            <Send className="w-4 h-4" />
-                            派送
-                          </button>
-                          {normalizeTemplateTaskType(t.type) === 'note' && (
+                          {isNote ? (
                             <button
                               onClick={() => {
                                 setAssignTemplate(t);
                                 setAssignDraftOnly(true);
                                 setAssignOpen(true);
                               }}
-                              className="px-3 py-2 rounded-xl bg-[#FDEEAD] text-brand-brown border-2 border-brand-brown hover:bg-[#FCE690] font-black flex items-center gap-2"
-                              title="先建立草稿筆記（已套用模板），再打開編輯/派發"
+                              className="px-3 py-2 rounded-xl bg-blue-600 text-white border-2 border-blue-700 hover:bg-blue-700 font-black flex items-center gap-2"
+                              title="筆記會先建立草稿（已套用模板）並打開編輯頁；完成後再派發"
                             >
                               <MoveRight className="w-4 h-4" />
-                              編輯再派送
+                              開啟草稿
+                            </button>
+                          ) : (
+                            <button
+                              onClick={() => {
+                                setAssignTemplate(t);
+                                setAssignDraftOnly(false);
+                                setAssignOpen(true);
+                              }}
+                              className="px-3 py-2 rounded-xl bg-blue-600 text-white border-2 border-blue-700 hover:bg-blue-700 font-black flex items-center gap-2"
+                            >
+                              <Send className="w-4 h-4" />
+                              派送
                             </button>
                           )}
                           {!isMy && (

@@ -464,6 +464,7 @@ const NoteEditorModal: React.FC<Props> = ({ open, onClose, authService, mode, no
   const fabricRef = useRef<fabric.Canvas | null>(null);
   const suppressSaveRef = useRef(false);
   const saveTimerRef = useRef<number | null>(null);
+  const templateSaveTimerRef = useRef<number | null>(null);
   const docRef = useRef<FabricDocSnapshot>(emptyDoc());
   const annotationDocRef = useRef<FabricDocSnapshot | null>(null);
   const pendingImgAbortRef = useRef<AbortController | null>(null);
@@ -607,6 +608,34 @@ const NoteEditorModal: React.FC<Props> = ({ open, onClose, authService, mode, no
         // keep silent (offline / network)
       }
     }, 1200);
+  };
+
+  const scheduleTemplateSave = async () => {
+    const canvas = fabricRef.current;
+    if (!canvas) return;
+    if (suppressSaveRef.current) return;
+    if (mode !== 'template') return;
+    if (!canTemplateEdit) return;
+
+    if (templateSaveTimerRef.current) window.clearTimeout(templateSaveTimerRef.current);
+    templateSaveTimerRef.current = window.setTimeout(async () => {
+      try {
+        saveCanvasToDoc();
+        const doc = { ...docRef.current, currentPage: docRef.current.currentPage };
+        await idbSet(buildLocalKey(noteId, viewerId), { savedAt: new Date().toISOString(), snapshot: doc });
+
+        if (!navigator.onLine) return;
+        await authService.updateNoteTemplate(noteId, doc);
+      } catch {
+        // keep silent (offline / network)
+      }
+    }, 1200);
+  };
+
+  const scheduleAutoSave = async () => {
+    if (mode === 'student') return scheduleStudentSave();
+    if (mode === 'template') return scheduleTemplateSave();
+    return;
   };
 
   const saveCanvasAnnotationsToRef = () => {
@@ -758,7 +787,7 @@ const NoteEditorModal: React.FC<Props> = ({ open, onClose, authService, mode, no
     docRef.current.pages.push(emptyPage());
     setPageCount(docRef.current.pages.length);
     await reloadCanvas();
-    await scheduleStudentSave();
+    await scheduleAutoSave();
   };
 
   const canChangePageOrientation =
@@ -849,7 +878,7 @@ const NoteEditorModal: React.FC<Props> = ({ open, onClose, authService, mode, no
     }
     it.dirty = true;
     canvas.requestRenderAll();
-    void scheduleStudentSave();
+    void scheduleAutoSave();
   };
 
   const toggleBold = () => {
@@ -876,7 +905,7 @@ const NoteEditorModal: React.FC<Props> = ({ open, onClose, authService, mode, no
     (it as any).text = next;
     it.dirty = true;
     canvas.requestRenderAll();
-    void scheduleStudentSave();
+    void scheduleAutoSave();
   };
 
   const deleteSelection = () => {
@@ -898,7 +927,7 @@ const NoteEditorModal: React.FC<Props> = ({ open, onClose, authService, mode, no
     canvas.discardActiveObject();
     canvas.requestRenderAll();
     setLayersVersion((v) => v + 1);
-    void scheduleStudentSave();
+    void scheduleAutoSave();
   };
 
   const bringToFront = () => {
@@ -914,7 +943,7 @@ const NoteEditorModal: React.FC<Props> = ({ open, onClose, authService, mode, no
     bringToFrontCompat(canvas, obj);
     canvas.requestRenderAll();
     setLayersVersion((v) => v + 1);
-    void scheduleStudentSave();
+    void scheduleAutoSave();
   };
 
   const sendToBack = () => {
@@ -930,7 +959,7 @@ const NoteEditorModal: React.FC<Props> = ({ open, onClose, authService, mode, no
     sendToBackAbovePaper(canvas, obj);
     canvas.requestRenderAll();
     setLayersVersion((v) => v + 1);
-    void scheduleStudentSave();
+    void scheduleAutoSave();
   };
 
   const bringForward = () => {
@@ -946,7 +975,7 @@ const NoteEditorModal: React.FC<Props> = ({ open, onClose, authService, mode, no
     (canvas as any).bringObjectForward?.(obj);
     canvas.requestRenderAll();
     setLayersVersion((v) => v + 1);
-    void scheduleStudentSave();
+    void scheduleAutoSave();
   };
 
   const sendBackward = () => {
@@ -962,7 +991,7 @@ const NoteEditorModal: React.FC<Props> = ({ open, onClose, authService, mode, no
     (canvas as any).sendObjectBackwards?.(obj);
     canvas.requestRenderAll();
     setLayersVersion((v) => v + 1);
-    void scheduleStudentSave();
+    void scheduleAutoSave();
   };
 
   const toggleLockSelected = () => {
@@ -986,7 +1015,7 @@ const NoteEditorModal: React.FC<Props> = ({ open, onClose, authService, mode, no
     }
     applyPermissionsToObjects(canvas);
     canvas.requestRenderAll();
-    void scheduleStudentSave();
+    void scheduleAutoSave();
   };
 
   const insertImageFromFile = async (file: File) => {
@@ -1042,7 +1071,7 @@ const NoteEditorModal: React.FC<Props> = ({ open, onClose, authService, mode, no
             );
             (localImg as any).crossOrigin = crossOrigin;
             canvas.requestRenderAll();
-            await scheduleStudentSave();
+            await scheduleAutoSave();
           } catch {
             // Keep local image; do not block
           } finally {
@@ -1050,7 +1079,7 @@ const NoteEditorModal: React.FC<Props> = ({ open, onClose, authService, mode, no
           }
         })();
       } else {
-        await scheduleStudentSave();
+        await scheduleAutoSave();
       }
     } catch (e: any) {
       setError(e?.message || '插入圖片失敗');
@@ -1334,7 +1363,7 @@ const NoteEditorModal: React.FC<Props> = ({ open, onClose, authService, mode, no
       markNewObjectLayer(obj);
       applyPermissionsToObjects(canvas);
       setLayersVersion((v) => v + 1);
-      void scheduleStudentSave();
+      void scheduleAutoSave();
     };
     const onModified = (e: any) => {
       if (suppressSaveRef.current) return;
@@ -1345,7 +1374,7 @@ const NoteEditorModal: React.FC<Props> = ({ open, onClose, authService, mode, no
         (obj as any).lpediaPageIndex = getPageIndexFromY(Number((obj as any).top) || 0, pageH, docRef.current.pages.length);
       }
       setLayersVersion((v) => v + 1);
-      void scheduleStudentSave();
+      void scheduleAutoSave();
     };
 
     canvas.on('object:added', onAdded);
@@ -1418,6 +1447,8 @@ const NoteEditorModal: React.FC<Props> = ({ open, onClose, authService, mode, no
       canvas.off('selection:created', bumpSelection);
       canvas.off('selection:updated', bumpSelection);
       canvas.off('selection:cleared', bumpSelection);
+      if (saveTimerRef.current) window.clearTimeout(saveTimerRef.current);
+      if (templateSaveTimerRef.current) window.clearTimeout(templateSaveTimerRef.current);
       canvas.dispose();
       fabricRef.current = null;
     };
@@ -1554,7 +1585,9 @@ const NoteEditorModal: React.FC<Props> = ({ open, onClose, authService, mode, no
           : '離線模式（只保存到本機）'
       : mode === 'teacher'
         ? '查看 / 批改'
-        : '模板編輯';
+        : navigator.onLine
+          ? '模板編輯（自動保存中）'
+          : '模板編輯（離線：只保存到本機）';
 
   const showLegacyConvert = mode === 'template' && error.includes('舊版格式');
 
