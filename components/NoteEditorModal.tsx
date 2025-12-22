@@ -139,14 +139,13 @@ const fitPaperToContainer = (canvas: fabric.Canvas, container: HTMLDivElement) =
 const exportPdfFromDoc = async (doc: FabricDocSnapshot) => {
   const pdf = await PDFDocument.create();
   for (const pageJson of doc.pages) {
-    const sc = new fabric.StaticCanvas(undefined as any, { width: A4_W, height: A4_H });
+    const canvasEl = document.createElement('canvas');
+    canvasEl.width = A4_W;
+    canvasEl.height = A4_H;
+    const sc = new fabric.StaticCanvas(canvasEl as any, { width: A4_W, height: A4_H });
     sc.backgroundColor = '#ffffff';
-    await new Promise<void>((resolve) => {
-      sc.loadFromJSON(pageJson, () => {
-        sc.renderAll();
-        resolve();
-      });
-    });
+    await withTimeout(sc.loadFromJSON(pageJson), 15000, 'PDF 匯出時載入頁面超時');
+    sc.renderAll();
     const dataUrl = sc.toDataURL({ format: 'png', multiplier: 2 });
     const bytes = Uint8Array.from(atob(dataUrl.split(',')[1] || ''), (c) => c.charCodeAt(0));
     const png = await pdf.embedPng(bytes);
@@ -269,6 +268,7 @@ const NoteEditorModal: React.FC<Props> = ({ open, onClose, authService, mode, no
   const docRef = useRef<FabricDocSnapshot>(emptyDoc());
   const annotationDocRef = useRef<FabricDocSnapshot | null>(null);
   const pendingImgAbortRef = useRef<AbortController | null>(null);
+  const pendingLoadAbortRef = useRef<AbortController | null>(null);
 
   const canTemplateEdit = mode === 'template' && canEdit;
   const canAddPage = (mode === 'template' && canEdit) || (mode === 'student' && canEdit && !submittedAt);
@@ -353,6 +353,9 @@ const NoteEditorModal: React.FC<Props> = ({ open, onClose, authService, mode, no
     const container = containerRef.current;
     if (!canvas || !container) return;
     const next = Math.min(Math.max(0, idx), docRef.current.pages.length - 1);
+    if (pendingLoadAbortRef.current) pendingLoadAbortRef.current.abort();
+    const loadAbort = new AbortController();
+    pendingLoadAbortRef.current = loadAbort;
     suppressSaveRef.current = true;
     try {
       if (mode === 'teacher') saveCurrentAnnotationsToRef();
@@ -364,7 +367,6 @@ const NoteEditorModal: React.FC<Props> = ({ open, onClose, authService, mode, no
         annotationDocRef.current.currentPage = next;
       }
 
-      canvas.clear();
       canvas.backgroundColor = '#E5E7EB';
       const baseJson = docRef.current.pages[next] || emptyPage();
       const pageJson =
@@ -384,18 +386,18 @@ const NoteEditorModal: React.FC<Props> = ({ open, onClose, authService, mode, no
               };
             })();
 
-      await new Promise<void>((resolve) => {
-        canvas.loadFromJSON(pageJson, () => {
-          canvas.renderAll();
-          resolve();
-        });
-      });
+      await withTimeout(canvas.loadFromJSON(pageJson, undefined, { signal: loadAbort.signal } as any), 15000, '載入頁面超時', () => loadAbort.abort());
       applyPermissionsToObjects(canvas);
       fitPaperToContainer(canvas, container);
       canvas.discardActiveObject();
       canvas.requestRenderAll();
+      setError('');
+    } catch (e: any) {
+      if (String(e?.name || '') === 'AbortError') return;
+      setError(e?.message || '載入頁面失敗');
     } finally {
       suppressSaveRef.current = false;
+      if (pendingLoadAbortRef.current === loadAbort) pendingLoadAbortRef.current = null;
     }
   };
 
@@ -723,6 +725,10 @@ const NoteEditorModal: React.FC<Props> = ({ open, onClose, authService, mode, no
     if (pendingImgAbortRef.current) {
       pendingImgAbortRef.current.abort();
       pendingImgAbortRef.current = null;
+    }
+    if (pendingLoadAbortRef.current) {
+      pendingLoadAbortRef.current.abort();
+      pendingLoadAbortRef.current = null;
     }
     if (mode === 'student') void loadForStudent();
     else if (mode === 'template') void loadForTemplate();
