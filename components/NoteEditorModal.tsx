@@ -618,9 +618,6 @@ const NoteEditorModal: React.FC<Props> = ({ open, onClose, authService, mode, no
     pendingLoadAbortRef.current = loadAbort;
     suppressSaveRef.current = true;
     try {
-      if (mode === 'teacher') saveCanvasAnnotationsToRef();
-      else saveCanvasToDoc();
-
       setPageCount(pageCountNow);
       docRef.current.currentPage = clamp(docRef.current.currentPage ?? 0, 0, pageCountNow - 1);
 
