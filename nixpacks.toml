@@ -1,5 +1,6 @@
 [phases.setup]
-nixPkgs = ['nodejs_20', 'npm-10_x']
+# Use Node.js 22 (includes npm 11) to avoid npm@10 lockfile parsing issues
+nixPkgs = ['nodejs_22']
 
 [phases.install]
 cmds = ['npm install']
@@ -12,4 +13,3 @@ cmds = [
 
 [start]
 cmd = 'serve -s dist -l $PORT'
-
