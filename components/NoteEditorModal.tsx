@@ -19,12 +19,15 @@ import {
   Pencil,
   Plus,
   RotateCw,
+  Scan,
   Save,
   Send,
   Sparkles,
   Trash2,
   Type,
-  X
+  X,
+  ZoomIn,
+  ZoomOut
 } from 'lucide-react';
 import { PDFDocument } from 'pdf-lib';
 import { get as idbGet, set as idbSet } from 'idb-keyval';
@@ -164,6 +167,42 @@ const fitPaperToContainer = (canvas: fabric.Canvas, container: HTMLDivElement, p
   canvas.requestRenderAll();
 };
 
+const ensurePaperRect = (canvas: fabric.Canvas, pageW: number, pageH: number) => {
+  const existing = canvas.getObjects().find((o) => Boolean((o as any).lpediaPaper)) as fabric.Rect | undefined;
+  if (existing) {
+    existing.set({ left: 0, top: 0, width: pageW, height: pageH, visible: true });
+    canvas.sendToBack(existing);
+    return existing;
+  }
+  const rect = new fabric.Rect({
+    left: 0,
+    top: 0,
+    width: pageW,
+    height: pageH,
+    fill: '#ffffff',
+    stroke: '#d1d5db',
+    strokeWidth: 2,
+    selectable: false,
+    evented: false,
+    hasControls: false,
+    hasBorders: false,
+    hoverCursor: 'default'
+  });
+  (rect as any).lpediaPaper = true;
+  (rect as any).lpediaLocked = true;
+  (rect as any).lpediaLayer = 'paper';
+  canvas.add(rect);
+  canvas.sendToBack(rect);
+  return rect;
+};
+
+const stripPaperFromCanvasJson = (json: any) => {
+  if (!json || typeof json !== 'object') return json;
+  const objects = Array.isArray(json.objects) ? json.objects : [];
+  const nextObjects = objects.filter((o: any) => !o?.lpediaPaper && String(o?.lpediaLayer || '') !== 'paper');
+  return { ...json, objects: nextObjects, background: '#ffffff', backgroundColor: undefined };
+};
+
 const exportPdfFromDoc = async (doc: FabricDocSnapshot) => {
   const orientation: PageOrientation = doc?.page?.orientation === 'landscape' ? 'landscape' : 'portrait';
   const { w: pageW, h: pageH } = getA4Size(orientation);
@@ -295,6 +334,7 @@ const NoteEditorModal: React.FC<Props> = ({ open, onClose, authService, mode, no
   const [penWidth, setPenWidth] = useState(2);
   const [layersOpen, setLayersOpen] = useState(false);
   const [layersVersion, setLayersVersion] = useState(0);
+  const [zoomPct, setZoomPct] = useState(100);
   const [activeTextColor, setActiveTextColor] = useState('#111827');
   const [docLoadedToken, setDocLoadedToken] = useState(0);
   const [selectionVersion, setSelectionVersion] = useState(0);
@@ -311,6 +351,9 @@ const NoteEditorModal: React.FC<Props> = ({ open, onClose, authService, mode, no
   const pendingLoadAbortRef = useRef<AbortController | null>(null);
   const pageSizeRef = useRef(getA4Size('portrait'));
   const penStateRef = useRef({ color: '#111827', width: 2 });
+  const spaceDownRef = useRef(false);
+  const isPanningRef = useRef(false);
+  const panLastRef = useRef<{ x: number; y: number } | null>(null);
 
   const latestStateRef = useRef({
     open,
@@ -333,6 +376,12 @@ const NoteEditorModal: React.FC<Props> = ({ open, onClose, authService, mode, no
   const applyPermissionsToObjects = (canvas: fabric.Canvas) => {
     const objs = canvas.getObjects();
     for (const o of objs) {
+      if ((o as any).lpediaPaper || String((o as any).lpediaLayer || '') === 'paper') {
+        o.visible = true;
+        o.selectable = false;
+        o.evented = false;
+        continue;
+      }
       const locked = Boolean((o as any).lpediaLocked);
       const layer = String((o as any).lpediaLayer || 'base');
 
@@ -366,8 +415,8 @@ const NoteEditorModal: React.FC<Props> = ({ open, onClose, authService, mode, no
     if (mode === 'teacher') return;
     const canvas = fabricRef.current;
     if (!canvas) return;
-    const json = canvas.toJSON(['lpediaLocked', 'lpediaLayer', 'crossOrigin']);
-    docRef.current.pages[docRef.current.currentPage] = json;
+    const json = canvas.toJSON(['lpediaLocked', 'lpediaLayer', 'crossOrigin', 'lpediaPaper']);
+    docRef.current.pages[docRef.current.currentPage] = stripPaperFromCanvasJson(json);
   };
 
   const scheduleStudentSave = async () => {
@@ -397,10 +446,10 @@ const NoteEditorModal: React.FC<Props> = ({ open, onClose, authService, mode, no
     const canvas = fabricRef.current;
     const ann = annotationDocRef.current;
     if (!canvas || !ann) return;
-    const json = canvas.toJSON(['lpediaLocked', 'lpediaLayer', 'crossOrigin']);
+    const json = canvas.toJSON(['lpediaLocked', 'lpediaLayer', 'crossOrigin', 'lpediaPaper']);
     const objects = Array.isArray((json as any).objects) ? (json as any).objects : [];
     const only = objects.filter((o: any) => String(o.lpediaLayer || '') === 'annotation');
-    ann.pages[ann.currentPage] = { ...json, objects: only, background: '#ffffff' };
+    ann.pages[ann.currentPage] = stripPaperFromCanvasJson({ ...json, objects: only, background: '#ffffff' });
   };
 
   const loadPage = async (idx: number) => {
@@ -444,8 +493,10 @@ const NoteEditorModal: React.FC<Props> = ({ open, onClose, authService, mode, no
             })();
 
       await withTimeout(canvas.loadFromJSON(pageJson, undefined, { signal: loadAbort.signal } as any), 15000, '載入頁面超時', () => loadAbort.abort());
+      ensurePaperRect(canvas, pageW, pageH);
       applyPermissionsToObjects(canvas);
       fitPaperToContainer(canvas, container, pageW, pageH);
+      setZoomPct(Math.round((canvas.getZoom() || 1) * 100));
       canvas.discardActiveObject();
       canvas.requestRenderAll();
       setError('');
@@ -465,6 +516,7 @@ const NoteEditorModal: React.FC<Props> = ({ open, onClose, authService, mode, no
     setPageIndex(0);
     setPageCount(1);
     setPageOrientation('portrait');
+    setZoomPct(100);
     await loadPage(0);
     setError('');
   };
@@ -483,6 +535,28 @@ const NoteEditorModal: React.FC<Props> = ({ open, onClose, authService, mode, no
   const canChangePageOrientation =
     (mode === 'template' && canTemplateEdit) || (mode === 'student' && canEdit && !submittedAt);
 
+  const fitView = () => {
+    const canvas = fabricRef.current;
+    const container = containerRef.current;
+    if (!canvas || !container) return;
+    const { w: pageW, h: pageH } = pageSizeRef.current;
+    ensurePaperRect(canvas, pageW, pageH);
+    fitPaperToContainer(canvas, container, pageW, pageH);
+    setZoomPct(Math.round((canvas.getZoom() || 1) * 100));
+  };
+
+  const zoomBy = (factor: number) => {
+    const canvas = fabricRef.current;
+    if (!canvas) return;
+    const clamp = (n: number, min: number, max: number) => Math.min(max, Math.max(min, n));
+    const current = canvas.getZoom() || 1;
+    const next = clamp(current * factor, 0.25, 4);
+    const pt = new fabric.Point(canvas.getWidth() / 2, canvas.getHeight() / 2);
+    canvas.zoomToPoint(pt, next);
+    setZoomPct(Math.round((canvas.getZoom() || 1) * 100));
+    canvas.requestRenderAll();
+  };
+
   const togglePageOrientation = () => {
     if (!canChangePageOrientation) return;
     const next: PageOrientation = pageOrientation === 'portrait' ? 'landscape' : 'portrait';
@@ -492,7 +566,9 @@ const NoteEditorModal: React.FC<Props> = ({ open, onClose, authService, mode, no
     const container = containerRef.current;
     if (canvas && container) {
       const { w: pageW, h: pageH } = getA4Size(next);
+      ensurePaperRect(canvas, pageW, pageH);
       fitPaperToContainer(canvas, container, pageW, pageH);
+      setZoomPct(Math.round((canvas.getZoom() || 1) * 100));
       canvas.requestRenderAll();
     }
   };
@@ -517,6 +593,7 @@ const NoteEditorModal: React.FC<Props> = ({ open, onClose, authService, mode, no
     canvas.add(tb);
     canvas.setActiveObject(tb);
     canvas.requestRenderAll();
+    setLayersVersion((v) => v + 1);
   };
 
   const applyTextStyle = (patch: Partial<fabric.IText>) => {
@@ -577,6 +654,7 @@ const NoteEditorModal: React.FC<Props> = ({ open, onClose, authService, mode, no
     if (active.length === 0) return;
 
     const deletable = active.filter((o) => {
+      if ((o as any).lpediaPaper) return false;
       const locked = Boolean((o as any).lpediaLocked);
       const layer = String((o as any).lpediaLayer || 'base');
       if (mode === 'student') return !locked && !submittedAt;
@@ -587,6 +665,7 @@ const NoteEditorModal: React.FC<Props> = ({ open, onClose, authService, mode, no
     deletable.forEach((o) => canvas.remove(o));
     canvas.discardActiveObject();
     canvas.requestRenderAll();
+    setLayersVersion((v) => v + 1);
     void scheduleStudentSave();
   };
 
@@ -893,35 +972,71 @@ const NoteEditorModal: React.FC<Props> = ({ open, onClose, authService, mode, no
     fabricRef.current = canvas;
     canvas.backgroundColor = undefined;
 
-    const drawPaper = () => {
-      const ctx = canvas.getContext();
-      if (!ctx) return;
-      const { w: pageW, h: pageH } = pageSizeRef.current;
-      const cw = canvas.getWidth();
-      const ch = canvas.getHeight();
-      const v = canvas.viewportTransform || [1, 0, 0, 1, 0, 0];
-      const s = v[0] || 1;
-      ctx.save();
-      ctx.globalCompositeOperation = 'destination-over';
-      ctx.setTransform(1, 0, 0, 1, 0, 0);
-      ctx.fillStyle = '#E5E7EB';
-      ctx.fillRect(0, 0, cw, ch);
-      ctx.setTransform(v[0], v[1], v[2], v[3], v[4], v[5]);
-      ctx.fillStyle = '#ffffff';
-      ctx.fillRect(0, 0, pageW, pageH);
-      ctx.strokeStyle = '#d1d5db';
-      ctx.lineWidth = 2 / s;
-      ctx.strokeRect(0, 0, pageW, pageH);
-      ctx.restore();
-    };
-    canvas.on('after:render', drawPaper);
-
     const onResize = () => {
       const { w: pageW, h: pageH } = pageSizeRef.current;
+      ensurePaperRect(canvas, pageW, pageH);
       fitPaperToContainer(canvas, container, pageW, pageH);
+      setZoomPct(Math.round((canvas.getZoom() || 1) * 100));
     };
     window.addEventListener('resize', onResize);
     onResize();
+
+    const clamp = (n: number, min: number, max: number) => Math.min(max, Math.max(min, n));
+
+    const onWheel = (opt: any) => {
+      const e = opt?.e as WheelEvent | undefined;
+      if (!e) return;
+      e.preventDefault();
+      e.stopPropagation();
+      if (e.ctrlKey || e.metaKey) {
+        const delta = e.deltaY;
+        const zoom = canvas.getZoom() || 1;
+        const next = clamp(zoom * Math.pow(0.999, delta), 0.25, 4);
+        const pt = new fabric.Point((e as any).offsetX ?? canvas.getWidth() / 2, (e as any).offsetY ?? canvas.getHeight() / 2);
+        canvas.zoomToPoint(pt, next);
+        setZoomPct(Math.round((canvas.getZoom() || 1) * 100));
+        canvas.requestRenderAll();
+        return;
+      }
+      // Pan (scroll up/down or trackpad)
+      canvas.relativePan(new fabric.Point(-e.deltaX, -e.deltaY));
+      canvas.requestRenderAll();
+    };
+    canvas.on('mouse:wheel', onWheel);
+
+    const onMouseDown = (opt: any) => {
+      const e = opt?.e as MouseEvent | undefined;
+      if (!e) return;
+      if (!spaceDownRef.current) return;
+      isPanningRef.current = true;
+      panLastRef.current = { x: e.clientX, y: e.clientY };
+      canvas.selection = false;
+      canvas.defaultCursor = 'grabbing';
+      canvas.discardActiveObject();
+      canvas.requestRenderAll();
+    };
+    const onMouseMove = (opt: any) => {
+      if (!isPanningRef.current) return;
+      const e = opt?.e as MouseEvent | undefined;
+      const last = panLastRef.current;
+      if (!e || !last) return;
+      const dx = e.clientX - last.x;
+      const dy = e.clientY - last.y;
+      panLastRef.current = { x: e.clientX, y: e.clientY };
+      canvas.relativePan(new fabric.Point(dx, dy));
+      canvas.requestRenderAll();
+    };
+    const onMouseUp = () => {
+      if (!isPanningRef.current) return;
+      isPanningRef.current = false;
+      panLastRef.current = null;
+      canvas.selection = true;
+      canvas.defaultCursor = 'default';
+      canvas.requestRenderAll();
+    };
+    canvas.on('mouse:down', onMouseDown);
+    canvas.on('mouse:move', onMouseMove);
+    canvas.on('mouse:up', onMouseUp);
 
     const allowEdit = () => {
       const st = latestStateRef.current;
@@ -990,6 +1105,13 @@ const NoteEditorModal: React.FC<Props> = ({ open, onClose, authService, mode, no
 
     const onKeyDown = (evt: KeyboardEvent) => {
       if (!open) return;
+      if (evt.code === 'Space') {
+        spaceDownRef.current = true;
+        evt.preventDefault();
+        canvas.defaultCursor = 'grab';
+        canvas.requestRenderAll();
+        return;
+      }
       if (evt.key === 'Delete' || evt.key === 'Backspace') {
         const active = canvas.getActiveObject() as any;
         if (active && (active as any).isEditing) return;
@@ -997,14 +1119,30 @@ const NoteEditorModal: React.FC<Props> = ({ open, onClose, authService, mode, no
         deleteSelection();
       }
     };
+    const onKeyUp = (evt: KeyboardEvent) => {
+      if (evt.code !== 'Space') return;
+      spaceDownRef.current = false;
+      if (isPanningRef.current) {
+        isPanningRef.current = false;
+        panLastRef.current = null;
+        canvas.selection = true;
+      }
+      canvas.defaultCursor = 'default';
+      canvas.requestRenderAll();
+    };
     window.addEventListener('keydown', onKeyDown);
+    window.addEventListener('keyup', onKeyUp);
 
     void loadPage(docRef.current.currentPage);
 
     return () => {
       window.removeEventListener('keydown', onKeyDown);
+      window.removeEventListener('keyup', onKeyUp);
       window.removeEventListener('resize', onResize);
-      canvas.off('after:render', drawPaper);
+      canvas.off('mouse:wheel', onWheel);
+      canvas.off('mouse:down', onMouseDown);
+      canvas.off('mouse:move', onMouseMove);
+      canvas.off('mouse:up', onMouseUp);
       canvas.off('object:added', onAdded);
       canvas.off('object:modified', onModified);
       canvas.off('object:removed', onModified);
@@ -1024,7 +1162,16 @@ const NoteEditorModal: React.FC<Props> = ({ open, onClose, authService, mode, no
     const container = containerRef.current;
     if (!canvas || !container) return;
     const { w: pageW, h: pageH } = pageSizeRef.current;
+    ensurePaperRect(canvas, pageW, pageH);
     fitPaperToContainer(canvas, container, pageW, pageH);
+    setZoomPct(Math.round((canvas.getZoom() || 1) * 100));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, fullscreen, pageOrientation]);
+
+  useEffect(() => {
+    if (!open) return;
+    const canvas = fabricRef.current;
+    if (!canvas) return;
     applyPermissionsToObjects(canvas);
     const allowEdit =
       canEdit &&
@@ -1043,7 +1190,7 @@ const NoteEditorModal: React.FC<Props> = ({ open, onClose, authService, mode, no
     }
     canvas.requestRenderAll();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [fullscreen, annotationMode, annotationsVisible, tool, canEdit, submittedAt, pageOrientation, penColor, penWidth]);
+  }, [annotationMode, annotationsVisible, tool, canEdit, submittedAt, penColor, penWidth]);
 
   useEffect(() => {
     if (!open) return;
@@ -1102,7 +1249,7 @@ const NoteEditorModal: React.FC<Props> = ({ open, onClose, authService, mode, no
     if (!open) return [];
     const canvas = fabricRef.current;
     if (!canvas) return [];
-    const objects = canvas.getObjects().slice();
+    const objects = canvas.getObjects().filter((o) => !(o as any).lpediaPaper).slice();
     const describe = (o: any) => {
       const t = String(o?.type || '');
       if (t === 'textbox' || t === 'i-text' || t === 'text') {
@@ -1187,6 +1334,38 @@ const NoteEditorModal: React.FC<Props> = ({ open, onClose, authService, mode, no
               <RotateCw className="w-4 h-4" />
               {pageOrientation === 'portrait' ? '橫放' : '直放'}
             </button>
+
+            <div className="px-3 py-2 rounded-2xl border-4 border-brand-brown bg-white text-brand-brown font-black shadow-comic flex items-center gap-2">
+              <button
+                type="button"
+                className="p-1 rounded-lg hover:bg-gray-100 disabled:opacity-40"
+                onClick={() => zoomBy(1 / 1.15)}
+                disabled={loading}
+                title="縮小"
+              >
+                <ZoomOut className="w-4 h-4" />
+              </button>
+              <div className="text-sm w-14 text-center">{zoomPct}%</div>
+              <button
+                type="button"
+                className="p-1 rounded-lg hover:bg-gray-100 disabled:opacity-40"
+                onClick={() => zoomBy(1.15)}
+                disabled={loading}
+                title="放大"
+              >
+                <ZoomIn className="w-4 h-4" />
+              </button>
+              <button
+                type="button"
+                className="px-2 py-1 rounded-xl border-2 border-brand-brown hover:bg-gray-50 text-sm font-black disabled:opacity-40 flex items-center gap-1"
+                onClick={fitView}
+                disabled={loading}
+                title="適合畫面"
+              >
+                <Scan className="w-4 h-4" />
+                適合
+              </button>
+            </div>
 
             <div className="px-3 py-2 rounded-2xl border-4 border-brand-brown bg-white text-brand-brown font-black shadow-comic flex items-center gap-2">
               <button
