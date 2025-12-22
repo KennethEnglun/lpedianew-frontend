@@ -2,11 +2,18 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ArrowLeft,
   ArrowRight,
+  ChevronsDown,
+  ChevronsUp,
+  ChevronDown,
+  ChevronUp,
   Bold,
   FileDown,
   Image as ImageIcon,
   Lock,
+  Layers,
   Maximize2,
+  ArrowDown,
+  ArrowUp,
   Minimize2,
   MousePointer2,
   Pencil,
@@ -284,6 +291,10 @@ const NoteEditorModal: React.FC<Props> = ({ open, onClose, authService, mode, no
   const [pageIndex, setPageIndex] = useState(0);
   const [pageCount, setPageCount] = useState(1);
   const [pageOrientation, setPageOrientation] = useState<PageOrientation>('portrait');
+  const [penColor, setPenColor] = useState('#111827');
+  const [penWidth, setPenWidth] = useState(2);
+  const [layersOpen, setLayersOpen] = useState(false);
+  const [layersVersion, setLayersVersion] = useState(0);
   const [activeTextColor, setActiveTextColor] = useState('#111827');
   const [docLoadedToken, setDocLoadedToken] = useState(0);
   const [selectionVersion, setSelectionVersion] = useState(0);
@@ -299,6 +310,7 @@ const NoteEditorModal: React.FC<Props> = ({ open, onClose, authService, mode, no
   const pendingImgAbortRef = useRef<AbortController | null>(null);
   const pendingLoadAbortRef = useRef<AbortController | null>(null);
   const pageSizeRef = useRef(getA4Size('portrait'));
+  const penStateRef = useRef({ color: '#111827', width: 2 });
 
   const latestStateRef = useRef({
     open,
@@ -315,6 +327,7 @@ const NoteEditorModal: React.FC<Props> = ({ open, onClose, authService, mode, no
   const canAnnotate = mode === 'teacher' && (viewerRole === 'teacher' || viewerRole === 'admin');
 
   pageSizeRef.current = getA4Size(pageOrientation);
+  penStateRef.current = { color: String(penColor || '#111827'), width: Math.max(1, Number(penWidth) || 2) };
   latestStateRef.current = { open, mode, canEdit, submittedAt, annotationMode, canTemplateEdit };
 
   const applyPermissionsToObjects = (canvas: fabric.Canvas) => {
@@ -410,7 +423,8 @@ const NoteEditorModal: React.FC<Props> = ({ open, onClose, authService, mode, no
         annotationDocRef.current.currentPage = next;
       }
 
-      canvas.backgroundColor = '#E5E7EB';
+      canvas.clear();
+      canvas.backgroundColor = undefined;
       const baseJson = docRef.current.pages[next] || emptyPage();
       const pageJson =
         mode !== 'teacher'
@@ -581,8 +595,14 @@ const NoteEditorModal: React.FC<Props> = ({ open, onClose, authService, mode, no
     if (!canvas) return;
     const obj = canvas.getActiveObject();
     if (!obj) return;
+    const locked = Boolean((obj as any).lpediaLocked);
+    const layer = String((obj as any).lpediaLayer || 'base');
+    if (mode === 'student' && (locked || submittedAt)) return;
+    if (mode === 'template' && !canTemplateEdit) return;
+    if (mode === 'teacher' && (!annotationMode || layer !== 'annotation')) return;
     canvas.bringToFront(obj);
     canvas.requestRenderAll();
+    setLayersVersion((v) => v + 1);
     void scheduleStudentSave();
   };
 
@@ -591,8 +611,46 @@ const NoteEditorModal: React.FC<Props> = ({ open, onClose, authService, mode, no
     if (!canvas) return;
     const obj = canvas.getActiveObject();
     if (!obj) return;
+    const locked = Boolean((obj as any).lpediaLocked);
+    const layer = String((obj as any).lpediaLayer || 'base');
+    if (mode === 'student' && (locked || submittedAt)) return;
+    if (mode === 'template' && !canTemplateEdit) return;
+    if (mode === 'teacher' && (!annotationMode || layer !== 'annotation')) return;
     canvas.sendToBack(obj);
     canvas.requestRenderAll();
+    setLayersVersion((v) => v + 1);
+    void scheduleStudentSave();
+  };
+
+  const bringForward = () => {
+    const canvas = fabricRef.current;
+    if (!canvas) return;
+    const obj = canvas.getActiveObject();
+    if (!obj) return;
+    const locked = Boolean((obj as any).lpediaLocked);
+    const layer = String((obj as any).lpediaLayer || 'base');
+    if (mode === 'student' && (locked || submittedAt)) return;
+    if (mode === 'template' && !canTemplateEdit) return;
+    if (mode === 'teacher' && (!annotationMode || layer !== 'annotation')) return;
+    (canvas as any).bringObjectForward?.(obj);
+    canvas.requestRenderAll();
+    setLayersVersion((v) => v + 1);
+    void scheduleStudentSave();
+  };
+
+  const sendBackward = () => {
+    const canvas = fabricRef.current;
+    if (!canvas) return;
+    const obj = canvas.getActiveObject();
+    if (!obj) return;
+    const locked = Boolean((obj as any).lpediaLocked);
+    const layer = String((obj as any).lpediaLayer || 'base');
+    if (mode === 'student' && (locked || submittedAt)) return;
+    if (mode === 'template' && !canTemplateEdit) return;
+    if (mode === 'teacher' && (!annotationMode || layer !== 'annotation')) return;
+    (canvas as any).sendObjectBackwards?.(obj);
+    canvas.requestRenderAll();
+    setLayersVersion((v) => v + 1);
     void scheduleStudentSave();
   };
 
@@ -715,6 +773,8 @@ const NoteEditorModal: React.FC<Props> = ({ open, onClose, authService, mode, no
       setNoteTitle(String(server?.note?.title || '筆記'));
       setCanEdit(!server?.submission?.submittedAt);
       setPageOrientation(docRef.current?.page?.orientation === 'landscape' ? 'landscape' : 'portrait');
+      setPenColor('#111827');
+      setPenWidth(2);
       setPageIndex(docRef.current.currentPage);
       setPageCount(docRef.current.pages.length);
       setDocLoadedToken(Date.now());
@@ -741,6 +801,8 @@ const NoteEditorModal: React.FC<Props> = ({ open, onClose, authService, mode, no
         docRef.current = normalizeDoc(snap);
       }
       setPageOrientation(docRef.current?.page?.orientation === 'landscape' ? 'landscape' : 'portrait');
+      setPenColor('#111827');
+      setPenWidth(2);
       setPageIndex(docRef.current.currentPage);
       setPageCount(docRef.current.pages.length);
       setDocLoadedToken(Date.now());
@@ -782,6 +844,8 @@ const NoteEditorModal: React.FC<Props> = ({ open, onClose, authService, mode, no
       setAnnotationMode(false);
       setAnnotationsVisible(true);
       setPageOrientation(docRef.current?.page?.orientation === 'landscape' ? 'landscape' : 'portrait');
+      setPenColor('#ef4444');
+      setPenWidth(3);
       setPageIndex(docRef.current.currentPage);
       setPageCount(docRef.current.pages.length);
       setDocLoadedToken(Date.now());
@@ -799,6 +863,7 @@ const NoteEditorModal: React.FC<Props> = ({ open, onClose, authService, mode, no
     setTool('select');
     setAnnotationMode(false);
     setAnnotationsVisible(true);
+    setLayersOpen(false);
     annotationDocRef.current = null;
     if (pendingImgAbortRef.current) {
       pendingImgAbortRef.current.abort();
@@ -826,15 +891,21 @@ const NoteEditorModal: React.FC<Props> = ({ open, onClose, authService, mode, no
       stopContextMenu: true
     });
     fabricRef.current = canvas;
-    canvas.backgroundColor = '#E5E7EB';
+    canvas.backgroundColor = undefined;
 
     const drawPaper = () => {
       const ctx = canvas.getContext();
       if (!ctx) return;
       const { w: pageW, h: pageH } = pageSizeRef.current;
+      const cw = canvas.getWidth();
+      const ch = canvas.getHeight();
       const v = canvas.viewportTransform || [1, 0, 0, 1, 0, 0];
       const s = v[0] || 1;
       ctx.save();
+      ctx.globalCompositeOperation = 'destination-over';
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
+      ctx.fillStyle = '#E5E7EB';
+      ctx.fillRect(0, 0, cw, ch);
       ctx.setTransform(v[0], v[1], v[2], v[3], v[4], v[5]);
       ctx.fillStyle = '#ffffff';
       ctx.fillRect(0, 0, pageW, pageH);
@@ -843,7 +914,7 @@ const NoteEditorModal: React.FC<Props> = ({ open, onClose, authService, mode, no
       ctx.strokeRect(0, 0, pageW, pageH);
       ctx.restore();
     };
-    canvas.on('before:render', drawPaper);
+    canvas.on('after:render', drawPaper);
 
     const onResize = () => {
       const { w: pageW, h: pageH } = pageSizeRef.current;
@@ -872,8 +943,8 @@ const NoteEditorModal: React.FC<Props> = ({ open, onClose, authService, mode, no
       }
       canvas.isDrawingMode = true;
       const brush = new fabric.PencilBrush(canvas);
-      brush.width = mode === 'teacher' ? 3 : 2;
-      brush.color = mode === 'teacher' ? '#ef4444' : '#111827';
+      brush.width = penStateRef.current.width;
+      brush.color = penStateRef.current.color;
       canvas.freeDrawingBrush = brush;
     };
 
@@ -895,15 +966,17 @@ const NoteEditorModal: React.FC<Props> = ({ open, onClose, authService, mode, no
         canvas.remove(obj);
         return;
       }
-	      markNewObjectLayer(obj);
-	      applyPermissionsToObjects(canvas);
-	      void scheduleStudentSave();
-	    };
-	    const onModified = () => {
-	      if (suppressSaveRef.current) return;
-	      if (!allowEdit()) return;
-	      void scheduleStudentSave();
-	    };
+      markNewObjectLayer(obj);
+      applyPermissionsToObjects(canvas);
+      setLayersVersion((v) => v + 1);
+      void scheduleStudentSave();
+    };
+    const onModified = () => {
+      if (suppressSaveRef.current) return;
+      if (!allowEdit()) return;
+      setLayersVersion((v) => v + 1);
+      void scheduleStudentSave();
+    };
 
     canvas.on('object:added', onAdded);
     canvas.on('object:modified', onModified);
@@ -931,7 +1004,7 @@ const NoteEditorModal: React.FC<Props> = ({ open, onClose, authService, mode, no
     return () => {
       window.removeEventListener('keydown', onKeyDown);
       window.removeEventListener('resize', onResize);
-      canvas.off('before:render', drawPaper);
+      canvas.off('after:render', drawPaper);
       canvas.off('object:added', onAdded);
       canvas.off('object:modified', onModified);
       canvas.off('object:removed', onModified);
@@ -962,15 +1035,15 @@ const NoteEditorModal: React.FC<Props> = ({ open, onClose, authService, mode, no
     if (allowEdit && tool === 'pen') {
       canvas.isDrawingMode = true;
       const brush = new fabric.PencilBrush(canvas);
-      brush.width = mode === 'teacher' ? 3 : 2;
-      brush.color = mode === 'teacher' ? '#ef4444' : '#111827';
+      brush.width = penStateRef.current.width;
+      brush.color = penStateRef.current.color;
       canvas.freeDrawingBrush = brush;
     } else {
       canvas.isDrawingMode = false;
     }
     canvas.requestRenderAll();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [fullscreen, annotationMode, annotationsVisible, tool, canEdit, submittedAt]);
+  }, [fullscreen, annotationMode, annotationsVisible, tool, canEdit, submittedAt, pageOrientation, penColor, penWidth]);
 
   useEffect(() => {
     if (!open) return;
@@ -1012,6 +1085,45 @@ const NoteEditorModal: React.FC<Props> = ({ open, onClose, authService, mode, no
     return { hasText: true, bold: fw === 'bold' || fw === '700' };
   }, [activeTextColor, pageIndex, tool, annotationMode, selectionVersion]);
 
+  const hasSelection = useMemo(() => {
+    if (!open) return false;
+    const canvas = fabricRef.current;
+    if (!canvas) return false;
+    return canvas.getActiveObjects().length > 0;
+  }, [open, pageIndex, selectionVersion, layersVersion]);
+
+  const canEditOnCanvas =
+    canEdit &&
+    !(mode === 'student' && !!submittedAt) &&
+    !(mode === 'teacher' && !annotationMode) &&
+    !(mode === 'template' && !canTemplateEdit);
+
+  const layerItems = useMemo(() => {
+    if (!open) return [];
+    const canvas = fabricRef.current;
+    if (!canvas) return [];
+    const objects = canvas.getObjects().slice();
+    const describe = (o: any) => {
+      const t = String(o?.type || '');
+      if (t === 'textbox' || t === 'i-text' || t === 'text') {
+        const txt = String(o.text || '').replace(/\s+/g, ' ').trim();
+        return txt ? `文字：${txt.slice(0, 16)}` : '文字';
+      }
+      if (t === 'image') return '圖片';
+      if (t === 'path' || t === 'path-group') return '筆跡';
+      if (t === 'group') return '群組';
+      return t || '物件';
+    };
+    return objects
+      .map((o, i) => {
+        const locked = Boolean((o as any).lpediaLocked);
+        const layer = String((o as any).lpediaLayer || 'base');
+        const isActive = canvas.getActiveObjects().includes(o);
+        return { key: `${layer}-${o.type}-${i}`, obj: o, label: describe(o), locked, layer, isActive };
+      })
+      .reverse();
+  }, [open, pageIndex, layersVersion, selectionVersion, annotationMode, annotationsVisible]);
+
   if (!open) return null;
 
   const statusText =
@@ -1041,6 +1153,7 @@ const NoteEditorModal: React.FC<Props> = ({ open, onClose, authService, mode, no
               <button
                 type="button"
                 onClick={() => {
+                  saveCurrentPageToDoc();
                   const doc = docRef.current;
                   void exportPdfFromDoc(doc);
                 }}
@@ -1154,7 +1267,58 @@ const NoteEditorModal: React.FC<Props> = ({ open, onClose, authService, mode, no
               >
                 <Trash2 className="w-4 h-4" />
               </button>
+              <button
+                type="button"
+                className="p-1 rounded-lg hover:bg-gray-100 disabled:opacity-40"
+                onClick={bringForward}
+                title="上移一層"
+                disabled={loading || !hasSelection || !canEditOnCanvas}
+              >
+                <ArrowUp className="w-4 h-4" />
+              </button>
+              <button
+                type="button"
+                className="p-1 rounded-lg hover:bg-gray-100 disabled:opacity-40"
+                onClick={sendBackward}
+                title="下移一層"
+                disabled={loading || !hasSelection || !canEditOnCanvas}
+              >
+                <ArrowDown className="w-4 h-4" />
+              </button>
+              <button
+                type="button"
+                className={`p-1 rounded-lg hover:bg-gray-100 ${layersOpen ? 'bg-gray-100' : ''}`}
+                onClick={() => setLayersOpen((v) => !v)}
+                title="圖層"
+                disabled={loading}
+              >
+                <Layers className="w-4 h-4" />
+              </button>
             </div>
+
+            {tool === 'pen' && (
+              <div className="px-3 py-2 rounded-2xl border-4 border-brand-brown bg-white text-brand-brown font-black shadow-comic flex items-center gap-2">
+                <div className="text-sm">筆</div>
+                <input
+                  type="color"
+                  value={penColor}
+                  onChange={(e) => setPenColor(e.target.value)}
+                  title="筆色"
+                  className="w-8 h-8 p-0 border-0 bg-transparent"
+                  disabled={loading || !canEditOnCanvas}
+                />
+                <input
+                  type="range"
+                  min={1}
+                  max={18}
+                  value={penWidth}
+                  onChange={(e) => setPenWidth(Number(e.target.value))}
+                  title="粗幼"
+                  disabled={loading || !canEditOnCanvas}
+                />
+                <div className="text-xs w-10 text-right">{penWidth}px</div>
+              </div>
+            )}
 
             {activeTextTools.hasText && (
               <div className="px-3 py-2 rounded-2xl border-4 border-brand-brown bg-white text-brand-brown font-black shadow-comic flex items-center gap-2">
@@ -1444,6 +1608,127 @@ const NoteEditorModal: React.FC<Props> = ({ open, onClose, authService, mode, no
               await insertImageFromFile(file);
             }}
           />
+          {layersOpen && (
+            <div className="absolute right-3 top-3 w-80 max-w-[90vw] rounded-2xl border-4 border-brand-brown bg-white shadow-comic overflow-hidden">
+              <div className="p-2 bg-[#C0E2BE] border-b-4 border-brand-brown flex items-center justify-between">
+                <div className="font-black text-brand-brown">圖層</div>
+                <button
+                  type="button"
+                  onClick={() => setLayersOpen(false)}
+                  className="w-8 h-8 rounded-full bg-white border-2 border-brand-brown hover:bg-gray-100 flex items-center justify-center"
+                  title="關閉"
+                >
+                  <X className="w-4 h-4 text-brand-brown" />
+                </button>
+              </div>
+              <div className="p-2 max-h-[60vh] overflow-auto">
+                {layerItems.length === 0 ? (
+                  <div className="text-sm text-gray-500 font-bold p-2">（此頁沒有物件）</div>
+                ) : (
+                  <div className="space-y-2">
+                    {layerItems.map((it) => {
+                      const canReorder =
+                        canEditOnCanvas &&
+                        !(mode === 'teacher' && it.layer !== 'annotation') &&
+                        !(mode === 'student' && (it.locked || !!submittedAt));
+                      return (
+                        <button
+                          key={it.key}
+                          type="button"
+                          className={`w-full text-left p-2 rounded-2xl border-2 ${
+                            it.isActive ? 'border-blue-500 bg-blue-50' : 'border-gray-200 hover:bg-gray-50'
+                          }`}
+                          onClick={() => {
+                            const canvas = fabricRef.current;
+                            if (!canvas) return;
+                            canvas.setActiveObject(it.obj);
+                            canvas.requestRenderAll();
+                            setSelectionVersion((v) => v + 1);
+                          }}
+                        >
+                          <div className="flex items-center justify-between gap-2">
+                            <div className="min-w-0">
+                              <div className="font-black text-brand-brown truncate">{it.label}</div>
+                              <div className="text-xs text-brand-brown/70">
+                                {it.layer === 'annotation' ? '批改層' : '內容'}
+                                {it.locked ? ' · 鎖定' : ''}
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-1">
+                              <button
+                                type="button"
+                                className="p-1 rounded-lg border-2 border-brand-brown hover:bg-gray-100 disabled:opacity-40"
+                                title="置頂"
+                                disabled={!canReorder}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  const canvas = fabricRef.current;
+                                  if (!canvas) return;
+                                  canvas.setActiveObject(it.obj);
+                                  setSelectionVersion((v) => v + 1);
+                                  bringToFront();
+                                }}
+                              >
+                                <ChevronsUp className="w-4 h-4" />
+                              </button>
+                              <button
+                                type="button"
+                                className="p-1 rounded-lg border-2 border-brand-brown hover:bg-gray-100 disabled:opacity-40"
+                                title="上移一層"
+                                disabled={!canReorder}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  const canvas = fabricRef.current;
+                                  if (!canvas) return;
+                                  canvas.setActiveObject(it.obj);
+                                  setSelectionVersion((v) => v + 1);
+                                  bringForward();
+                                }}
+                              >
+                                <ChevronUp className="w-4 h-4" />
+                              </button>
+                              <button
+                                type="button"
+                                className="p-1 rounded-lg border-2 border-brand-brown hover:bg-gray-100 disabled:opacity-40"
+                                title="下移一層"
+                                disabled={!canReorder}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  const canvas = fabricRef.current;
+                                  if (!canvas) return;
+                                  canvas.setActiveObject(it.obj);
+                                  setSelectionVersion((v) => v + 1);
+                                  sendBackward();
+                                }}
+                              >
+                                <ChevronDown className="w-4 h-4" />
+                              </button>
+                              <button
+                                type="button"
+                                className="p-1 rounded-lg border-2 border-brand-brown hover:bg-gray-100 disabled:opacity-40"
+                                title="置底"
+                                disabled={!canReorder}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  const canvas = fabricRef.current;
+                                  if (!canvas) return;
+                                  canvas.setActiveObject(it.obj);
+                                  setSelectionVersion((v) => v + 1);
+                                  sendToBack();
+                                }}
+                              >
+                                <ChevronsDown className="w-4 h-4" />
+                              </button>
+                            </div>
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
           {loading && (
             <div className="absolute inset-0 bg-white/60 flex items-center justify-center pointer-events-none">
               <div className="px-4 py-2 rounded-2xl border-4 border-brand-brown bg-white font-black text-brand-brown shadow-comic">
