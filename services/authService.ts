@@ -378,6 +378,15 @@ class AuthService {
     return this.handleResponse(response);
   }
 
+  async generateMindmap(payload: { prompt: string; maxNodes?: number }): Promise<{ nodes: Array<{ id: string; label: string }>; edges: Array<{ from: string; to: string; label?: string }> }> {
+    const response = await fetch(`${this.API_BASE}/ai/mindmap`, {
+      method: 'POST',
+      headers: this.getAuthHeaders(),
+      body: JSON.stringify(payload || {})
+    });
+    return this.handleResponse(response);
+  }
+
   // === Pedia 任務（派發自建 Pedia）===
   async createBotTask(payload: { botId: string; subject: string; targetClasses?: string[]; targetGroups?: string[]; targetClass?: string; classFolderId?: string }): Promise<{ task: any }> {
     const response = await fetch(`${this.API_BASE}/bot-tasks`, {
@@ -958,7 +967,7 @@ class AuthService {
     return this.handleResponse(response);
   }
 
-  async archiveManageTask(type: 'assignment' | 'quiz' | 'game' | 'contest' | 'ai-bot', id: string): Promise<{ message: string; task: any }> {
+  async archiveManageTask(type: 'assignment' | 'quiz' | 'game' | 'contest' | 'ai-bot' | 'note', id: string): Promise<{ message: string; task: any }> {
     const response = await fetch(`${this.API_BASE}/manage/tasks/${encodeURIComponent(type)}/${encodeURIComponent(id)}/archive`, {
       method: 'POST',
       headers: this.getAuthHeaders()
@@ -966,10 +975,122 @@ class AuthService {
     return this.handleResponse(response);
   }
 
-  async restoreManageTask(type: 'assignment' | 'quiz' | 'game' | 'contest' | 'ai-bot', id: string): Promise<{ message: string; task: any }> {
+  async restoreManageTask(type: 'assignment' | 'quiz' | 'game' | 'contest' | 'ai-bot' | 'note', id: string): Promise<{ message: string; task: any }> {
     const response = await fetch(`${this.API_BASE}/manage/tasks/${encodeURIComponent(type)}/${encodeURIComponent(id)}/restore`, {
       method: 'POST',
       headers: this.getAuthHeaders()
+    });
+    return this.handleResponse(response);
+  }
+
+  // === 派發筆記（notes）===
+  async createDraftNote(payload: { title: string; subject: string; className: string; classFolderId: string; targetClasses?: string[]; targetGroups?: string[] }): Promise<{ note: any }> {
+    const response = await fetch(`${this.API_BASE}/notes`, {
+      method: 'POST',
+      headers: this.getAuthHeaders(),
+      body: JSON.stringify(payload)
+    });
+    return this.handleResponse(response);
+  }
+
+  async getNoteDetail(noteId: string): Promise<{ note: any }> {
+    const response = await fetch(`${this.API_BASE}/notes/${encodeURIComponent(noteId)}`, {
+      headers: this.getAuthHeaders()
+    });
+    return this.handleResponse(response);
+  }
+
+  async updateNoteTemplate(noteId: string, templateSnapshot: any): Promise<{ note: any }> {
+    const response = await fetch(`${this.API_BASE}/notes/${encodeURIComponent(noteId)}/template`, {
+      method: 'PUT',
+      headers: this.getAuthHeaders(),
+      body: JSON.stringify({ templateSnapshot })
+    });
+    return this.handleResponse(response);
+  }
+
+  async publishNote(noteId: string): Promise<{ note: any; assignedStudents: number }> {
+    const response = await fetch(`${this.API_BASE}/notes/${encodeURIComponent(noteId)}/publish`, {
+      method: 'POST',
+      headers: this.getAuthHeaders()
+    });
+    return this.handleResponse(response);
+  }
+
+  async deleteNote(noteId: string): Promise<{ message: string }> {
+    const response = await fetch(`${this.API_BASE}/notes/${encodeURIComponent(noteId)}`, {
+      method: 'DELETE',
+      headers: this.getAuthHeaders()
+    });
+    return this.handleResponse(response);
+  }
+
+  async uploadNoteAsset(noteId: string, file: File): Promise<{ asset: { id: string; mime: string; size: number; url: string } }> {
+    const formData = new FormData();
+    formData.append('noteId', noteId);
+    formData.append('file', file);
+    const response = await fetch(`${this.API_BASE}/notes/assets`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${this.getToken()}`
+      },
+      body: formData
+    });
+    return this.handleResponse(response);
+  }
+
+  // Student notes
+  async getStudentNotes(): Promise<{ notes: any[]; total: number }> {
+    const response = await fetch(`${this.API_BASE}/notes/student`, {
+      headers: this.getAuthHeaders()
+    });
+    return this.handleResponse(response);
+  }
+
+  async getMyNote(noteId: string): Promise<{ note: any; submission: any }> {
+    const response = await fetch(`${this.API_BASE}/notes/${encodeURIComponent(noteId)}/my`, {
+      headers: this.getAuthHeaders()
+    });
+    return this.handleResponse(response);
+  }
+
+  async saveMyNoteDraft(noteId: string, snapshot: any): Promise<{ message: string; submission: any }> {
+    const response = await fetch(`${this.API_BASE}/notes/${encodeURIComponent(noteId)}/my`, {
+      method: 'PUT',
+      headers: this.getAuthHeaders(),
+      body: JSON.stringify({ snapshot })
+    });
+    return this.handleResponse(response);
+  }
+
+  async submitMyNote(noteId: string): Promise<{ message: string; submission: any }> {
+    const response = await fetch(`${this.API_BASE}/notes/${encodeURIComponent(noteId)}/my/submit`, {
+      method: 'POST',
+      headers: this.getAuthHeaders()
+    });
+    return this.handleResponse(response);
+  }
+
+  // Teacher/Admin notes
+  async listNoteSubmissions(noteId: string): Promise<{ note: any; submissions: any[]; total: number }> {
+    const response = await fetch(`${this.API_BASE}/notes/${encodeURIComponent(noteId)}/submissions`, {
+      headers: this.getAuthHeaders()
+    });
+    return this.handleResponse(response);
+  }
+
+  async getNoteSubmissionDetail(noteId: string, studentId: string): Promise<{ submission: any }> {
+    const response = await fetch(`${this.API_BASE}/notes/${encodeURIComponent(noteId)}/submissions/${encodeURIComponent(studentId)}`, {
+      headers: this.getAuthHeaders()
+    });
+    return this.handleResponse(response);
+  }
+
+  async saveNoteAnnotations(noteId: string, studentId: string, annotations: any): Promise<{ message: string; submission: any }> {
+    const response = await fetch(`${this.API_BASE}/notes/${encodeURIComponent(noteId)}/submissions/${encodeURIComponent(studentId)}/annotations`, {
+      method: 'PUT',
+      headers: this.getAuthHeaders(),
+      body: JSON.stringify({ annotations })
     });
     return this.handleResponse(response);
   }

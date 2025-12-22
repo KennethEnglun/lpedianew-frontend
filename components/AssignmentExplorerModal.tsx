@@ -1,9 +1,11 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Archive, ArchiveRestore, ChevronLeft, RefreshCw, Trash2, X } from 'lucide-react';
+import { Archive, ArchiveRestore, ChevronLeft, Plus, RefreshCw, Trash2, X } from 'lucide-react';
 import { VISIBLE_SUBJECTS } from '../platform';
 import RichHtmlContent from './RichHtmlContent';
+import NoteCreateModal from './NoteCreateModal';
+import NoteEditorModal from './NoteEditorModal';
 
-type ManagedTaskType = 'assignment' | 'quiz' | 'game' | 'contest' | 'ai-bot';
+type ManagedTaskType = 'assignment' | 'quiz' | 'game' | 'contest' | 'ai-bot' | 'note';
 
 type Props = {
   open: boolean;
@@ -104,6 +106,7 @@ const getTaskLabel = (t: any) => {
     case 'game': return '遊戲';
     case 'contest': return '問答比賽';
     case 'ai-bot': return 'Pedia 任務';
+    case 'note': return '筆記';
     default: return '任務';
   }
 };
@@ -135,6 +138,11 @@ const AssignmentExplorerModal: React.FC<Props> = ({ open, onClose, authService, 
   const [expandedContestAttemptIds, setExpandedContestAttemptIds] = useState<Set<string>>(new Set());
   const [contestAttemptDetails, setContestAttemptDetails] = useState<Record<string, any>>({});
   const [contestAttemptLoading, setContestAttemptLoading] = useState<Record<string, boolean>>({});
+  const [createNoteOpen, setCreateNoteOpen] = useState(false);
+  const [noteEditorOpen, setNoteEditorOpen] = useState(false);
+  const [noteEditorMode, setNoteEditorMode] = useState<'template' | 'teacher'>('teacher');
+  const [noteEditorNoteId, setNoteEditorNoteId] = useState('');
+  const [noteEditorStudentId, setNoteEditorStudentId] = useState('');
 
   const canArchive = viewerRole === 'admin';
 
@@ -338,6 +346,16 @@ const AssignmentExplorerModal: React.FC<Props> = ({ open, onClose, authService, 
         const resp = await authService.getBotTaskThreads(t.id);
         setTaskDetail(resp.task || null);
         setTaskResponses(Array.isArray(resp.threads) ? resp.threads : []);
+      } else if (t.type === 'note') {
+        if (String(t.status || '') && String(t.status) !== 'published') {
+          const resp = await authService.getNoteDetail(t.id);
+          setTaskDetail(resp.note || null);
+          setTaskResponses([]);
+        } else {
+          const resp = await authService.listNoteSubmissions(t.id);
+          setTaskDetail(resp.note || null);
+          setTaskResponses(Array.isArray(resp.submissions) ? resp.submissions : []);
+        }
       } else {
         const resp = await authService.getAssignmentResponses(t.id);
         setTaskDetail(resp.assignment || null);
@@ -398,6 +416,7 @@ const AssignmentExplorerModal: React.FC<Props> = ({ open, onClose, authService, 
       else if (t.type === 'game') await authService.deleteGame(t.id);
       else if (t.type === 'contest') await authService.deleteContest(t.id);
       else if (t.type === 'ai-bot') await authService.deleteBotTask(t.id);
+      else if (t.type === 'note') await authService.deleteNote(t.id);
       else await authService.deleteAssignment(t.id);
       await load();
       setSelectedTask(null);
@@ -432,15 +451,24 @@ const AssignmentExplorerModal: React.FC<Props> = ({ open, onClose, authService, 
             <div className="text-sm text-brand-brown/80 font-bold">
               {breadcrumbs || '科目 → 班別 → 學段 → 課題 → 任務'}
             </div>
-          </div>
-          <div className="flex items-center gap-2">
-            {canArchive && (
-              <button
-                type="button"
-                onClick={() => setIncludeArchived((v) => !v)}
-                className={`px-4 py-2 rounded-2xl border-4 font-black shadow-comic ${includeArchived ? 'bg-[#B5D8F8] border-brand-brown text-brand-brown' : 'bg-white border-brand-brown text-brand-brown hover:bg-gray-50'}`}
-                title="顯示/隱藏已封存任務"
-              >
+	          </div>
+	          <div className="flex items-center gap-2">
+	            <button
+	              type="button"
+	              onClick={() => setCreateNoteOpen(true)}
+	              className="px-4 py-2 rounded-2xl border-4 border-brand-brown bg-white text-brand-brown font-black shadow-comic hover:bg-gray-50 flex items-center gap-2"
+	              title="新增筆記任務（草稿→編輯模板→派發）"
+	            >
+	              <Plus className="w-4 h-4" />
+	              新增筆記
+	            </button>
+	            {canArchive && (
+	              <button
+	                type="button"
+	                onClick={() => setIncludeArchived((v) => !v)}
+	                className={`px-4 py-2 rounded-2xl border-4 font-black shadow-comic ${includeArchived ? 'bg-[#B5D8F8] border-brand-brown text-brand-brown' : 'bg-white border-brand-brown text-brand-brown hover:bg-gray-50'}`}
+	                title="顯示/隱藏已封存任務"
+	              >
                 {includeArchived ? '顯示封存中' : '只顯示未封存'}
               </button>
             )}
@@ -611,6 +639,35 @@ const AssignmentExplorerModal: React.FC<Props> = ({ open, onClose, authService, 
                     <div className="text-sm text-gray-600 font-bold">（對話內容請到學生清單點選對話查看）</div>
                   </div>
                 )}
+
+                {selectedTask.type === 'note' && (
+                  <div className="bg-[#FEF7EC] border-2 border-gray-200 rounded-2xl p-4 space-y-1">
+                    {String((selectedTask as any).status || '') !== 'published' ? (
+                      <>
+                        <div className="font-bold text-gray-800">（草稿）先編輯模板，確認後再派發（派發後模板會固定）</div>
+                        <div className="pt-2">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setNoteEditorMode('template');
+                              setNoteEditorNoteId(String(selectedTask.id));
+                              setNoteEditorStudentId('');
+                              setNoteEditorOpen(true);
+                            }}
+                            className="px-3 py-1 rounded-xl border-2 border-brand-brown bg-white text-brand-brown font-black shadow-comic hover:bg-gray-50"
+                          >
+                            編輯模板 / 派發
+                          </button>
+                        </div>
+                      </>
+                    ) : (
+                      <>
+                        <div className="font-bold text-gray-800">（此任務為 A4 筆記；學生按「交回」才算完成）</div>
+                        <div className="text-sm text-gray-600 font-bold">在下方可查看每位學生狀態，並點「查看筆記」查看內容。</div>
+                      </>
+                    )}
+                  </div>
+                )}
               </div>
 
               <div className="mt-4 border-t-2 border-gray-200 pt-4">
@@ -623,7 +680,7 @@ const AssignmentExplorerModal: React.FC<Props> = ({ open, onClose, authService, 
                   <div className="space-y-2">
                     {taskResponses.map((r: any, idx: number) => {
                       const name = r.studentName || r.studentUsername || '學生';
-                      const cls = r.studentClass || '';
+                      const cls = r.studentClass || r.className || '';
                       const meta = (() => {
                         if (selectedTask.type === 'quiz' || selectedTask.type === 'contest') {
                           const score = r.score !== undefined && r.score !== null ? `${Math.round(Number(r.score))}%` : '';
@@ -640,11 +697,16 @@ const AssignmentExplorerModal: React.FC<Props> = ({ open, onClose, authService, 
                           const at = r.lastMessageAt || '';
                           return [done, at].filter(Boolean).join(' ・ ');
                         }
+                        if (selectedTask.type === 'note') {
+                          const status = r.submittedAt ? '已交回' : r.startedAt ? '進行中' : '未開始';
+                          const at = r.submittedAt || r.updatedAt || '';
+                          return [status, at].filter(Boolean).join(' ・ ');
+                        }
                         return r.createdAt || '';
                       })();
 
                       return (
-                        <div key={r.id || r.threadId || idx} className="p-3 rounded-2xl border-2 border-gray-200 bg-gray-50">
+                        <div key={r.id || r.threadId || r.studentId || idx} className="p-3 rounded-2xl border-2 border-gray-200 bg-gray-50">
                           <div className="flex flex-wrap items-center justify-between gap-2">
                             <div className="font-black text-brand-brown">{name}{cls ? `（${cls}）` : ''}</div>
                             <div className="text-xs text-gray-600 font-bold">{meta}</div>
@@ -691,8 +753,8 @@ const AssignmentExplorerModal: React.FC<Props> = ({ open, onClose, authService, 
                             </div>
                           )}
 
-                          {selectedTask.type === 'contest' && (
-                            <div className="mt-3">
+	                          {selectedTask.type === 'contest' && (
+	                            <div className="mt-3">
                               <button
                                 type="button"
                                 onClick={() => void toggleContestAttempt(String(r.id))}
@@ -742,13 +804,33 @@ const AssignmentExplorerModal: React.FC<Props> = ({ open, onClose, authService, 
                                   )}
                                 </div>
                               )}
-                            </div>
-                          )}
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
+	                            </div>
+	                          )}
+
+	                          {selectedTask.type === 'note' && (
+	                            <div className="mt-3 flex flex-wrap gap-2">
+	                              <button
+	                                type="button"
+	                                onClick={() => {
+	                                  const sid = String(r.studentId || '');
+	                                  if (!sid) return;
+	                                  setNoteEditorMode('teacher');
+	                                  setNoteEditorNoteId(String(selectedTask.id));
+	                                  setNoteEditorStudentId(sid);
+	                                  setNoteEditorOpen(true);
+	                                }}
+	                                className="px-3 py-1 rounded-xl border-2 border-brand-brown bg-white text-brand-brown font-black shadow-comic hover:bg-gray-50 disabled:opacity-60"
+	                                disabled={!r.studentId}
+	                              >
+	                                查看筆記
+	                              </button>
+	                            </div>
+	                          )}
+	                        </div>
+	                      );
+	                    })}
+	                  </div>
+	                )}
               </div>
             </div>
           ) : !subject ? (
@@ -896,10 +978,41 @@ const AssignmentExplorerModal: React.FC<Props> = ({ open, onClose, authService, 
               )}
             </div>
           )}
-        </div>
-      </div>
-    </div>
-  );
+	        </div>
+	      </div>
+
+	      <NoteCreateModal
+	        open={createNoteOpen}
+	        onClose={() => setCreateNoteOpen(false)}
+	        authService={authService}
+	        onCreated={(id) => {
+	          setCreateNoteOpen(false);
+	          setNoteEditorMode('template');
+	          setNoteEditorNoteId(String(id));
+	          setNoteEditorStudentId('');
+	          setNoteEditorOpen(true);
+	        }}
+	      />
+
+	      <NoteEditorModal
+	        open={noteEditorOpen && !!noteEditorNoteId}
+	        onClose={() => {
+	          setNoteEditorOpen(false);
+	          setNoteEditorStudentId('');
+	          void load({ keepSelection: true });
+	        }}
+	        authService={authService}
+	        mode={noteEditorMode === 'template' ? 'template' : 'teacher'}
+	        noteId={noteEditorNoteId || ''}
+	        viewerId={String(viewerId || '')}
+	        viewerRole={viewerRole}
+	        studentId={noteEditorStudentId || undefined}
+	        onPublished={() => {
+	          void load({ keepSelection: true });
+	        }}
+	      />
+	    </div>
+	  );
 };
 
 export default AssignmentExplorerModal;

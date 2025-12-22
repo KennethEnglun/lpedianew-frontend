@@ -15,6 +15,7 @@ import UiSettingsModal from '../components/UiSettingsModal';
 import AiChatModal from '../components/AiChatModal';
 import BotTaskChatModal from '../components/BotTaskChatModal';
 import AppStudioModal from '../components/AppStudioModal';
+import NoteEditorModal from '../components/NoteEditorModal';
 import { loadHiddenTaskKeys, makeTaskKey, saveHiddenTaskKeys } from '../services/taskVisibility';
 import RichHtmlContent from '../components/RichHtmlContent';
 import { buildHtmlPreviewPlaceholder, looksLikeExecutableHtml, MAX_LPEDIA_HTML_PREVIEW_CHARS } from '../services/htmlPreview';
@@ -155,6 +156,8 @@ const StudentDashboard: React.FC = () => {
   const [selectedTopicId, setSelectedTopicId] = useState<string>('');
   const [selectedSubfolderId, setSelectedSubfolderId] = useState<string>('');
   const [showAllTasks, setShowAllTasks] = useState(false);
+  const [showNoteModal, setShowNoteModal] = useState(false);
+  const [selectedNoteId, setSelectedNoteId] = useState<string | null>(null);
 
   // 小测验相关状态
   const [showQuizModal, setShowQuizModal] = useState(false);
@@ -602,12 +605,13 @@ const StudentDashboard: React.FC = () => {
       }
 
       // 並行載入討論串、小測驗、遊戲、問答比賽，以及班級資料夾/隱藏偏好
-      const [discussionResponse, quizResponse, gameResponse, botTaskResponse, contestResponse, classFolderResp] = await Promise.all([
+      const [discussionResponse, quizResponse, gameResponse, botTaskResponse, contestResponse, noteResponse, classFolderResp] = await Promise.all([
         authService.getStudentDiscussions(),
         authService.getStudentQuizzes(),
         authService.getStudentGames(),
         authService.getStudentBotTasks(),
         authService.getStudentContests(),
+        authService.getStudentNotes().catch(() => ({ notes: [] })),
         authService.getMyClassFolders().catch(() => ({ className: '', folders: [], hiddenFolderIds: [] }))
       ]);
 
@@ -697,8 +701,21 @@ const StudentDashboard: React.FC = () => {
         bestScore: contest.bestScore
       }));
 
+      const noteTasks: Task[] = (noteResponse?.notes || []).map((n: any) => ({
+        id: String(n.id),
+        title: String(n.title || '筆記'),
+        type: 'note' as const,
+        subject: n.subject,
+        teacherName: n.teacherName || '教師',
+        teacherAvatar: '/teacher_login.png',
+        createdAt: n.createdAt || n.updatedAt,
+        folderId: n.classFolderId || n.folderSnapshot?.folderId || null,
+        folderSnapshot: n.folderSnapshot || null,
+        completed: !!n.completed
+      }));
+
       // 合併所有任務
-      const allTasks = [...discussionTasks, ...quizTasks, ...gameTasks, ...botTasks, ...contestTasks];
+      const allTasks = [...discussionTasks, ...quizTasks, ...gameTasks, ...botTasks, ...contestTasks, ...noteTasks];
       setTasks(allTasks);
       setLastRefresh(new Date());
 
@@ -788,6 +805,11 @@ const StudentDashboard: React.FC = () => {
   const handleBotTaskClick = (taskId: string) => {
     setSelectedBotTaskId(String(taskId));
     setShowBotTaskChat(true);
+  };
+
+  const handleNoteClick = (taskId: string) => {
+    setSelectedNoteId(String(taskId));
+    setShowNoteModal(true);
   };
 
   // 處理答案選擇
@@ -1762,6 +1784,7 @@ const StudentDashboard: React.FC = () => {
                     case 'discussion': return <MessageSquare className="w-5 h-5 text-purple-600" />;
                     case 'game': return <span className="text-xl">🎮</span>;
                     case 'contest': return <span className="text-xl">🏁</span>;
+                    case 'note': return <span className="text-xl">📝</span>;
                     default: return null;
                   }
                 };
@@ -1793,6 +1816,9 @@ const StudentDashboard: React.FC = () => {
                     }
                     return '開始比賽';
                   }
+                  if (task.type === 'note') {
+                    return task.completed ? '已交回 ✓' : '打開筆記';
+                  }
                   switch (task.type) {
                     case 'ai-bot': return task.completed ? '已完成 ✓' : '開始對話';
                     default: return '開始';
@@ -1822,6 +1848,7 @@ const StudentDashboard: React.FC = () => {
                   switch (task.type) {
                     case 'ai-bot': return task.completed ? 'bg-[#93C47D] hover:bg-[#86b572]' : 'bg-[#B5D8F8] hover:bg-[#A1CCF0]';
                     case 'contest': return task.attempts && task.attempts > 0 ? 'bg-[#FFE4B5] hover:bg-[#FFDBA1]' : 'bg-[#FFF2DC] hover:bg-[#FCEBCD]'; // 已參賽：橙色，未參賽：淺橙色
+                    case 'note': return task.completed ? 'bg-[#93C47D] hover:bg-[#86b572]' : 'bg-[#B5D8F8] hover:bg-[#A1CCF0]';
                     default: return 'bg-[#93C47D] hover:bg-[#86b572]';
                   }
                 };
@@ -1866,6 +1893,8 @@ const StudentDashboard: React.FC = () => {
                           handleBotTaskClick(task.id);
                         } else if (task.type === 'contest') {
                           handleContestClick(task.id);
+                        } else if (task.type === 'note') {
+                          handleNoteClick(task.id);
                         }
                       }}
                       className={`${getTaskButtonColor()} text-brand-brown font-bold px-6 py-2 rounded-2xl border-4 border-brand-brown shadow-comic active:translate-y-1 active:shadow-none bg-opacity-100 ${task.type === 'quiz' && task.completed ? 'cursor-pointer hover:bg-green-300' : ''
@@ -1901,13 +1930,14 @@ const StudentDashboard: React.FC = () => {
                     const taskKey = makeTaskKey(task.type, task.id);
                     const manuallyHidden = hiddenTaskKeys.has(taskKey) && !autoHidden;
 
-                    const openTask = () => {
-                      if (task.type === 'discussion') handleDiscussionClick(task.id);
-                      else if (task.type === 'quiz') handleQuizClick(task.id);
-                      else if (task.type === 'game') handleGameClick(task.id);
-                      else if (task.type === 'ai-bot') handleBotTaskClick(task.id);
-                      else if (task.type === 'contest') handleContestClick(task.id);
-                    };
+                      const openTask = () => {
+                        if (task.type === 'discussion') handleDiscussionClick(task.id);
+                        else if (task.type === 'quiz') handleQuizClick(task.id);
+                        else if (task.type === 'game') handleGameClick(task.id);
+                        else if (task.type === 'ai-bot') handleBotTaskClick(task.id);
+                        else if (task.type === 'contest') handleContestClick(task.id);
+                        else if (task.type === 'note') handleNoteClick(task.id);
+                      };
 
                     return (
                       <div key={taskKey} className="bg-gray-50 border-4 border-gray-300 rounded-3xl p-4 flex items-center shadow-comic">
@@ -1922,6 +1952,8 @@ const StudentDashboard: React.FC = () => {
                                 ? <HelpCircle className="w-5 h-5 text-blue-600" />
                                 : task.type === 'ai-bot'
                                   ? <Bot className="w-5 h-5 text-green-600" />
+                                  : task.type === 'note'
+                                    ? <span className="text-xl">📝</span>
                                   : task.type === 'contest'
                                     ? <span className="text-xl">🏁</span>
                                     : <MessageSquare className="w-5 h-5 text-purple-600" />
@@ -1964,6 +1996,20 @@ const StudentDashboard: React.FC = () => {
         </main>
 
       </div>
+
+      <NoteEditorModal
+        open={showNoteModal && !!selectedNoteId}
+        onClose={() => {
+          setShowNoteModal(false);
+          setSelectedNoteId(null);
+          void loadDiscussions(false, true);
+        }}
+        authService={authService}
+        mode="student"
+        noteId={selectedNoteId || ''}
+        viewerId={String(user?.id || '')}
+        viewerRole="student"
+      />
 
       {/* Discussion Content Modal */}
       {showDiscussionModal && selectedDiscussion && (
