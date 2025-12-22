@@ -503,6 +503,10 @@ const NoteEditorModal: React.FC<Props> = ({ open, onClose, authService, mode, no
 
   if (!open) return null;
 
+  const isProd = Boolean((import.meta as any).env?.PROD);
+  const tldrawLicenseKey = String((import.meta as any).env?.VITE_TLDRAW_LICENSE_KEY || '').trim();
+  const missingLicenseInProd = isProd && !tldrawLicenseKey;
+
   const canTemplateEdit = mode === 'template' && canEdit;
   const canAnnotate = mode === 'teacher' && (viewerRole === 'teacher' || viewerRole === 'admin');
   const canAddPage = (mode === 'template' && canEdit) || (mode === 'student' && canEdit && !submittedAt);
@@ -795,33 +799,56 @@ const NoteEditorModal: React.FC<Props> = ({ open, onClose, authService, mode, no
 	        )}
 
 	        <div className="flex-1 min-h-0 relative">
-	          <Tldraw
-	            store={store as any}
-	            onMount={(editor) => {
-	              editorRef.current = editor;
-	              ensureA4FramesForAllPages(editor);
-              const frameId = ensureA4FrameOnCurrentPage(editor);
-              const bounds = editor.getShapePageBounds(frameId as any);
-              if (bounds) editor.zoomToBounds(bounds, { immediate: true, inset: 64 } as any);
-              if (mode === 'student' && submittedAt) editor.setReadOnly(true);
-              if (mode === 'teacher') {
-                const base = new Set<string>();
-                for (const r of editor.store.allRecords() as any[]) {
-                  if (r?.typeName === 'shape') base.add(String(r.id));
-                }
-                baseShapeIdsRef.current = base;
-                if (teacherAnnotations) applyTeacherAnnotationsToCanvas(editor, teacherAnnotations);
-                editor.setReadOnly(true);
-              }
-            }}
-            maxAssetSize={3 * 1024 * 1024}
-            maxImageDimension={2560}
-            autoFocus
-          />
-          {loading && (
-            <div className="absolute inset-0 bg-white/60 flex items-center justify-center pointer-events-none">
-              <div className="px-4 py-2 rounded-2xl border-4 border-brand-brown bg-white font-black text-brand-brown shadow-comic">
-                處理中…
+	          {missingLicenseInProd ? (
+	            <div className="absolute inset-0 flex items-center justify-center p-6">
+	              <div className="max-w-xl w-full bg-white border-4 border-brand-brown rounded-3xl shadow-comic p-6">
+	                <div className="text-2xl font-black text-brand-brown mb-2">缺少 tldraw 授權</div>
+	                <div className="text-sm font-bold text-gray-700 leading-relaxed">
+	                  目前是 production 環境，但未設定 <span className="font-black">VITE_TLDRAW_LICENSE_KEY</span>，tldraw 會在載入後自動隱藏畫布（變成空白）。
+	                  <br />
+	                  <br />
+	                  請在前端部署環境設定 <span className="font-black">VITE_TLDRAW_LICENSE_KEY</span>（有效 key）後重新 build / redeploy。
+	                </div>
+	                <div className="mt-4 flex justify-end">
+	                  <button
+	                    className="px-4 py-2 rounded-xl bg-white border-2 border-brand-brown font-black text-brand-brown hover:bg-gray-50"
+	                    onClick={onClose}
+	                  >
+	                    關閉
+	                  </button>
+	                </div>
+	              </div>
+	            </div>
+	          ) : (
+	            <Tldraw
+	              store={store as any}
+	              licenseKey={tldrawLicenseKey || undefined}
+	              onMount={(editor) => {
+	                editorRef.current = editor;
+	                ensureA4FramesForAllPages(editor);
+	                const frameId = ensureA4FrameOnCurrentPage(editor);
+	                const bounds = editor.getShapePageBounds(frameId as any);
+	                if (bounds) editor.zoomToBounds(bounds, { immediate: true, inset: 64 } as any);
+	                if (mode === 'student' && submittedAt) editor.setReadOnly(true);
+	                if (mode === 'teacher') {
+	                  const base = new Set<string>();
+	                  for (const r of editor.store.allRecords() as any[]) {
+	                    if (r?.typeName === 'shape') base.add(String(r.id));
+	                  }
+	                  baseShapeIdsRef.current = base;
+	                  if (teacherAnnotations) applyTeacherAnnotationsToCanvas(editor, teacherAnnotations);
+	                  editor.setReadOnly(true);
+	                }
+	              }}
+	              maxAssetSize={3 * 1024 * 1024}
+	              maxImageDimension={2560}
+	              autoFocus
+	            />
+	          )}
+	          {loading && (
+	            <div className="absolute inset-0 bg-white/60 flex items-center justify-center pointer-events-none">
+	              <div className="px-4 py-2 rounded-2xl border-4 border-brand-brown bg-white font-black text-brand-brown shadow-comic">
+	                處理中…
               </div>
             </div>
           )}

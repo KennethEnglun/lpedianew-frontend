@@ -32,6 +32,7 @@ npm run preview
 
 ```
 VITE_API_BASE_URL=http://localhost:5000/api
+VITE_TLDRAW_LICENSE_KEY=your_tldraw_license_key
 ```
 
 ## 專案架構
@@ -87,6 +88,7 @@ pages/
 ```
 NODE_ENV=production
 VITE_API_BASE_URL=https://lpedianew-backend-production.up.railway.app/api
+VITE_TLDRAW_LICENSE_KEY=your_tldraw_license_key
 ```
 
 ## 開發指南
