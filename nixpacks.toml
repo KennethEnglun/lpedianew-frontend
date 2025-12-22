@@ -3,7 +3,12 @@
 nixPkgs = ['nodejs_22']
 
 [phases.install]
-cmds = ['npm install']
+cmds = [
+  # Railway/Nixpacks sometimes runs with production=true which omits devDependencies (breaks Vite build).
+  # Also, some npm versions fail parsing certain lockfiles in the build environment.
+  # Use an explicit install that includes dev deps and ignores package-lock.json.
+  'npm install --include=dev --no-package-lock'
+]
 
 [phases.build]
 cmds = [
