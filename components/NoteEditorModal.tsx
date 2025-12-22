@@ -164,6 +164,24 @@ const exportPdfFromDoc = async (doc: FabricDocSnapshot) => {
   URL.revokeObjectURL(url);
 };
 
+const withTimeout = async <T,>(promise: Promise<T>, ms: number, message: string, onTimeout?: () => void): Promise<T> => {
+  let timer: number | null = null;
+  try {
+    const timeoutPromise = new Promise<T>((_, reject) => {
+      timer = window.setTimeout(() => {
+        try {
+          onTimeout?.();
+        } finally {
+          reject(new Error(message));
+        }
+      }, ms);
+    });
+    return await Promise.race([promise, timeoutPromise]);
+  } finally {
+    if (timer) window.clearTimeout(timer);
+  }
+};
+
 const insertMindmap = (canvas: fabric.Canvas, mindmap: { nodes: Array<{ id: string; label: string }>; edges: Array<{ from: string; to: string; label?: string }> }) => {
   const nodes = Array.isArray(mindmap?.nodes) ? mindmap.nodes : [];
   const edges = Array.isArray(mindmap?.edges) ? mindmap.edges : [];
@@ -250,6 +268,7 @@ const NoteEditorModal: React.FC<Props> = ({ open, onClose, authService, mode, no
   const saveTimerRef = useRef<number | null>(null);
   const docRef = useRef<FabricDocSnapshot>(emptyDoc());
   const annotationDocRef = useRef<FabricDocSnapshot | null>(null);
+  const pendingImgAbortRef = useRef<AbortController | null>(null);
 
   const canTemplateEdit = mode === 'template' && canEdit;
   const canAddPage = (mode === 'template' && canEdit) || (mode === 'student' && canEdit && !submittedAt);
@@ -541,29 +560,52 @@ const NoteEditorModal: React.FC<Props> = ({ open, onClose, authService, mode, no
     setError('');
     try {
       const compressed = await compressImageToMaxBytes(file);
-      let src = '';
-      if (navigator.onLine) {
-        const resp = await authService.uploadNoteAsset(noteId, compressed);
-        src = String(resp?.asset?.url || '');
-      }
-      if (!src) src = await toDataUrl(compressed);
+      const localSrc = await toDataUrl(compressed);
 
-      const crossOrigin = src.startsWith('http') ? 'anonymous' : undefined;
-      // Fabric v6: Image.fromURL returns a Promise (callback form is no longer reliable)
-      const img: any = await (fabric.Image as any).fromURL(src, { crossOrigin });
-      if (!img) throw new Error('載入圖片失敗');
-      img.set({
-        left: 80,
-        top: 120,
-        selectable: true
-      });
-      (img as any).crossOrigin = crossOrigin;
-      if (mode === 'teacher') (img as any).lpediaLayer = 'annotation';
-      canvas.add(img);
-      canvas.setActiveObject(img);
+      // Insert immediately (no network dependency)
+      const localImg: any = await (fabric.Image as any).fromURL(localSrc, { crossOrigin: undefined });
+      if (!localImg) throw new Error('載入圖片失敗');
+      localImg.set({ left: 80, top: 120, selectable: true });
+      if (mode === 'teacher') (localImg as any).lpediaLayer = 'annotation';
+      canvas.add(localImg);
+      canvas.setActiveObject(localImg);
       canvas.requestRenderAll();
 
-      await scheduleStudentSave();
+      // Stop blocking UI as soon as the image is inserted
+      setLoading(false);
+
+      // Background upload (best-effort), then replace src to remote url (smaller JSON, avoids huge base64 in snapshot)
+      if (navigator.onLine) {
+        // Abort any previous pending upload/load
+        if (pendingImgAbortRef.current) pendingImgAbortRef.current.abort();
+        const ac = new AbortController();
+        pendingImgAbortRef.current = ac;
+
+        void (async () => {
+          try {
+            const upload = authService.uploadNoteAsset(noteId, compressed) as Promise<any>;
+            const resp = await withTimeout(upload, 20000, '圖片上傳超時，已改用本機圖片', () => ac.abort());
+            const remoteUrl = String(resp?.asset?.url || '').trim();
+            if (!remoteUrl) return;
+            const crossOrigin = 'anonymous';
+            await withTimeout(
+              (localImg as any).setSrc(remoteUrl, { crossOrigin, signal: ac.signal }),
+              15000,
+              '圖片載入超時，已保留本機圖片',
+              () => ac.abort()
+            );
+            (localImg as any).crossOrigin = crossOrigin;
+            canvas.requestRenderAll();
+            await scheduleStudentSave();
+          } catch {
+            // Keep local image; do not block
+          } finally {
+            if (pendingImgAbortRef.current === ac) pendingImgAbortRef.current = null;
+          }
+        })();
+      } else {
+        await scheduleStudentSave();
+      }
     } catch (e: any) {
       setError(e?.message || '插入圖片失敗');
     } finally {
@@ -678,6 +720,10 @@ const NoteEditorModal: React.FC<Props> = ({ open, onClose, authService, mode, no
     setAnnotationMode(false);
     setAnnotationsVisible(true);
     annotationDocRef.current = null;
+    if (pendingImgAbortRef.current) {
+      pendingImgAbortRef.current.abort();
+      pendingImgAbortRef.current = null;
+    }
     if (mode === 'student') void loadForStudent();
     else if (mode === 'template') void loadForTemplate();
     else void loadForTeacher();
