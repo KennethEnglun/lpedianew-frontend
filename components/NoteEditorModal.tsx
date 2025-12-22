@@ -107,10 +107,43 @@ const emptyDoc = (): FabricDocSnapshot => ({
   pages: [emptyPage()]
 });
 
+const sanitizePageJson = (pageJson: any, pageW: number, pageH: number) => {
+  const base = pageJson && typeof pageJson === 'object' ? pageJson : emptyPage();
+  const objects = Array.isArray((base as any).objects) ? (base as any).objects : [];
+  const near = (a: number, b: number, tol: number) => Number.isFinite(a) && Number.isFinite(b) && Math.abs(a - b) <= tol;
+  const isPaperLikeRect = (o: any) => {
+    if (!o || typeof o !== 'object') return false;
+    if (o.lpediaPaper) return true;
+    if (String(o.lpediaLayer || '') === 'paper') return true;
+    if (String(o.type || '') !== 'rect') return false;
+    const fill = String(o.fill || '').toLowerCase();
+    const stroke = String(o.stroke || '').toLowerCase();
+    const w = Number(o.width);
+    const h = Number(o.height);
+    const left = Number(o.left);
+    const top = Number(o.top);
+    const scaleX = Number(o.scaleX ?? 1);
+    const scaleY = Number(o.scaleY ?? 1);
+    const effW = Number.isFinite(w) && Number.isFinite(scaleX) ? w * scaleX : w;
+    const effH = Number.isFinite(h) && Number.isFinite(scaleY) ? h * scaleY : h;
+
+    const fillOk = fill === '#fff' || fill === '#ffffff' || fill === 'white';
+    const strokeOk = stroke === '#d1d5db' || stroke.includes('209') || stroke === 'rgb(209,213,219)';
+    const sizeOk = near(effW, pageW, 6) && near(effH, pageH, 6);
+    const posOk = near(left, 0, 6) && near(top, 0, 6);
+    return fillOk && strokeOk && sizeOk && posOk;
+  };
+
+  const nextObjects = objects.filter((o: any) => !isPaperLikeRect(o));
+  return { ...base, objects: nextObjects };
+};
+
 const normalizeDoc = (snap: any): FabricDocSnapshot => {
   if (isFabricDocSnapshot(snap)) {
     const orientation: PageOrientation = snap?.page?.orientation === 'landscape' ? 'landscape' : 'portrait';
-    const pages = snap.pages.length > 0 ? snap.pages : [emptyPage()];
+    const { w: pageW, h: pageH } = getA4Size(orientation);
+    const pagesRaw = snap.pages.length > 0 ? snap.pages : [emptyPage()];
+    const pages = pagesRaw.map((p) => sanitizePageJson(p, pageW, pageH));
     const currentPage = Math.min(Math.max(0, snap.currentPage ?? 0), pages.length - 1);
     return { format: 'fabric-v1', version: 1, page: { orientation }, currentPage, pages };
   }
