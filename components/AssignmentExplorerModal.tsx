@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Archive, ArchiveRestore, ChevronLeft, Plus, RefreshCw, Trash2, X } from 'lucide-react';
+import { Archive, ArchiveRestore, ChevronLeft, FolderInput, Pencil, Plus, RefreshCw, Trash2, X } from 'lucide-react';
 import { VISIBLE_SUBJECTS } from '../platform';
 import RichHtmlContent from './RichHtmlContent';
 import NoteCreateModal from './NoteCreateModal';
@@ -118,6 +118,11 @@ const parseFolder = (task: any) => {
   const topic = path[1] ? { id: String(path[1].id), name: String(path[1].name || '') } : null;
   const sub = path[2] ? { id: String(path[2].id), name: String(path[2].name || '') } : null;
   return { stage, topic, sub };
+};
+
+const parseGradeFromClassName = (className?: string) => {
+  const match = String(className || '').match(/^(\d+)/);
+  return match ? match[1] : '';
 };
 
 const AssignmentExplorerModal: React.FC<Props> = ({ open, onClose, authService, viewerRole, viewerId }) => {
@@ -408,6 +413,53 @@ const AssignmentExplorerModal: React.FC<Props> = ({ open, onClose, authService, 
     return String(t.teacherId || '') === String(viewerId || '');
   };
 
+  const renameTask = async (t: any) => {
+    if (!canDeleteTask(t)) return;
+    const current = String(t?.title || '').trim();
+    const next = prompt('輸入新名稱', current);
+    const title = String(next || '').trim();
+    if (!title || title === current) return;
+    try {
+      await authService.renameManageTaskTitle(String(t.type) as ManagedTaskType, String(t.id), title);
+      setSelectedTask((prev) => (prev && String(prev.id) === String(t.id) && String(prev.type) === String(t.type) ? { ...prev, title } : prev));
+      await load({ keepSelection: true });
+    } catch (e: any) {
+      setError(e?.message || '改名失敗');
+    }
+  };
+
+  const copyTaskToTeacherFolder = async (t: any) => {
+    try {
+      const type = String(t?.type || '').trim();
+      const id = String(t?.id || '').trim();
+      if (!type || !id) return;
+
+      const classes = normalizeStringArray(t?.targetClasses);
+      const classCandidate = (classes.length === 1 && classes[0] !== '全部') ? classes[0] : '';
+      let grade = parseGradeFromClassName(classCandidate);
+      if (!grade) {
+        const input = prompt('模板年級（輸入數字，例如 4）', '');
+        grade = String(input || '').trim();
+      }
+      if (!grade) return;
+
+      let folderId: string | null = null;
+      try {
+        const myFolders = await authService.listMyLibraryFolders(grade);
+        const list = (myFolders.folders || []).map((f: any) => `${f.id}:${f.name}`).join('\n');
+        const picked = prompt(`放入哪個 folder？（留空=未分類）\n可用 folder：\n${list}`, '');
+        folderId = picked && picked.trim() ? picked.trim().split(':')[0] : null;
+      } catch {
+        folderId = null;
+      }
+
+      await authService.createTemplateFromTask({ type, id, grade, ...(folderId ? { folderId } : {}) });
+      alert('已複製到教師資料夾（模板）');
+    } catch (e: any) {
+      setError(e?.message || '複製失敗');
+    }
+  };
+
   const deleteTask = async (t: any) => {
     const label = getTaskLabel(t);
     if (!window.confirm(`確定要刪除此${label}及相關記錄嗎？此操作無法復原！`)) return;
@@ -524,6 +576,26 @@ const AssignmentExplorerModal: React.FC<Props> = ({ open, onClose, authService, 
                   </div>
                 </div>
                 <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => void copyTaskToTeacherFolder(selectedTask)}
+                    className="px-4 py-2 rounded-2xl border-4 border-brand-brown bg-white text-brand-brown font-black shadow-comic hover:bg-gray-50 flex items-center gap-2"
+                    title="複製到教師資料夾（模板），可日後再派送"
+                  >
+                    <FolderInput className="w-4 h-4" />
+                    複製到資料夾
+                  </button>
+                  {canDeleteTask(selectedTask) && (
+                    <button
+                      type="button"
+                      onClick={() => void renameTask(selectedTask)}
+                      className="px-4 py-2 rounded-2xl border-4 border-brand-brown bg-white text-brand-brown font-black shadow-comic hover:bg-gray-50 flex items-center gap-2"
+                      title="改名（只限派發老師或管理員）"
+                    >
+                      <Pencil className="w-4 h-4" />
+                      改名
+                    </button>
+                  )}
                   {canArchive && (
                     <button
                       type="button"

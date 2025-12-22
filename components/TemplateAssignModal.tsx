@@ -8,7 +8,9 @@ type Props = {
   availableClasses: string[];
   templateTitle: string;
   templateId: string;
+  draftOnly?: boolean;
   onAssigned?: () => void;
+  onAssignedResult?: (result: any) => void;
 };
 
 const parseGradeFromClassName = (className?: string) => {
@@ -16,7 +18,7 @@ const parseGradeFromClassName = (className?: string) => {
   return match ? match[1] : '';
 };
 
-const TemplateAssignModal: React.FC<Props> = ({ open, onClose, authService, availableClasses, templateTitle, templateId, onAssigned }) => {
+const TemplateAssignModal: React.FC<Props> = ({ open, onClose, authService, availableClasses, templateTitle, templateId, draftOnly, onAssigned, onAssignedResult }) => {
   const [className, setClassName] = useState('');
   const [folders, setFolders] = useState<any[]>([]);
   const [loadingFolders, setLoadingFolders] = useState(false);
@@ -222,8 +224,9 @@ const TemplateAssignModal: React.FC<Props> = ({ open, onClose, authService, avai
                 setAssigning(true);
                 setError('');
                 try {
-                  await authService.assignTemplateToClass(templateId, { className, classFolderId: resolvedFolderId });
-                  alert('派送成功！');
+                  const resp = await authService.assignTemplateToClass(templateId, { className, classFolderId: resolvedFolderId, ...(draftOnly ? { draftOnly: true } : {}) });
+                  onAssignedResult?.(resp);
+                  alert(draftOnly ? '已開啟草稿！' : '派送成功！');
                   onAssigned?.();
                   onClose();
                 } catch (e: any) {
@@ -235,7 +238,7 @@ const TemplateAssignModal: React.FC<Props> = ({ open, onClose, authService, avai
               className="px-4 py-2 rounded-xl bg-blue-600 text-white font-black border-2 border-blue-700 hover:bg-blue-700 disabled:opacity-60"
               disabled={assigning || loadingFolders}
             >
-              {assigning ? '派送中…' : '派送'}
+              {assigning ? (draftOnly ? '建立中…' : '派送中…') : (draftOnly ? '開啟草稿' : '派送')}
             </button>
           </div>
         </div>

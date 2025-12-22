@@ -9,6 +9,7 @@ type Props = {
   authService: any;
   userId: string;
   availableClasses: string[];
+  onOpenNoteDraft?: (noteId: string) => void;
 };
 
 type ContentBlock = { type: string; value: string };
@@ -49,7 +50,25 @@ const normalizeContentBlocks = (input: any): ContentBlock[] => {
   return [];
 };
 
-const TemplateLibraryModal: React.FC<Props> = ({ open, onClose, authService, userId, availableClasses }) => {
+const normalizeTemplateTaskType = (raw: any) => {
+  const t = String(raw || '').trim();
+  if (t === 'discussion') return 'assignment';
+  if (t === 'assignment' || t === 'quiz' || t === 'game' || t === 'contest' || t === 'ai-bot' || t === 'note') return t;
+  return 'assignment';
+};
+
+const templateTypeLabel = (t: any) => {
+  switch (normalizeTemplateTaskType(t?.type)) {
+    case 'quiz': return '小測驗';
+    case 'game': return '遊戲';
+    case 'contest': return '問答比賽';
+    case 'ai-bot': return 'Pedia 任務';
+    case 'note': return '筆記';
+    default: return '任務';
+  }
+};
+
+const TemplateLibraryModal: React.FC<Props> = ({ open, onClose, authService, userId, availableClasses, onOpenNoteDraft }) => {
   const [space, setSpace] = useState<'my' | 'shared'>('my');
   const gradeOptions = useMemo(() => {
     const grades = Array.from(
@@ -72,6 +91,7 @@ const TemplateLibraryModal: React.FC<Props> = ({ open, onClose, authService, use
 
   const [assignOpen, setAssignOpen] = useState(false);
   const [assignTemplate, setAssignTemplate] = useState<any | null>(null);
+  const [assignDraftOnly, setAssignDraftOnly] = useState(false);
 
   const isMy = space === 'my';
 
@@ -375,6 +395,9 @@ const TemplateLibraryModal: React.FC<Props> = ({ open, onClose, authService, use
                         <div className="min-w-0">
                           <div className="font-black text-gray-800 truncate">{t.title}</div>
                           <div className="text-sm text-gray-600 font-bold">
+                            <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-[#FDEEAD] border border-brand-brown text-brand-brown font-black text-xs mr-2">
+                              {templateTypeLabel(t)}
+                            </span>
                             科目：{t.subject} ｜ {isMy ? '我的題庫' : '共用'} ｜ 作者：{t.ownerTeacherName || t.ownerTeacherId}
                           </div>
                           <div className="text-xs text-gray-500 font-bold">
@@ -392,6 +415,7 @@ const TemplateLibraryModal: React.FC<Props> = ({ open, onClose, authService, use
                           <button
                             onClick={() => {
                               setAssignTemplate(t);
+                              setAssignDraftOnly(false);
                               setAssignOpen(true);
                             }}
                             className="px-3 py-2 rounded-xl bg-blue-600 text-white border-2 border-blue-700 hover:bg-blue-700 font-black flex items-center gap-2"
@@ -399,6 +423,20 @@ const TemplateLibraryModal: React.FC<Props> = ({ open, onClose, authService, use
                             <Send className="w-4 h-4" />
                             派送
                           </button>
+                          {normalizeTemplateTaskType(t.type) === 'note' && (
+                            <button
+                              onClick={() => {
+                                setAssignTemplate(t);
+                                setAssignDraftOnly(true);
+                                setAssignOpen(true);
+                              }}
+                              className="px-3 py-2 rounded-xl bg-[#FDEEAD] text-brand-brown border-2 border-brand-brown hover:bg-[#FCE690] font-black flex items-center gap-2"
+                              title="先建立草稿筆記（已套用模板），再打開編輯/派發"
+                            >
+                              <MoveRight className="w-4 h-4" />
+                              編輯再派送
+                            </button>
+                          )}
                           {!isMy && (
                             <button
                               onClick={async () => {
@@ -521,6 +559,15 @@ const TemplateLibraryModal: React.FC<Props> = ({ open, onClose, authService, use
           availableClasses={availableClasses}
           templateTitle={String(assignTemplate?.title || '')}
           templateId={String(assignTemplate?.id || '')}
+          draftOnly={assignDraftOnly}
+          onAssignedResult={(resp) => {
+            if (!assignDraftOnly) return;
+            const note = resp?.note;
+            const noteId = note?.id ? String(note.id) : '';
+            if (!noteId) return;
+            onOpenNoteDraft?.(noteId);
+            onClose();
+          }}
           onAssigned={() => {
             setAssignOpen(false);
           }}

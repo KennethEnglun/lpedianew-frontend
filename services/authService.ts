@@ -834,10 +834,20 @@ class AuthService {
     grade: string;
     subject: string;
     title: string;
+    type?: string;
     content: any;
     folderId?: string | null;
   }): Promise<{ template: any }> {
     const response = await fetch(`${this.API_BASE}/templates/my`, {
+      method: 'POST',
+      headers: this.getAuthHeaders(),
+      body: JSON.stringify(payload)
+    });
+    return this.handleResponse(response);
+  }
+
+  async createTemplateFromTask(payload: { type: string; id: string; grade?: string; folderId?: string | null }): Promise<{ template: any }> {
+    const response = await fetch(`${this.API_BASE}/templates/from-task`, {
       method: 'POST',
       headers: this.getAuthHeaders(),
       body: JSON.stringify(payload)
@@ -909,7 +919,7 @@ class AuthService {
     return this.handleResponse(response);
   }
 
-  async assignTemplateToClass(templateId: string, payload: { className: string; classFolderId: string; versionId?: string }): Promise<{ discussion: any }> {
+  async assignTemplateToClass(templateId: string, payload: { className: string; classFolderId: string; versionId?: string; draftOnly?: boolean }): Promise<any> {
     const response = await fetch(`${this.API_BASE}/templates/${templateId}/assign`, {
       method: 'POST',
       headers: this.getAuthHeaders(),
@@ -979,6 +989,15 @@ class AuthService {
     const response = await fetch(`${this.API_BASE}/manage/tasks/${encodeURIComponent(type)}/${encodeURIComponent(id)}/restore`, {
       method: 'POST',
       headers: this.getAuthHeaders()
+    });
+    return this.handleResponse(response);
+  }
+
+  async renameManageTaskTitle(type: 'assignment' | 'quiz' | 'game' | 'contest' | 'ai-bot' | 'note', id: string, title: string): Promise<{ message: string; task: any }> {
+    const response = await fetch(`${this.API_BASE}/manage/tasks/${encodeURIComponent(type)}/${encodeURIComponent(id)}/title`, {
+      method: 'PATCH',
+      headers: this.getAuthHeaders(),
+      body: JSON.stringify({ title })
     });
     return this.handleResponse(response);
   }

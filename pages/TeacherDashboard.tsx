@@ -6991,6 +6991,10 @@ const TeacherDashboard: React.FC = () => {
         authService={authService}
         userId={String(user?.id || '')}
         availableClasses={availableClasses}
+        onOpenNoteDraft={(noteId) => {
+          setNoteEditorNoteId(noteId);
+          setShowNoteEditorModal(true);
+        }}
       />
 
 		      {/* Settings Modal */}
