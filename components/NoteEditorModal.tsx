@@ -547,26 +547,22 @@ const NoteEditorModal: React.FC<Props> = ({ open, onClose, authService, mode, no
         src = String(resp?.asset?.url || '');
       }
       if (!src) src = await toDataUrl(compressed);
-      await new Promise<void>((resolve, reject) => {
-        fabric.Image.fromURL(
-          src,
-          (img) => {
-            if (!img) return reject(new Error('載入圖片失敗'));
-            img.set({
-              left: 80,
-              top: 120,
-              selectable: true
-            });
-            (img as any).crossOrigin = src.startsWith('http') ? 'anonymous' : undefined;
-            if (mode === 'teacher') (img as any).lpediaLayer = 'annotation';
-            canvas.add(img);
-            canvas.setActiveObject(img);
-            canvas.requestRenderAll();
-            resolve();
-          },
-          { crossOrigin: src.startsWith('http') ? 'anonymous' : undefined }
-        );
+
+      const crossOrigin = src.startsWith('http') ? 'anonymous' : undefined;
+      // Fabric v6: Image.fromURL returns a Promise (callback form is no longer reliable)
+      const img: any = await (fabric.Image as any).fromURL(src, { crossOrigin });
+      if (!img) throw new Error('載入圖片失敗');
+      img.set({
+        left: 80,
+        top: 120,
+        selectable: true
       });
+      (img as any).crossOrigin = crossOrigin;
+      if (mode === 'teacher') (img as any).lpediaLayer = 'annotation';
+      canvas.add(img);
+      canvas.setActiveObject(img);
+      canvas.requestRenderAll();
+
       await scheduleStudentSave();
     } catch (e: any) {
       setError(e?.message || '插入圖片失敗');
