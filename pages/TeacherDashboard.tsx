@@ -14,8 +14,7 @@ import DraftLibraryModal from '../components/DraftLibraryModal';
 import DraftSavePublishWizardModal from '../components/DraftSavePublishWizardModal';
 import ClassFolderSelectInline from '../components/ClassFolderSelectInline';
 import AssignmentExplorerModal from '../components/AssignmentExplorerModal';
-import NoteCreateModal from '../components/NoteCreateModal';
-import NoteEditorModal from '../components/NoteEditorModal';
+import NoteEditorModal, { NoteEditorHandle } from '../components/NoteEditorModal';
 import { MathExpressionBuilder, finalizeMathQuestions } from '../components/MathExpressionBuilder';
 import { MathEquationBuilder, finalizeMathEquationQuestions } from '../components/MathEquationBuilder';
 import { MathExpressionView, FractionView } from '../components/MathExpressionView';
@@ -103,6 +102,11 @@ const TeacherDashboard: React.FC = () => {
     }>,
     timeLimit: 0
   });
+  const [quizDraftId, setQuizDraftId] = useState('');
+  const [quizDraftMeta, setQuizDraftMeta] = useState<any | null>(null);
+  const [quizDraftReadOnly, setQuizDraftReadOnly] = useState(false);
+  const [quizWizardOpen, setQuizWizardOpen] = useState(false);
+  const [quizWizardMode, setQuizWizardMode] = useState<'save' | 'publish'>('save');
 
   const [showAiGenerator, setShowAiGenerator] = useState(false);
   const [aiGeneratorMode, setAiGeneratorMode] = useState<'mcq' | 'pairs'>('mcq');
@@ -136,9 +140,18 @@ const TeacherDashboard: React.FC = () => {
     const [showDraftLibraryModal, setShowDraftLibraryModal] = useState(false);
     const [activeDraftId, setActiveDraftId] = useState('');
     const [activeDraftToolType, setActiveDraftToolType] = useState<string>('');
-	  const [showNoteCreateModal, setShowNoteCreateModal] = useState(false);
-	  const [showNoteEditorModal, setShowNoteEditorModal] = useState(false);
-	  const [noteEditorNoteId, setNoteEditorNoteId] = useState('');
+    const noteEditorRef = useRef<NoteEditorHandle | null>(null);
+	  const [showNoteDraftModal, setShowNoteDraftModal] = useState(false);
+	  const [noteDraftId, setNoteDraftId] = useState('');
+	  const [noteDraftMeta, setNoteDraftMeta] = useState<any | null>(null);
+	  const [noteDraftReadOnly, setNoteDraftReadOnly] = useState(false);
+	  const [noteDraftSnapshot, setNoteDraftSnapshot] = useState<any>(null);
+	  const [noteDraftForm, setNoteDraftForm] = useState<{ title: string; subject: string }>({
+	    title: '筆記',
+	    subject: String(DEFAULT_SUBJECT)
+	  });
+	  const [noteWizardOpen, setNoteWizardOpen] = useState(false);
+	  const [noteWizardMode, setNoteWizardMode] = useState<'save' | 'publish'>('save');
 	  const [discussionClassFolderId, setDiscussionClassFolderId] = useState('');
 	  const [quizClassFolderId, setQuizClassFolderId] = useState('');
 	  const [contestClassFolderId, setContestClassFolderId] = useState('');
@@ -219,6 +232,11 @@ const TeacherDashboard: React.FC = () => {
   // 小遊戲相關狀態
   const [showGameModal, setShowGameModal] = useState(false);
 	  const [gameType, setGameType] = useState<'maze' | 'matching' | 'tower-defense' | 'math' | 'ranger-td' | null>(null);
+  const [gameDraftId, setGameDraftId] = useState('');
+  const [gameDraftMeta, setGameDraftMeta] = useState<any | null>(null);
+  const [gameDraftReadOnly, setGameDraftReadOnly] = useState(false);
+  const [gameWizardOpen, setGameWizardOpen] = useState(false);
+  const [gameWizardMode, setGameWizardMode] = useState<'save' | 'publish'>('save');
 
   // 問答比賽相關狀態
   const [showContestModal, setShowContestModal] = useState(false);
@@ -234,6 +252,11 @@ const TeacherDashboard: React.FC = () => {
     targetClasses: [] as string[],
     targetGroups: [] as string[]
   });
+  const [contestDraftId, setContestDraftId] = useState('');
+  const [contestDraftMeta, setContestDraftMeta] = useState<any | null>(null);
+  const [contestDraftReadOnly, setContestDraftReadOnly] = useState(false);
+  const [contestWizardOpen, setContestWizardOpen] = useState(false);
+  const [contestWizardMode, setContestWizardMode] = useState<'save' | 'publish'>('save');
   const [gameForm, setGameForm] = useState({
     title: '',
     description: '',
@@ -1599,6 +1622,341 @@ const TeacherDashboard: React.FC = () => {
     }
   };
 
+  const resetQuizEditor = () => {
+    setQuizDraftId('');
+    setQuizDraftMeta(null);
+    setQuizDraftReadOnly(false);
+    setQuizForm({
+      title: '',
+      description: '',
+      subject: DEFAULT_SUBJECT,
+      targetClasses: [],
+      targetGroups: [],
+      questions: [],
+      timeLimit: 0
+    });
+    setQuizClassFolderId('');
+    setImageUploading(false);
+  };
+
+  const loadQuizDraft = async (draftId: string) => {
+    const id = String(draftId || '').trim();
+    if (!id) return;
+    try {
+      const resp = await authService.getDraft(id);
+      const d = resp?.draft;
+      if (!d) throw new Error('找不到草稿');
+      if (String(d.toolType || '') !== 'quiz') throw new Error('草稿類型不正確');
+      setQuizDraftMeta(d);
+      setQuizDraftId(String(d.id || id));
+      const isOwner = String(d.ownerTeacherId || '') === String(user?.id || '');
+      const isShared = String(d.scope || 'my') === 'shared';
+      setQuizDraftReadOnly(isShared && !isOwner);
+      const snap = d.contentSnapshot?.quiz;
+      setQuizForm({
+        title: String(d.title || ''),
+        description: String(snap?.description || ''),
+        subject: String(d.subject || DEFAULT_SUBJECT) as any,
+        targetClasses: [],
+        targetGroups: [],
+        questions: Array.isArray(snap?.questions) ? snap.questions : [],
+        timeLimit: Number(snap?.timeLimit) || 0
+      });
+      setQuizClassFolderId('');
+    } catch (e: any) {
+      alert(e?.message || '載入草稿失敗');
+      resetQuizEditor();
+      setShowQuizModal(false);
+    }
+  };
+
+  const resetContestEditor = () => {
+    setContestDraftId('');
+    setContestDraftMeta(null);
+    setContestDraftReadOnly(false);
+    setContestForm({
+      title: '',
+      topic: '',
+      scopeText: '',
+      advancedOnly: false,
+      subject: DEFAULT_SUBJECT,
+      grade: '小一',
+      questionCount: 10,
+      timeLimitSeconds: null,
+      targetClasses: [],
+      targetGroups: []
+    });
+    setContestClassFolderId('');
+  };
+
+  const loadContestDraft = async (draftId: string) => {
+    const id = String(draftId || '').trim();
+    if (!id) return;
+    try {
+      const resp = await authService.getDraft(id);
+      const d = resp?.draft;
+      if (!d) throw new Error('找不到草稿');
+      if (String(d.toolType || '') !== 'contest') throw new Error('草稿類型不正確');
+      setContestDraftMeta(d);
+      setContestDraftId(String(d.id || id));
+      const isOwner = String(d.ownerTeacherId || '') === String(user?.id || '');
+      const isShared = String(d.scope || 'my') === 'shared';
+      setContestDraftReadOnly(isShared && !isOwner);
+      const snap = d.contentSnapshot?.contest;
+      setContestForm({
+        title: String(d.title || ''),
+        topic: String(snap?.topic || ''),
+        scopeText: String(snap?.scopeText || ''),
+        advancedOnly: !!snap?.advancedOnly,
+        subject: String(d.subject || DEFAULT_SUBJECT) as any,
+        grade: String(snap?.grade || '小一'),
+        questionCount: Number(snap?.questionCount) || 10,
+        timeLimitSeconds: snap?.timeLimitSeconds ?? null,
+        targetClasses: [],
+        targetGroups: []
+      });
+      setContestClassFolderId('');
+    } catch (e: any) {
+      alert(e?.message || '載入草稿失敗');
+      resetContestEditor();
+      setShowContestModal(false);
+    }
+  };
+
+  const initNewNoteDraftEditor = () => {
+    setNoteDraftId('');
+    setNoteDraftMeta(null);
+    setNoteDraftReadOnly(false);
+    setNoteDraftSnapshot(null);
+    setNoteDraftForm({ title: '筆記', subject: String(DEFAULT_SUBJECT) });
+  };
+
+  const resetNoteDraftEditor = () => {
+    initNewNoteDraftEditor();
+    setNoteWizardOpen(false);
+    setNoteWizardMode('save');
+    setShowNoteDraftModal(false);
+  };
+
+  const loadNoteDraft = async (draftId: string) => {
+    const id = String(draftId || '').trim();
+    if (!id) return;
+    try {
+      const resp = await authService.getDraft(id);
+      const d = resp?.draft;
+      if (!d) throw new Error('找不到草稿');
+      if (String(d.toolType || '') !== 'note') throw new Error('草稿類型不正確');
+      setNoteDraftMeta(d);
+      setNoteDraftId(String(d.id || id));
+      const isOwner = String(d.ownerTeacherId || '') === String(user?.id || '');
+      const isShared = String(d.scope || 'my') === 'shared';
+      setNoteDraftReadOnly(isShared && !isOwner);
+      setNoteDraftForm({ title: String(d.title || '筆記'), subject: String(d.subject || DEFAULT_SUBJECT) });
+      const templateSnapshot = d.contentSnapshot?.note?.templateSnapshot;
+      setNoteDraftSnapshot(templateSnapshot || null);
+    } catch (e: any) {
+      alert(e?.message || '載入草稿失敗');
+      resetNoteDraftEditor();
+    }
+  };
+
+  const cancelNoteDraftEditor = async () => {
+    const isOwner = String(noteDraftMeta?.ownerTeacherId || user?.id || '') === String(user?.id || '');
+    const canDelete = !!noteDraftId && isOwner && !noteDraftReadOnly;
+    if (canDelete) {
+      const ok = window.confirm('取消＝刪除草稿。確定要刪除嗎？');
+      if (!ok) return;
+      try {
+        await authService.deleteDraft(noteDraftId);
+        alert('草稿已刪除');
+      } catch (e: any) {
+        alert(e?.message || '刪除失敗');
+        return;
+      }
+    }
+    resetNoteDraftEditor();
+  };
+
+  const resetGameEditor = () => {
+    setGameDraftId('');
+    setGameDraftMeta(null);
+    setGameDraftReadOnly(false);
+    setGameWizardOpen(false);
+    setGameWizardMode('save');
+    setGameType(null);
+    setShowGameModal(false);
+    setGameForm({
+      title: '',
+      description: '',
+      subject: DEFAULT_SUBJECT,
+      targetClasses: [],
+      targetGroups: [],
+      questions: [],
+      difficulty: 'medium'
+    });
+    setTowerDefenseQuestions([]);
+    setTowerDefenseTimeSeconds(60);
+    setTowerDefenseTimeSecondsText('60');
+    setTowerDefenseLivesEnabled(true);
+    setTowerDefenseLivesLimit(10);
+    setGameClassFolderId('');
+    setRangerForm({ title: '', description: '', targetClasses: [], targetGroups: [] });
+    setRangerClassFolderId('');
+    setMathClassFolderId('');
+  };
+
+  const loadGameDraft = async (draftId: string) => {
+    const id = String(draftId || '').trim();
+    if (!id) return;
+    try {
+      const resp = await authService.getDraft(id);
+      const d = resp?.draft;
+      if (!d) throw new Error('找不到草稿');
+      if (String(d.toolType || '') !== 'game') throw new Error('草稿類型不正確');
+      setGameDraftMeta(d);
+      setGameDraftId(String(d.id || id));
+      const isOwner = String(d.ownerTeacherId || '') === String(user?.id || '');
+      const isShared = String(d.scope || 'my') === 'shared';
+      setGameDraftReadOnly(isShared && !isOwner);
+
+      const snap = d.contentSnapshot?.game;
+      const payload = snap && typeof snap === 'object' ? snap : null;
+      if (!payload) throw new Error('草稿內容不足');
+      const gt = String(payload.gameType || '').trim() as any;
+      if (!gt) throw new Error('草稿缺少 gameType');
+
+      const editorState = payload.editorState && typeof payload.editorState === 'object' ? payload.editorState : {};
+
+      setShowGameModal(true);
+      setGameType(gt);
+
+      if (gt === 'maze' || gt === 'matching') {
+        const gf = editorState.gameForm && typeof editorState.gameForm === 'object' ? editorState.gameForm : payload;
+        setGameForm({
+          title: String(d.title || ''),
+          description: String(gf.description || ''),
+          subject: String(d.subject || DEFAULT_SUBJECT) as any,
+          targetClasses: [],
+          targetGroups: [],
+          questions: Array.isArray(gf.questions) ? gf.questions : [],
+          difficulty: (gf.difficulty === 'easy' || gf.difficulty === 'hard' ? gf.difficulty : 'medium')
+        });
+        setGameClassFolderId('');
+      } else if (gt === 'tower-defense') {
+        const gf = editorState.gameForm && typeof editorState.gameForm === 'object' ? editorState.gameForm : payload;
+        setGameForm({
+          title: String(d.title || ''),
+          description: String(gf.description || ''),
+          subject: String(d.subject || DEFAULT_SUBJECT) as any,
+          targetClasses: [],
+          targetGroups: [],
+          questions: [],
+          difficulty: (gf.difficulty === 'easy' || gf.difficulty === 'hard' ? gf.difficulty : 'medium')
+        });
+        setTowerDefenseQuestions(Array.isArray(editorState.towerDefenseQuestions) ? editorState.towerDefenseQuestions : []);
+        if (editorState.towerDefenseTimeSecondsText !== undefined) setTowerDefenseTimeSecondsText(String(editorState.towerDefenseTimeSecondsText));
+        if (editorState.towerDefenseTimeSeconds !== undefined) setTowerDefenseTimeSeconds(Number(editorState.towerDefenseTimeSeconds) || 60);
+        setTowerDefenseLivesEnabled(editorState.towerDefenseLivesEnabled !== false);
+        setTowerDefenseLivesLimit(Number(editorState.towerDefenseLivesLimit) || 10);
+        setGameClassFolderId('');
+      } else if (gt === 'ranger-td') {
+        const rf = editorState.rangerForm && typeof editorState.rangerForm === 'object' ? editorState.rangerForm : {};
+        setRangerForm({
+          title: String(d.title || rf.title || ''),
+          description: String(rf.description || ''),
+          targetClasses: [],
+          targetGroups: []
+        });
+        setRangerAnswerMode(editorState.rangerAnswerMode === 'input' ? 'input' : 'mcq');
+        setRangerGrade((['小一', '小二', '小三', '小四', '小五', '小六'] as const).includes(editorState.rangerGrade) ? editorState.rangerGrade : '小一');
+        setRangerSubject((String(d.subject || DEFAULT_SUBJECT) as any) || DEFAULT_SUBJECT);
+        setRangerStageQuestionCount(Number(editorState.rangerStageQuestionCount) || 10);
+        setRangerEquationPercentText(String(editorState.rangerEquationPercentText || '30'));
+        setRangerDecimalPercentText(String(editorState.rangerDecimalPercentText || '50'));
+        if (editorState.rangerOps && typeof editorState.rangerOps === 'object') setRangerOps(editorState.rangerOps);
+        setRangerRunSeconds(Number(editorState.rangerRunSeconds) || 300);
+        setRangerRunSecondsText(String(editorState.rangerRunSecondsText || '300'));
+        setRangerAllowNegative(!!editorState.rangerAllowNegative);
+        setRangerMinValueText(String(editorState.rangerMinValueText || '0'));
+        setRangerMaxValueText(String(editorState.rangerMaxValueText || '50'));
+        setRangerMaxDenText(String(editorState.rangerMaxDenText || '20'));
+        setRangerMaxDecimalPlacesText(String(editorState.rangerMaxDecimalPlacesText || '2'));
+        setRangerEquationSteps(editorState.rangerEquationSteps === 1 ? 1 : 2);
+        setRangerEquationAnswerType(editorState.rangerEquationAnswerType || 'int');
+        setRangerMcqQuestions(Array.isArray(editorState.rangerMcqQuestions) ? editorState.rangerMcqQuestions : []);
+        setRangerWrongTowerDamageText(String(editorState.rangerWrongTowerDamageText || '2'));
+        setRangerTowerHpText(String(editorState.rangerTowerHpText || '20'));
+        setRangerPromptText(String(editorState.rangerPromptText || ''));
+        setRangerClassFolderId('');
+      } else if (gt === 'math') {
+        const mf = editorState.mathForm && typeof editorState.mathForm === 'object' ? editorState.mathForm : {};
+        setMathForm({
+          title: String(d.title || mf.title || ''),
+          description: String(mf.description || ''),
+          targetClasses: [],
+          targetGroups: []
+        });
+        setMathGameTab(editorState.mathGameTab === 'ai' ? 'ai' : 'manual');
+        setMathAnswerMode(editorState.mathAnswerMode === 'mcq' ? 'mcq' : 'input');
+        setMathQuestionType(editorState.mathQuestionType === 'equation' ? 'equation' : 'calc');
+        setMathGrade((['小一', '小二', '小三', '小四', '小五', '小六'] as const).includes(editorState.mathGrade) ? editorState.mathGrade : '小一');
+        if (editorState.mathOps && typeof editorState.mathOps === 'object') setMathOps(editorState.mathOps);
+        setMathNumberMode(editorState.mathNumberMode === 'decimal' ? 'decimal' : 'fraction');
+        setMathAllowNegative(!!editorState.mathAllowNegative);
+        setMathMinValueText(String(editorState.mathMinValueText || '0'));
+        setMathMaxValueText(String(editorState.mathMaxValueText || '50'));
+        setMathMaxDenText(String(editorState.mathMaxDenText || '20'));
+        setMathMaxDecimalPlacesText(String(editorState.mathMaxDecimalPlacesText || '2'));
+        setMathEquationSteps(editorState.mathEquationSteps === 2 ? 2 : 1);
+        setMathEquationAnswerType(editorState.mathEquationAnswerType || 'int');
+        setMathQuestionCount(Number(editorState.mathQuestionCount) || 10);
+        setMathTimeEnabled(!!editorState.mathTimeEnabled);
+        setMathTimeSeconds(Number(editorState.mathTimeSeconds) || 60);
+        setMathTimeSecondsText(String(editorState.mathTimeSecondsText || '60'));
+        setMathDrafts(Array.isArray(editorState.mathDrafts) ? editorState.mathDrafts : []);
+        setMathClassFolderId('');
+      }
+    } catch (e: any) {
+      alert(e?.message || '載入草稿失敗');
+      resetGameEditor();
+    }
+  };
+
+  const getCurrentGameTitle = () => {
+    if (gameType === 'ranger-td') return String(rangerForm.title || '').trim();
+    if (gameType === 'math') return String(mathForm.title || '').trim();
+    return String(gameForm.title || '').trim();
+  };
+
+  const getCurrentGameSubject = () => {
+    if (gameType === 'ranger-td') return rangerAnswerMode === 'mcq' ? String(rangerSubject || DEFAULT_SUBJECT) : String(DEFAULT_SUBJECT);
+    if (gameType === 'math') return String(DEFAULT_SUBJECT);
+    return String(gameForm.subject || DEFAULT_SUBJECT);
+  };
+
+  const getCurrentGameDescription = () => {
+    if (gameType === 'ranger-td') return String(rangerForm.description || '');
+    if (gameType === 'math') return String(mathForm.description || '');
+    return String(gameForm.description || '');
+  };
+
+  const cancelGameDraftEditor = async () => {
+    const isOwner = String(gameDraftMeta?.ownerTeacherId || user?.id || '') === String(user?.id || '');
+    const canDelete = !!gameDraftId && isOwner && !gameDraftReadOnly;
+    if (canDelete) {
+      const ok = window.confirm('取消＝刪除草稿。確定要刪除嗎？');
+      if (!ok) return;
+      try {
+        await authService.deleteDraft(gameDraftId);
+        alert('草稿已刪除');
+      } catch (e: any) {
+        alert(e?.message || '刪除失敗');
+        return;
+      }
+    }
+    resetGameEditor();
+  };
+
   // 監聽討論串模態框開啟
   useEffect(() => {
     if (showDiscussionModal) {
@@ -1613,14 +1971,30 @@ const TeacherDashboard: React.FC = () => {
   // 監聽小測驗模態框開啟
   useEffect(() => {
     if (showQuizModal) {
-      loadClassesAndGroups(quizForm.subject);
-      setQuizClassFolderId('');
+      if (quizDraftId) {
+        void loadQuizDraft(quizDraftId);
+      } else {
+        resetQuizEditor();
+      }
     }
   }, [showQuizModal]);
+
+  // 監聽筆記草稿模態框開啟
+  useEffect(() => {
+    if (!showNoteDraftModal) return;
+    if (noteDraftId) {
+      void loadNoteDraft(noteDraftId);
+      return;
+    }
+    initNewNoteDraftEditor();
+  }, [showNoteDraftModal, noteDraftId]);
 
   // 監聽遊戲模態框開啟
   useEffect(() => {
     if (showGameModal) {
+      if (gameDraftId && String(gameDraftMeta?.id || '') !== String(gameDraftId || '')) {
+        void loadGameDraft(gameDraftId);
+      }
       if (gameType === 'math') loadClassesAndGroups(DEFAULT_SUBJECT);
       else if (gameType === 'ranger-td') loadClassesAndGroups(DEFAULT_SUBJECT);
       else loadClassesAndGroups(gameForm.subject);
@@ -1628,13 +2002,16 @@ const TeacherDashboard: React.FC = () => {
       setRangerClassFolderId('');
       setMathClassFolderId('');
     }
-  }, [showGameModal, gameType, rangerAnswerMode, rangerSubject]);
+  }, [showGameModal, gameType, rangerAnswerMode, rangerSubject, gameDraftId]);
 
   // 監聽問答比賽模態框開啟
   useEffect(() => {
     if (showContestModal) {
-      loadClassesAndGroups(contestForm.subject);
-      setContestClassFolderId('');
+      if (contestDraftId) {
+        void loadContestDraft(contestDraftId);
+      } else {
+        resetContestEditor();
+      }
     }
   }, [showContestModal]);
 
@@ -2697,80 +3074,18 @@ const TeacherDashboard: React.FC = () => {
                 </Button>
 	                <Button
 	                  fullWidth
-	                  className="bg-[#D2EFFF] hover:bg-[#BCE0FF] flex items-center justify-center gap-2"
-	                  onClick={() => {
-	                    openBotTaskAssign();
-	                    closeSidebar();
-	                  }}
-	                >
-	                  <Bot className="w-5 h-5" />
-	                  派發Pedia
-	                </Button>
-	                <Button
-	                  fullWidth
 	                  className="bg-[#F8C5C5] hover:bg-[#F0B5B5] flex items-center justify-center gap-2"
 	                  onClick={() => {
 	                    setShowCreateTaskModal(true);
                       closeSidebar();
                     }}
-	                >
-	                  <MessageSquare className="w-5 h-5" />
-	                  建立任務
-	                </Button>
-	                <Button
-	                  fullWidth
-	                  className="bg-[#FDEEAD] hover:bg-[#FCE690] flex items-center justify-center gap-2"
-	                  onClick={() => {
-	                    setShowQuizModal(true);
-	                    closeSidebar();
-	                  }}
-	                >
-	                  <HelpCircle className="w-5 h-5" />
-	                  派發小測驗
-	                </Button>
-	                <Button
-	                  fullWidth
-	                  className="bg-[#E9E6FF] hover:bg-[#DCD6FF] flex items-center justify-center gap-2"
-	                  onClick={() => {
-	                    setShowNoteCreateModal(true);
-	                    closeSidebar();
-	                  }}
-	                >
-	                  📝 派發筆記
-	                </Button>
-	                <Button
-	                  fullWidth
-	                  className="bg-[#DFF6FF] hover:bg-[#CDEFFF] flex items-center justify-center gap-2"
-	                  onClick={() => {
-	                    openMathQuizCreator();
-                    closeSidebar();
-                  }}
-                >
-                  🧮 創建數學測驗
-                </Button>
-                <Button
-                  fullWidth
-                  className="bg-[#E8F5E9] hover:bg-[#C8E6C9] flex items-center justify-center gap-2"
-                  onClick={() => {
-                    openGameCreator();
-                    closeSidebar();
-                  }}
-                >
-                  🎮 創建小遊戲
-                </Button>
-                <Button
-                  fullWidth
-                  className="bg-[#FFF2DC] hover:bg-[#FCEBCD] flex items-center justify-center gap-2"
-                  onClick={() => {
-                    setShowContestModal(true);
-                    closeSidebar();
-                  }}
-                >
-                  🏁 創建問答比賽
-                </Button>
-                <Button fullWidth className="bg-[#FAD5BE] hover:bg-[#F8C4A6]" onClick={closeSidebar}>
-                  更多功能開發中⋯⋯
-                </Button>
+		                >
+		                  <MessageSquare className="w-5 h-5" />
+		                  建立任務
+		                </Button>
+		                <Button fullWidth className="bg-[#FAD5BE] hover:bg-[#F8C4A6]" onClick={closeSidebar}>
+		                  更多功能開發中⋯⋯
+		                </Button>
               </nav>
             </div>
           </aside>
@@ -2837,60 +3152,16 @@ const TeacherDashboard: React.FC = () => {
           >
             教師資料夾
           </Button>
-	          <Button
-	            fullWidth
-	            className="bg-[#D2EFFF] hover:bg-[#BCE0FF] text-lg flex items-center justify-center gap-2"
-	            onClick={openBotTaskAssign}
-	          >
-	            <Bot className="w-5 h-5" />
-	            派發Pedia
+		          <Button
+		            fullWidth
+		            className="bg-[#F8C5C5] hover:bg-[#F0B5B5] text-lg flex items-center justify-center gap-2"
+		            onClick={() => setShowCreateTaskModal(true)}
+		          >
+	            <MessageSquare className="w-5 h-5" />
+	            建立任務
 	          </Button>
-	          <Button
-	            fullWidth
-	            className="bg-[#F8C5C5] hover:bg-[#F0B5B5] text-lg flex items-center justify-center gap-2"
-	            onClick={() => setShowCreateTaskModal(true)}
-	          >
-            <MessageSquare className="w-5 h-5" />
-            建立任務
-          </Button>
-	          <Button
-	            fullWidth
-	            className="bg-[#FDEEAD] hover:bg-[#FCE690] text-lg flex items-center justify-center gap-2"
-	            onClick={() => setShowQuizModal(true)}
-	          >
-	            <HelpCircle className="w-5 h-5" />
-	            派發小測驗
-	          </Button>
-	          <Button
-	            fullWidth
-	            className="bg-[#E9E6FF] hover:bg-[#DCD6FF] text-lg flex items-center justify-center gap-2"
-	            onClick={() => setShowNoteCreateModal(true)}
-	          >
-	            📝 派發筆記
-	          </Button>
-	          <Button
-	            fullWidth
-	            className="bg-[#DFF6FF] hover:bg-[#CDEFFF] text-lg flex items-center justify-center gap-2"
-	            onClick={openMathQuizCreator}
-	          >
-            🧮 創建數學測驗
-          </Button>
-	          <Button
-	            fullWidth
-	            className="bg-[#E8F5E9] hover:bg-[#C8E6C9] text-lg flex items-center justify-center gap-2"
-	            onClick={openGameCreator}
-	          >
-	            🎮 創建小遊戲
-	          </Button>
-          <Button
-            fullWidth
-            className="bg-[#FFF2DC] hover:bg-[#FCEBCD] text-lg flex items-center justify-center gap-2"
-            onClick={() => setShowContestModal(true)}
-          >
-            🏁 創建問答比賽
-          </Button>
-          <Button fullWidth className="bg-[#FAD5BE] hover:bg-[#F8C4A6] text-lg">更多功能開發中⋯⋯</Button>
-        </nav>
+	          <Button fullWidth className="bg-[#FAD5BE] hover:bg-[#F8C4A6] text-lg">更多功能開發中⋯⋯</Button>
+	        </nav>
       </aside>
 
       {/* Main Content Area */}
@@ -3013,77 +3284,6 @@ const TeacherDashboard: React.FC = () => {
                 </div>
               </div>
 
-              {/* Target Classes */}
-              <div>
-                <label className="block text-sm font-bold text-purple-800 mb-2">派發至班級</label>
-                <div className="flex flex-wrap gap-2">
-                  {availableClasses.map(className => (
-                    <button
-                      key={className}
-                      type="button"
-                      onClick={() => {
-                        setGameForm(prev => ({
-                          ...prev,
-                          targetClasses: prev.targetClasses.includes(className)
-                            ? prev.targetClasses.filter(c => c !== className)
-                            : [...prev.targetClasses, className]
-                        }));
-                      }}
-                      className={`px-4 py-2 rounded-2xl border-2 font-bold transition-colors ${gameForm.targetClasses.includes(className)
-                        ? 'bg-purple-200 border-purple-500 text-purple-700'
-                        : 'bg-white border-gray-300 text-gray-600 hover:border-purple-500'
-                        }`}
-                    >
-                      {className}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {gameForm.targetClasses.length === 1 ? (
-                <ClassFolderSelectInline
-                  authService={authService}
-                  className={gameForm.targetClasses[0]}
-                  value={gameClassFolderId}
-                  onChange={setGameClassFolderId}
-                />
-              ) : (
-                <div className="p-4 bg-gray-50 border-2 border-gray-200 rounded-2xl text-sm text-gray-700 font-bold">
-                  請先只選擇 1 個班級，才可選擇資料夾（資料夾屬於單一班別）。
-                </div>
-              )}
-
-              {/* Target Groups */}
-              {availableGroups.length > 0 && (
-                <div>
-                  <label className="block text-sm font-bold text-purple-800 mb-2">
-                    選擇分組 ({gameForm.subject})
-                  </label>
-                  <div className="flex flex-wrap gap-2">
-                    {availableGroups.map(groupName => (
-                      <button
-                        key={groupName}
-                        type="button"
-                        onClick={() => {
-                          setGameForm(prev => ({
-                            ...prev,
-                            targetGroups: prev.targetGroups.includes(groupName)
-                              ? prev.targetGroups.filter(g => g !== groupName)
-                              : [...prev.targetGroups, groupName]
-                          }));
-                        }}
-                        className={`px-4 py-2 rounded-2xl border-2 font-bold transition-colors ${gameForm.targetGroups.includes(groupName)
-                          ? 'bg-purple-200 border-purple-500 text-purple-700'
-                          : 'bg-white border-gray-300 text-gray-600 hover:border-purple-500'
-                          }`}
-                      >
-                        {groupName}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              )}
-
               <div>
                 <label className="block text-sm font-bold text-purple-800 mb-2">難度</label>
                 <select
@@ -3191,71 +3391,33 @@ const TeacherDashboard: React.FC = () => {
 
               <div className="flex gap-4 pt-4 border-t-4 border-purple-200">
                 <button
-                  onClick={() => { setGameType(null); }}
+                  onClick={() => void cancelGameDraftEditor()}
                   className="flex-1 py-3 rounded-2xl border-4 border-gray-300 text-gray-600 font-bold hover:bg-gray-100"
                 >
-                  返回
+                  取消
                 </button>
                 <button
-                  onClick={async () => {
-                    try {
-                      if (!gameForm.title) {
-                        alert('請填寫遊戲標題');
-                        return;
-                      }
-                      if (gameForm.targetClasses.length === 0) {
-                        alert('請選擇至少一個班級');
-                        return;
-                      }
-                      if (gameForm.targetClasses.length !== 1) {
-                        alert('請只選擇 1 個班級（資料夾屬於單一班別）');
-                        return;
-                      }
-                      if (GROUPS_ENABLED && gameForm.targetGroups.length > 0) {
-                        alert('使用資料夾分類時暫不支援分組派發，請取消分組');
-                        return;
-                      }
-                      if (!gameClassFolderId) {
-                        alert('請選擇資料夾（學段→課題→子folder可選）');
-                        return;
-                      }
-                      if (gameForm.questions.length === 0) {
-                        alert('請至少新增一個題目');
-                        return;
-                      }
-
-                      await authService.createGame({
-                        title: gameForm.title,
-                        description: gameForm.description,
-                        gameType: 'maze',
-                        subject: gameForm.subject,
-                        targetClasses: gameForm.targetClasses,
-                        targetGroups: GROUPS_ENABLED ? gameForm.targetGroups : [],
-                        questions: gameForm.questions,
-                        difficulty: gameForm.difficulty,
-                        classFolderId: gameClassFolderId
-                      });
-
-                      alert('迷宮追逐遊戲創建成功！');
-                      setShowGameModal(false);
-                      setGameType(null);
-                      setGameForm({
-                        title: '',
-                        description: '',
-                        subject: DEFAULT_SUBJECT,
-                        targetClasses: [],
-                        targetGroups: [],
-                        questions: [],
-                        difficulty: 'medium'
-                      });
-                      setGameClassFolderId('');
-                    } catch (error) {
-                      alert('創建遊戲失敗：' + (error instanceof Error ? error.message : '未知錯誤'));
-                    }
+                  onClick={() => {
+                    if (gameDraftReadOnly) return;
+                    if (!String(gameForm.title || '').trim()) return alert('請填寫遊戲標題');
+                    setGameWizardMode('save');
+                    setGameWizardOpen(true);
+                  }}
+                  disabled={gameDraftReadOnly}
+                  className="flex-1 py-3 rounded-2xl border-4 border-purple-500 bg-white text-purple-800 font-bold hover:bg-purple-50 disabled:opacity-60"
+                >
+                  儲存
+                </button>
+                <button
+                  onClick={() => {
+                    if (!String(gameForm.title || '').trim()) return alert('請填寫遊戲標題');
+                    if (!Array.isArray(gameForm.questions) || gameForm.questions.length === 0) return alert('請至少新增一個題目');
+                    setGameWizardMode('publish');
+                    setGameWizardOpen(true);
                   }}
                   className="flex-1 py-3 rounded-2xl border-4 border-purple-500 bg-purple-500 text-white font-bold hover:bg-purple-600"
                 >
-                  創建遊戲
+                  儲存及派發
                 </button>
               </div>
             </div>
@@ -3328,80 +3490,6 @@ const TeacherDashboard: React.FC = () => {
 	                  ))}
 	                </select>
 	              </div>
-
-	              {/* Target Classes */}
-	              <div>
-	                <label className="block text-sm font-bold text-blue-800 mb-2">派發至班級</label>
-	                <div className="flex flex-wrap gap-2">
-	                  {availableClasses.map(className => (
-	                    <button
-	                      key={className}
-	                      type="button"
-	                      onClick={() => {
-	                        setGameForm(prev => ({
-	                          ...prev,
-	                          targetClasses: prev.targetClasses.includes(className)
-	                            ? prev.targetClasses.filter(c => c !== className)
-	                            : [...prev.targetClasses, className]
-	                        }));
-	                      }}
-	                      className={`px-4 py-2 rounded-2xl border-2 font-bold transition-colors ${gameForm.targetClasses.includes(className)
-	                        ? 'bg-blue-200 border-blue-500 text-blue-800'
-	                        : 'bg-white border-gray-300 text-gray-600 hover:border-blue-500'
-	                        }`}
-	                    >
-	                      {className}
-	                    </button>
-	                  ))}
-	                </div>
-	              </div>
-
-                {gameForm.targetClasses.length === 1 ? (
-                  <ClassFolderSelectInline
-                    authService={authService}
-                    className={gameForm.targetClasses[0]}
-                    value={gameClassFolderId}
-                    onChange={setGameClassFolderId}
-                  />
-                ) : (
-                  <div className="p-4 bg-gray-50 border-2 border-gray-200 rounded-2xl text-sm text-gray-700 font-bold">
-                    請先只選擇 1 個班級，才可選擇資料夾（資料夾屬於單一班別）。
-                  </div>
-                )}
-
-	              {/* Target Groups */}
-	              {availableGroups.length > 0 && (
-	                <div>
-	                  <label className="block text-sm font-bold text-blue-800 mb-2">
-	                    選擇分組 ({gameForm.subject})
-	                  </label>
-	                  <div className="flex flex-wrap gap-2">
-	                    {availableGroups.map(groupName => (
-	                      <button
-	                        key={groupName}
-	                        type="button"
-	                        onClick={() => {
-	                          setGameForm(prev => ({
-	                            ...prev,
-	                            targetGroups: prev.targetGroups.includes(groupName)
-	                              ? prev.targetGroups.filter(g => g !== groupName)
-	                              : [...prev.targetGroups, groupName]
-	                          }));
-	                        }}
-	                        className={`px-4 py-2 rounded-2xl border-2 font-bold transition-colors ${gameForm.targetGroups.includes(groupName)
-	                          ? 'bg-blue-100 border-blue-500 text-blue-700'
-	                          : 'bg-white border-gray-300 text-gray-600 hover:border-blue-500'
-	                          }`}
-	                      >
-	                        {groupName}
-	                      </button>
-	                    ))}
-	                  </div>
-	                  <p className="text-xs text-gray-500 mt-1">
-	                    選擇分組會精確派發給該分組的學生
-	                  </p>
-	                </div>
-	      )}
 
 	              <div>
 	                <label className="block text-sm font-bold text-blue-800 mb-2">配對內容（左邊配右邊）</label>
@@ -3482,83 +3570,32 @@ const TeacherDashboard: React.FC = () => {
 
               <div className="flex gap-4 pt-4 border-t-4 border-blue-200">
                 <button
-                  onClick={() => { setGameType(null); }}
+                  onClick={() => void cancelGameDraftEditor()}
                   className="flex-1 py-3 rounded-2xl border-4 border-gray-300 text-gray-600 font-bold hover:bg-gray-100"
                 >
-                  返回
+                  取消
                 </button>
-	                <button
-	                  onClick={() => {
-	                    (async () => {
-	                      try {
-	                        if (!gameForm.title.trim()) {
-	                          alert('請輸入遊戲標題');
-	                          return;
-	                        }
-
-	                        if (gameForm.targetClasses.length === 0) {
-	                          alert('請選擇至少一個班級');
-	                          return;
-	                        }
-                          if (gameForm.targetClasses.length !== 1) {
-                            alert('請只選擇 1 個班級（資料夾屬於單一班別）');
-                            return;
-                          }
-                          if (GROUPS_ENABLED && gameForm.targetGroups.length > 0) {
-                            alert('使用資料夾分類時暫不支援分組派發，請取消分組');
-                            return;
-                          }
-                          if (!gameClassFolderId) {
-                            alert('請選擇資料夾（學段→課題→子folder可選）');
-                            return;
-                          }
-
-	                        const requiredPairs = gameForm.difficulty === 'easy' ? 4 : gameForm.difficulty === 'medium' ? 6 : 8;
-	                        const cleanedPairs = gameForm.questions
-	                          .map(q => ({
-	                            question: q.question.trim(),
-	                            answer: q.answer.trim()
-	                          }))
-	                          .filter(q => q.question && q.answer);
-
-	                        if (cleanedPairs.length < requiredPairs) {
-	                          alert(`請至少輸入 ${requiredPairs} 對配對內容`);
-	                          return;
-	                        }
-
-	                        await authService.createGame({
-	                          title: gameForm.title.trim(),
-	                          description: gameForm.description,
-	                          gameType: 'matching',
-	                          subject: gameForm.subject,
-	                          targetClasses: gameForm.targetClasses,
-	                          targetGroups: GROUPS_ENABLED ? gameForm.targetGroups : [],
-	                          questions: cleanedPairs.slice(0, requiredPairs),
-	                          difficulty: gameForm.difficulty,
-                            classFolderId: gameClassFolderId
-	                        });
-
-	                        alert('翻牌記憶遊戲創建成功！');
-	                        setShowGameModal(false);
-	                        setGameType(null);
-	                        setGameForm({
-	                          title: '',
-	                          description: '',
-	                          subject: DEFAULT_SUBJECT,
-	                          targetClasses: [],
-	                          targetGroups: [],
-	                          questions: [],
-	                          difficulty: 'medium'
-	                        });
-                          setGameClassFolderId('');
-	                      } catch (error) {
-	                        alert('創建遊戲失敗：' + (error instanceof Error ? error.message : '未知錯誤'));
-	                      }
-	                    })();
-	                  }}
-	                  className="flex-1 py-3 rounded-2xl border-4 border-blue-500 bg-blue-500 text-white font-bold hover:bg-blue-600"
-	                >
-	                  創建遊戲
+                <button
+                  onClick={() => {
+                    if (gameDraftReadOnly) return;
+                    if (!String(gameForm.title || '').trim()) return alert('請輸入遊戲標題');
+                    setGameWizardMode('save');
+                    setGameWizardOpen(true);
+                  }}
+                  disabled={gameDraftReadOnly}
+                  className="flex-1 py-3 rounded-2xl border-4 border-blue-500 bg-white text-blue-800 font-bold hover:bg-blue-50 disabled:opacity-60"
+                >
+                  儲存
+                </button>
+                <button
+                  onClick={() => {
+                    if (!String(gameForm.title || '').trim()) return alert('請輸入遊戲標題');
+                    setGameWizardMode('publish');
+                    setGameWizardOpen(true);
+                  }}
+                  className="flex-1 py-3 rounded-2xl border-4 border-blue-500 bg-blue-500 text-white font-bold hover:bg-blue-600"
+                >
+                  儲存及派發
                 </button>
               </div>
             </div>
@@ -3617,84 +3654,10 @@ const TeacherDashboard: React.FC = () => {
 	                </select>
 	              </div>
 
-	              {/* Target Classes */}
-	              <div>
-	                <label className="block text-sm font-bold text-emerald-800 mb-2">派發至班級</label>
-	                <div className="flex flex-wrap gap-2">
-	                  {availableClasses.map(className => (
-	                    <button
-	                      key={className}
-	                      type="button"
-	                      onClick={() => {
-	                        setGameForm(prev => ({
-	                          ...prev,
-	                          targetClasses: prev.targetClasses.includes(className)
-	                            ? prev.targetClasses.filter(c => c !== className)
-	                            : [...prev.targetClasses, className]
-	                        }));
-	                      }}
-	                      className={`px-4 py-2 rounded-2xl border-2 font-bold transition-colors ${gameForm.targetClasses.includes(className)
-	                        ? 'bg-emerald-200 border-emerald-500 text-emerald-800'
-	                        : 'bg-white border-gray-300 text-gray-600 hover:border-emerald-500'
-	                        }`}
-	                    >
-	                      {className}
-	                    </button>
-	                  ))}
-	                </div>
-	              </div>
-
-                {gameForm.targetClasses.length === 1 ? (
-                  <ClassFolderSelectInline
-                    authService={authService}
-                    className={gameForm.targetClasses[0]}
-                    value={gameClassFolderId}
-                    onChange={setGameClassFolderId}
-                  />
-                ) : (
-                  <div className="p-4 bg-gray-50 border-2 border-gray-200 rounded-2xl text-sm text-gray-700 font-bold">
-                    請先只選擇 1 個班級，才可選擇資料夾（資料夾屬於單一班別）。
-                  </div>
-                )}
-
-	              {/* Target Groups */}
-	              {availableGroups.length > 0 && (
-	                <div>
-	                  <label className="block text-sm font-bold text-emerald-800 mb-2">
-	                    選擇分組 ({gameForm.subject})
-	                  </label>
-	                  <div className="flex flex-wrap gap-2">
-	                    {availableGroups.map(groupName => (
-	                      <button
-	                        key={groupName}
-	                        type="button"
-	                        onClick={() => {
-	                          setGameForm(prev => ({
-	                            ...prev,
-	                            targetGroups: prev.targetGroups.includes(groupName)
-	                              ? prev.targetGroups.filter(g => g !== groupName)
-	                              : [...prev.targetGroups, groupName]
-	                          }));
-	                        }}
-	                        className={`px-4 py-2 rounded-2xl border-2 font-bold transition-colors ${gameForm.targetGroups.includes(groupName)
-	                          ? 'bg-lime-200 border-lime-500 text-lime-900'
-	                          : 'bg-white border-gray-300 text-gray-600 hover:border-lime-500'
-	                          }`}
-	                      >
-	                        {groupName}
-	                      </button>
-	                    ))}
-	                  </div>
-	                  <p className="text-xs text-gray-500 mt-1">
-	                    選擇分組會精確派發給該分組的學生
-	                  </p>
-	                </div>
-	              )}
-
-		              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-		                <div>
-		                  <label className="block text-sm font-bold text-emerald-800 mb-2">難度（影響起始金幣與怪物強度）</label>
-		                  <select
+			              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+			                <div>
+			                  <label className="block text-sm font-bold text-emerald-800 mb-2">難度（影響起始金幣與怪物強度）</label>
+			                  <select
 		                    className="w-full px-4 py-2 border-4 border-emerald-300 rounded-2xl bg-white font-bold"
 		                    value={gameForm.difficulty}
 		                    onChange={(e) => setGameForm(prev => ({ ...prev, difficulty: e.target.value as 'easy' | 'medium' | 'hard' }))}
@@ -3897,93 +3860,32 @@ const TeacherDashboard: React.FC = () => {
 
 	              <div className="flex gap-4 pt-4 border-t-4 border-emerald-200">
 	                <button
-	                  onClick={() => { setGameType(null); }}
+	                  onClick={() => void cancelGameDraftEditor()}
 	                  className="flex-1 py-3 rounded-2xl border-4 border-gray-300 text-gray-600 font-bold hover:bg-gray-100"
 	                >
-	                  返回
+	                  取消
 	                </button>
 	                <button
-	                  onClick={async () => {
-	                    try {
-	                      if (!gameForm.title.trim()) {
-	                        alert('請填寫遊戲標題');
-	                        return;
-	                      }
-		                      if (gameForm.targetClasses.length === 0) {
-		                        alert('請選擇至少一個班級');
-		                        return;
-		                      }
-                          if (gameForm.targetClasses.length !== 1) {
-                            alert('請只選擇 1 個班級（資料夾屬於單一班別）');
-                            return;
-                          }
-                          if (GROUPS_ENABLED && gameForm.targetGroups.length > 0) {
-                            alert('使用資料夾分類時暫不支援分組派發，請取消分組');
-                            return;
-                          }
-                          if (!gameClassFolderId) {
-                            alert('請選擇資料夾（學段→課題→子folder可選）');
-                            return;
-                          }
-		                      const cleanedQuestions: TowerDefenseQuestionDraft[] = towerDefenseQuestions
-		                        .map((q) => {
-		                          const options = (q.options || []).map((o) => String(o || '').trim());
-		                          const correctIndex = Number.isInteger(q.correctIndex) ? q.correctIndex : 0;
-		                          const safeCorrectIndex = Math.max(0, Math.min(3, correctIndex));
-		                          if (q.type === 'match') {
-		                            return { type: 'match', left: String(q.left || '').trim(), options, correctIndex: safeCorrectIndex };
-		                          }
-		                          return { type: 'mcq', prompt: String(q.prompt || '').trim(), options, correctIndex: safeCorrectIndex };
-		                        })
-		                        .filter((q) => {
-		                          const filledOptions = Array.isArray(q.options) && q.options.length === 4 && q.options.every((o) => String(o || '').trim());
-		                          if (!filledOptions) return false;
-		                          return q.type === 'match' ? Boolean(q.left.trim()) : Boolean(q.prompt.trim());
-		                        });
-		                      if (cleanedQuestions.length === 0) {
-		                        alert('請至少新增一個完整題目（四個選項都要填，且需選擇正確答案）');
-		                        return;
-		                      }
-
-		                      await authService.createGame({
-		                        title: gameForm.title.trim(),
-		                        description: gameForm.description,
-		                        gameType: 'tower-defense',
-		                        subject: gameForm.subject,
-		                        targetClasses: gameForm.targetClasses,
-		                        targetGroups: GROUPS_ENABLED ? gameForm.targetGroups : [],
-		                        questions: cleanedQuestions,
-		                        difficulty: gameForm.difficulty,
-		                        timeLimitSeconds: clampTowerDefenseTimeSeconds(towerDefenseTimeSecondsText, towerDefenseTimeSeconds),
-		                        livesLimit: towerDefenseLivesEnabled ? towerDefenseLivesLimit : null,
-                            classFolderId: gameClassFolderId
-		                      });
-
-		                      alert('答題塔防遊戲創建成功！');
-		                      setShowGameModal(false);
-		                      setGameType(null);
-			                      setTowerDefenseQuestions([]);
-			                      setTowerDefenseTimeSeconds(60);
-			                      setTowerDefenseTimeSecondsText('60');
-			                      setTowerDefenseLivesEnabled(true);
-			                      setTowerDefenseLivesLimit(10);
-			                      setGameForm({
-			                        title: '',
-			                        description: '',
-			                        subject: DEFAULT_SUBJECT,
-			                        targetClasses: [],
-			                        targetGroups: [],
-			                        questions: [],
-			                        difficulty: 'medium'
-			                      });
-                            setGameClassFolderId('');
-	                    } catch (error) {
-	                      alert('創建遊戲失敗：' + (error instanceof Error ? error.message : '未知錯誤'));
-	                    }
-	                  }}
+	                  onClick={() => {
+                      if (gameDraftReadOnly) return;
+	                      if (!String(gameForm.title || '').trim()) return alert('請填寫遊戲標題');
+                      setGameWizardMode('save');
+                      setGameWizardOpen(true);
+                    }}
+                    disabled={gameDraftReadOnly}
+	                  className="flex-1 py-3 rounded-2xl border-4 border-emerald-600 bg-white text-emerald-800 font-bold hover:bg-emerald-50 disabled:opacity-60"
+	                >
+	                  儲存
+	                </button>
+	                <button
+	                  onClick={() => {
+                      if (!String(gameForm.title || '').trim()) return alert('請填寫遊戲標題');
+                      setGameWizardMode('publish');
+                      setGameWizardOpen(true);
+                    }}
 	                  className="flex-1 py-3 rounded-2xl border-4 border-emerald-600 bg-emerald-600 text-white font-bold hover:bg-emerald-700"
 	                >
-	                  創建遊戲
+	                  儲存及派發
 	                </button>
 	              </div>
 	            </div>
@@ -4414,185 +4316,36 @@ const TeacherDashboard: React.FC = () => {
 		                </>
 		              )}
 
-	              {/* Target Classes */}
-		              {availableClasses.length > 0 && (
-			                <div>
-			                  <label className="block text-sm font-bold text-amber-900 mb-2">
-			                    {rangerAnswerMode === 'mcq' ? `派發至班級（${rangerSubject}）` : '選擇班級（數學）'}
-			                  </label>
-			                  <div className="flex flex-wrap gap-2">
-	                    {availableClasses.map(className => (
-	                      <button
-	                        key={className}
-	                        type="button"
-	                        onClick={() => {
-	                          setRangerForm(prev => ({
-	                            ...prev,
-	                            targetClasses: prev.targetClasses.includes(className)
-	                              ? prev.targetClasses.filter(c => c !== className)
-	                              : [...prev.targetClasses, className]
-	                          }));
-	                        }}
-	                        className={`px-4 py-2 rounded-2xl border-2 font-bold transition-colors ${rangerForm.targetClasses.includes(className)
-	                          ? 'bg-amber-200 border-amber-500 text-amber-900'
-	                          : 'bg-white border-gray-300 text-gray-700 hover:border-amber-500'
-	                          }`}
-	                      >
-	                        {className}
-	                      </button>
-	                    ))}
-		                  </div>
-		                </div>
-		              )}
-
-		              {rangerForm.targetClasses.length === 1 ? (
-		                <ClassFolderSelectInline
-		                  authService={authService}
-		                  className={rangerForm.targetClasses[0]}
-		                  value={rangerClassFolderId}
-		                  onChange={setRangerClassFolderId}
-		                />
-		              ) : (
-		                <div className="p-4 bg-gray-50 border-2 border-gray-200 rounded-2xl text-sm text-gray-700 font-bold">
-		                  請先只選擇 1 個班級，才可選擇資料夾（資料夾屬於單一班別）。
-		                </div>
-		              )}
-
-		              {/* Target Groups */}
-			              {availableGroups.length > 0 && (
-			                <div>
-			                  <label className="block text-sm font-bold text-amber-900 mb-2">
-			                    {rangerAnswerMode === 'mcq' ? `選擇分組（${rangerSubject}）` : '選擇分組（數學）'}
-			                  </label>
-		                  <div className="flex flex-wrap gap-2">
-	                    {availableGroups.map(groupName => (
-	                      <button
-	                        key={groupName}
-	                        type="button"
-	                        onClick={() => {
-	                          setRangerForm(prev => ({
-	                            ...prev,
-	                            targetGroups: prev.targetGroups.includes(groupName)
-	                              ? prev.targetGroups.filter(g => g !== groupName)
-	                              : [...prev.targetGroups, groupName]
-	                          }));
-	                        }}
-	                        className={`px-4 py-2 rounded-2xl border-2 font-bold transition-colors ${rangerForm.targetGroups.includes(groupName)
-	                          ? 'bg-amber-200 border-amber-500 text-amber-900'
-	                          : 'bg-white border-gray-300 text-gray-700 hover:border-amber-500'
-	                          }`}
-	                      >
-	                        {groupName}
-	                      </button>
-	                    ))}
-	                  </div>
-	                </div>
-	              )}
-
-	              <div className="flex justify-end gap-3 pt-4 border-t-2 border-gray-100">
-	                <button
-	                  onClick={() => { setShowGameModal(false); setGameType(null); }}
-	                  className="px-6 py-3 rounded-2xl border-4 border-gray-300 bg-white text-gray-700 font-bold hover:bg-gray-50"
-	                >
-	                  取消
-	                </button>
-	                <button
-		                  onClick={async () => {
-		                    try {
-		                      if (!rangerForm.title.trim()) return alert('請輸入測驗標題');
-		                      if (!rangerForm.targetClasses?.length) return alert('請選擇至少一個目標班級');
-
-		                      const wrongTowerDamage = Math.max(1, Math.min(99, Number.parseInt(String(rangerWrongTowerDamageText || '2').trim(), 10) || 2));
-		                      const towerHp = Math.max(5, Math.min(999, Number.parseInt(String(rangerTowerHpText || '20').trim(), 10) || 20));
-
-		                      const isMcq = rangerAnswerMode === 'mcq';
-		                      const subject = DEFAULT_SUBJECT;
-
-		                      const questionsPayload: any[] = (() => {
-		                        if (!isMcq) return [];
-		                        return rangerMcqQuestions
-		                          .filter((q) => q.type === 'mcq')
-		                          .map((q) => {
-		                            const options = (q.options || []).map((o) => String(o || '').trim());
-		                            const correctIndex = Number.isInteger(q.correctIndex) ? q.correctIndex : 0;
-		                            const safeCorrectIndex = Math.max(0, Math.min(3, correctIndex));
-		                            return { type: 'mcq', prompt: String(q.prompt || '').trim(), options, correctIndex: safeCorrectIndex };
-		                          })
-		                          .filter((q) => q.prompt && Array.isArray(q.options) && q.options.length === 4 && q.options.every((o) => String(o || '').trim()));
-		                      })();
-			                      if (isMcq && questionsPayload.length === 0) {
-			                        alert('請至少新增一個完整題目（四個選項都要填，且需選擇正確答案）');
-			                        return;
-			                      }
-
-			                      if (!rangerForm.targetClasses?.length) {
-			                        alert('請選擇至少一個目標班級');
-			                        return;
-			                      }
-			                      if (rangerForm.targetClasses.length !== 1) {
-			                        alert('請只選擇 1 個班級（資料夾屬於單一班別）');
-			                        return;
-			                      }
-			                      if (GROUPS_ENABLED && rangerForm.targetGroups.length > 0) {
-			                        alert('使用資料夾分類時暫不支援分組派發，請取消分組');
-			                        return;
-			                      }
-			                      if (!rangerClassFolderId) {
-			                        alert('請選擇資料夾（學段→課題→子folder可選）');
-			                        return;
-			                      }
-
-			                      if (!isMcq && rangerAllowedOps.length === 0) {
-			                        alert('請至少選擇一種運算（加/減/乘/除）');
-			                        return;
-			                      }
-
-		                      const rangerTdPayload: any = {
-		                        answerMode: rangerAnswerMode,
-		                        perStageQuestionCount: rangerStageQuestionCount,
-		                        wrongTowerDamage,
-		                        towerHp
-		                      };
-		                      if (!isMcq) {
-		                        const eqPercent = Math.max(0, Math.min(100, Number.parseInt(String(rangerEquationPercentText || '0').trim(), 10) || 0));
-		                        const decPercent = Math.max(0, Math.min(100, Number.parseInt(String(rangerDecimalPercentText || '0').trim(), 10) || 0));
-		                        rangerTdPayload.grade = rangerGrade;
-		                        rangerTdPayload.equationPercent = eqPercent;
-		                        rangerTdPayload.decimalPercent = decPercent;
-		                        rangerTdPayload.allowedOps = rangerAllowedOps;
-		                        rangerTdPayload.allowParentheses = rangerOps.paren;
-		                        rangerTdPayload.constraints = rangerConstraints;
-		                        rangerTdPayload.promptText = rangerPromptText;
-		                      }
-
-			                      await authService.createGame({
-			                        title: rangerForm.title,
-			                        description: rangerForm.description,
-			                        gameType: 'ranger-td',
-			                        subject,
-			                        targetClasses: rangerForm.targetClasses,
-			                        targetGroups: GROUPS_ENABLED ? rangerForm.targetGroups : [],
-			                        questions: questionsPayload,
-			                        difficulty: 'medium',
-			                        timeLimitSeconds: clampTowerDefenseTimeSeconds(rangerRunSecondsText, rangerRunSeconds),
-			                        livesLimit: null,
-			                        rangerTd: rangerTdPayload,
-			                        classFolderId: rangerClassFolderId
-			                      });
-
-			                      alert(isMcq ? 'Ranger 塔防（答題）創建成功！' : 'Ranger 塔防創建成功！');
-			                      setShowGameModal(false);
-			                      setGameType(null);
-			                      setRangerClassFolderId('');
-			                    } catch (e: any) {
-			                      alert('創建遊戲失敗：' + (e?.message || '未知錯誤'));
-			                    }
-			                  }}
-	                  className="px-6 py-3 rounded-2xl border-4 border-amber-600 bg-amber-600 text-white font-black hover:bg-amber-700"
-	                >
-	                  創建遊戲
-	                </button>
-	              </div>
+		              <div className="flex gap-4 pt-4 border-t-2 border-gray-100">
+		                <button
+		                  onClick={() => void cancelGameDraftEditor()}
+		                  className="flex-1 py-3 rounded-2xl border-4 border-gray-300 text-gray-600 font-bold hover:bg-gray-100"
+		                >
+		                  取消
+		                </button>
+		                <button
+		                  onClick={() => {
+		                    if (gameDraftReadOnly) return;
+		                    if (!String(rangerForm.title || '').trim()) return alert('請輸入標題');
+		                    setGameWizardMode('save');
+		                    setGameWizardOpen(true);
+		                  }}
+		                  disabled={gameDraftReadOnly}
+		                  className="flex-1 py-3 rounded-2xl border-4 border-amber-600 bg-white text-amber-900 font-bold hover:bg-amber-50 disabled:opacity-60"
+		                >
+		                  儲存
+		                </button>
+		                <button
+		                  onClick={() => {
+		                    if (!String(rangerForm.title || '').trim()) return alert('請輸入標題');
+		                    setGameWizardMode('publish');
+		                    setGameWizardOpen(true);
+		                  }}
+		                  className="flex-1 py-3 rounded-2xl border-4 border-amber-600 bg-amber-600 text-white font-bold hover:bg-amber-700"
+		                >
+		                  儲存及派發
+		                </button>
+		              </div>
 	            </div>
 	          </div>
 	        </div>
@@ -4927,80 +4680,6 @@ const TeacherDashboard: React.FC = () => {
 	                </div>
 	              </div>
 
-		              {/* Target Classes */}
-		              <div>
-		                <label className="block text-sm font-bold text-sky-900 mb-2">派發至班級</label>
-		                <div className="flex flex-wrap gap-2">
-		                  {availableClasses.map(className => (
-	                    <button
-	                      key={className}
-	                      type="button"
-	                      onClick={() => {
-	                        setMathForm(prev => ({
-	                          ...prev,
-	                          targetClasses: prev.targetClasses.includes(className)
-	                            ? prev.targetClasses.filter(c => c !== className)
-	                            : [...prev.targetClasses, className]
-	                        }));
-	                      }}
-	                      className={`px-4 py-2 rounded-2xl border-2 font-bold transition-colors ${mathForm.targetClasses.includes(className)
-	                        ? 'bg-sky-200 border-sky-500 text-sky-900'
-	                        : 'bg-white border-gray-300 text-gray-700 hover:border-sky-500'
-	                        }`}
-	                    >
-	                      {className}
-	                    </button>
-	                  ))}
-		                </div>
-		              </div>
-
-		              {mathForm.targetClasses.length === 1 ? (
-		                <ClassFolderSelectInline
-		                  authService={authService}
-		                  className={mathForm.targetClasses[0]}
-		                  value={mathClassFolderId}
-		                  onChange={setMathClassFolderId}
-		                />
-		              ) : (
-		                <div className="p-4 bg-gray-50 border-2 border-gray-200 rounded-2xl text-sm text-gray-700 font-bold">
-		                  請先只選擇 1 個班級，才可選擇資料夾（資料夾屬於單一班別）。
-		                </div>
-		              )}
-
-		              {/* Target Groups */}
-		              {availableGroups.length > 0 && (
-		                <div>
-		                  <label className="block text-sm font-bold text-sky-900 mb-2">
-	                    選擇分組（數學）
-	                  </label>
-	                  <div className="flex flex-wrap gap-2">
-	                    {availableGroups.map(groupName => (
-	                      <button
-	                        key={groupName}
-	                        type="button"
-	                        onClick={() => {
-	                          setMathForm(prev => ({
-	                            ...prev,
-	                            targetGroups: prev.targetGroups.includes(groupName)
-	                              ? prev.targetGroups.filter(g => g !== groupName)
-	                              : [...prev.targetGroups, groupName]
-	                          }));
-	                        }}
-	                        className={`px-4 py-2 rounded-2xl border-2 font-bold transition-colors ${mathForm.targetGroups.includes(groupName)
-	                          ? 'bg-sky-200 border-sky-500 text-sky-900'
-	                          : 'bg-white border-gray-300 text-gray-700 hover:border-sky-500'
-	                          }`}
-	                      >
-	                        {groupName}
-	                      </button>
-	                    ))}
-	                  </div>
-	                  <p className="text-xs text-gray-500 mt-1">
-	                    選擇分組會精確派發給該分組的學生
-	                  </p>
-	                </div>
-	              )}
-
 	              <div className="bg-white border-2 border-gray-200 rounded-2xl p-4">
 	                <div className="flex items-center justify-between gap-3 flex-wrap">
 	                  <div className="flex items-center gap-2">
@@ -5193,85 +4872,40 @@ const TeacherDashboard: React.FC = () => {
 	                </div>
 	              </div>
 
-	              <div className="flex justify-end gap-3 pt-4 border-t-2 border-gray-100">
-	                <button
-	                  onClick={() => { setShowGameModal(false); setGameType(null); }}
-	                  className="px-6 py-3 rounded-2xl border-4 border-gray-300 bg-white text-gray-700 font-bold hover:bg-gray-50"
-	                >
-	                  取消
-	                </button>
-	                <button
-		                  onClick={async () => {
-		                    try {
-		                      if (!mathForm.title.trim()) return alert('請輸入遊戲標題');
-		                      if (mathAllowedOps.length === 0 && mathQuestionType === 'calc') return alert('請至少選擇一種運算（加/減/乘/除）');
-		                      if (!mathForm.targetClasses?.length) return alert('請選擇至少一個目標班級');
-		                      if (mathForm.targetClasses.length !== 1) return alert('請只選擇 1 個班級（資料夾屬於單一班別）');
-		                      if (GROUPS_ENABLED && mathForm.targetGroups.length > 0) return alert('使用資料夾分類時暫不支援分組派發，請取消分組');
-		                      if (!mathClassFolderId) return alert('請選擇資料夾（學段→課題→子folder可選）');
-		                      if (!mathDrafts.length) return alert('請新增至少一題');
-
-	                      const questions = mathQuestionType === 'equation'
-	                        ? finalizeMathEquationQuestions(
-	                          mathDrafts.map((d) => {
-	                            if (d.kind !== 'eq') throw new Error('題目類型不一致，請重新切換題目類型');
-	                            return { equation: d.equation || '' };
-	                          }),
-	                          { answerMode: mathAnswerMode, allowedOps: mathAllowedOps, allowParentheses: mathOps.paren, constraints: mathConstraints }
-	                        )
-	                        : finalizeMathQuestions(
-	                          mathDrafts.map((d) => {
-	                            if (d.kind !== 'expr') throw new Error('題目類型不一致，請重新切換題目類型');
-	                            return { tokens: d.tokens || [] };
-	                          }),
-	                          { answerMode: mathAnswerMode, allowedOps: mathAllowedOps, allowParentheses: mathOps.paren, constraints: mathConstraints }
-	                        );
-
-		                      await authService.createGame({
-		                        title: mathForm.title,
-		                        description: mathForm.description,
-		                        gameType: 'math',
-		                        subject: DEFAULT_SUBJECT,
-		                        targetClasses: mathForm.targetClasses,
-		                        targetGroups: GROUPS_ENABLED ? mathForm.targetGroups : [],
-		                        questions,
-		                        difficulty: 'medium',
-		                        timeLimitSeconds: mathTimeEnabled ? clampTowerDefenseTimeSeconds(mathTimeSecondsText, mathTimeSeconds) : undefined,
-		                        livesLimit: null,
-		                        classFolderId: mathClassFolderId,
-		                        math: {
-		                          answerMode: mathAnswerMode,
-		                          questionType: mathQuestionType,
-	                          numberMode: mathNumberMode,
-	                          allowedOps: mathAllowedOps,
-	                          allowParentheses: mathOps.paren,
-	                          allowNegative: mathAllowNegative,
-	                          range: { min: mathConstraints.minValue, max: mathConstraints.maxValue },
-	                          maxDen: mathConstraints.maxDen,
-	                          maxDecimalPlaces: mathConstraints.maxDecimalPlaces,
-	                          equationSteps: mathConstraints.equationSteps,
-	                          equationAnswerType: mathConstraints.equationAnswerType,
-	                          grade: mathGrade
-	                        }
-	                      });
-
-		                      alert('數學測驗創建成功！');
-		                      setShowGameModal(false);
-		                      setGameType(null);
-		                      setMathClassFolderId('');
-		                    } catch (e: any) {
-		                      alert('創建遊戲失敗：' + (e?.message || '未知錯誤'));
-		                    }
+		              <div className="flex gap-4 pt-4 border-t-2 border-gray-100">
+		                <button
+		                  onClick={() => void cancelGameDraftEditor()}
+		                  className="flex-1 py-3 rounded-2xl border-4 border-gray-300 text-gray-600 font-bold hover:bg-gray-100"
+		                >
+		                  取消
+		                </button>
+		                <button
+		                  onClick={() => {
+		                    if (gameDraftReadOnly) return;
+		                    if (!String(mathForm.title || '').trim()) return alert('請輸入標題');
+		                    setGameWizardMode('save');
+		                    setGameWizardOpen(true);
 		                  }}
-	                  className="px-6 py-3 rounded-2xl border-4 border-sky-600 bg-sky-600 text-white font-black hover:bg-sky-700"
-	                >
-	                  創建遊戲
-	                </button>
-	              </div>
-	            </div>
-	          </div>
-	        </div>
-	      )}
+		                  disabled={gameDraftReadOnly}
+		                  className="flex-1 py-3 rounded-2xl border-4 border-sky-600 bg-white text-sky-900 font-bold hover:bg-sky-50 disabled:opacity-60"
+		                >
+		                  儲存
+		                </button>
+		                <button
+		                  onClick={() => {
+		                    if (!String(mathForm.title || '').trim()) return alert('請輸入標題');
+		                    setGameWizardMode('publish');
+		                    setGameWizardOpen(true);
+		                  }}
+		                  className="flex-1 py-3 rounded-2xl border-4 border-sky-600 bg-sky-600 text-white font-black hover:bg-sky-700"
+		                >
+		                  儲存及派發
+		                </button>
+		              </div>
+		            </div>
+		          </div>
+		        </div>
+		      )}
 
 	      {/* Discussion Creation Modal */}
 	      {
@@ -5527,30 +5161,35 @@ const TeacherDashboard: React.FC = () => {
 	            />
 	          )}
 
-	          {showNoteCreateModal && (
-	            <NoteCreateModal
-	              open={showNoteCreateModal}
-	              onClose={() => setShowNoteCreateModal(false)}
-	              authService={authService}
-	              onCreated={(noteId) => {
-	                setNoteEditorNoteId(noteId);
-	                setShowNoteEditorModal(true);
-	              }}
-	            />
-	          )}
-
-	          {showNoteEditorModal && !!noteEditorNoteId && (
+	          {showNoteDraftModal && (
 	            <NoteEditorModal
-	              open={showNoteEditorModal}
-	              onClose={() => {
-	                setShowNoteEditorModal(false);
-	                setNoteEditorNoteId('');
-	              }}
+	              ref={noteEditorRef}
+	              open={showNoteDraftModal}
+	              onClose={() => setShowNoteDraftModal(false)}
 	              authService={authService}
-	              mode="template"
-	              noteId={noteEditorNoteId}
+	              mode="draft"
 	              viewerId={String(user?.id || '')}
 	              viewerRole="teacher"
+	              draftId={noteDraftId || undefined}
+	              draftReadOnly={noteDraftReadOnly}
+	              draftTitle={noteDraftForm.title}
+	              draftSubject={noteDraftForm.subject}
+	              draftSnapshot={noteDraftSnapshot}
+	              onDraftTitleChange={(next) => setNoteDraftForm((prev) => ({ ...prev, title: next }))}
+	              onDraftSubjectChange={(next) => setNoteDraftForm((prev) => ({ ...prev, subject: next }))}
+	              onDraftCancel={() => void cancelNoteDraftEditor()}
+	              onDraftSave={() => {
+	                const title = String(noteDraftForm.title || '').trim();
+	                if (!title) return alert('請輸入標題');
+	                setNoteWizardMode('save');
+	                setNoteWizardOpen(true);
+	              }}
+	              onDraftSaveAndPublish={() => {
+	                const title = String(noteDraftForm.title || '').trim();
+	                if (!title) return alert('請輸入標題');
+	                setNoteWizardMode('publish');
+	                setNoteWizardOpen(true);
+	              }}
 	            />
 	          )}
 	
@@ -6726,7 +6365,10 @@ const TeacherDashboard: React.FC = () => {
                 <div className="flex justify-between items-center">
                   <h2 className="text-3xl font-black text-brand-brown">創建小測驗</h2>
                   <button
-                    onClick={() => setShowQuizModal(false)}
+                    onClick={() => {
+                      setShowQuizModal(false);
+                      resetQuizEditor();
+                    }}
                     className="w-10 h-10 rounded-full bg-white border-2 border-brand-brown hover:bg-gray-100 flex items-center justify-center"
                   >
                     <X className="w-6 h-6 text-brand-brown" />
@@ -6735,6 +6377,11 @@ const TeacherDashboard: React.FC = () => {
               </div>
 
               <div className="p-6 space-y-6">
+                {quizDraftReadOnly && (
+                  <div className="p-4 bg-blue-50 border-2 border-blue-200 rounded-2xl text-sm text-gray-700 font-bold">
+                    共用草稿（唯讀）：你可以直接「儲存及派發」，但不可修改內容。如需修改請先在教師資料夾按「複製到我的」。
+                  </div>
+                )}
                 {/* Basic Info */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <Input
@@ -6742,6 +6389,7 @@ const TeacherDashboard: React.FC = () => {
                     placeholder="輸入小測驗標題..."
                     value={quizForm.title}
                     onChange={(e) => setQuizForm(prev => ({ ...prev, title: e.target.value }))}
+                    disabled={quizDraftReadOnly}
                   />
                   <div>
                     <label className="block text-sm font-bold text-brand-brown mb-2">選擇科目</label>
@@ -6750,10 +6398,9 @@ const TeacherDashboard: React.FC = () => {
                       value={quizForm.subject}
                       onChange={(e) => {
                         const newSubject = e.target.value as Subject;
-                        setQuizForm(prev => ({ ...prev, subject: newSubject, targetClasses: [], targetGroups: [] }));
-                        setQuizClassFolderId('');
-                        loadClassesAndGroups(newSubject);
+                        setQuizForm(prev => ({ ...prev, subject: newSubject }));
                       }}
+                      disabled={quizDraftReadOnly}
                     >
                       {VISIBLE_SUBJECTS.map(subject => (
                         <option key={subject} value={subject}>{subject}</option>
@@ -6769,6 +6416,7 @@ const TeacherDashboard: React.FC = () => {
                       placeholder="描述這個小測驗..."
                       value={quizForm.description}
                       onChange={(e) => setQuizForm(prev => ({ ...prev, description: e.target.value }))}
+                      disabled={quizDraftReadOnly}
                     />
                   </div>
                   <div>
@@ -6782,83 +6430,10 @@ const TeacherDashboard: React.FC = () => {
                       className="w-full px-4 py-2 border-4 border-brand-brown rounded-2xl bg-white font-bold"
                       value={quizForm.timeLimit}
                       onChange={(e) => setQuizForm(prev => ({ ...prev, timeLimit: parseInt(e.target.value) || 0 }))}
+                      disabled={quizDraftReadOnly}
                     />
                   </div>
                 </div>
-
-                {/* Target Classes */}
-                <div>
-                  <label className="block text-sm font-bold text-brand-brown mb-2">派發至班級</label>
-                  <div className="flex flex-wrap gap-2">
-                    {availableClasses.map(className => (
-                      <button
-                        key={className}
-                        type="button"
-                        onClick={() => {
-                          setQuizForm(prev => ({
-                            ...prev,
-                            targetClasses: prev.targetClasses.includes(className)
-                              ? prev.targetClasses.filter(c => c !== className)
-                              : [...prev.targetClasses, className]
-                          }));
-                        }}
-                        className={`px-4 py-2 rounded-2xl border-2 font-bold transition-colors ${quizForm.targetClasses.includes(className)
-                          ? 'bg-[#FDEEAD] border-brand-brown text-brand-brown'
-                          : 'bg-white border-gray-300 text-gray-600 hover:border-brand-brown'
-                          }`}
-                      >
-                        {className}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                {quizForm.targetClasses.length === 1 ? (
-                  <ClassFolderSelectInline
-                    authService={authService}
-                    className={quizForm.targetClasses[0]}
-                    value={quizClassFolderId}
-                    onChange={setQuizClassFolderId}
-                  />
-                ) : (
-                  <div className="p-4 bg-gray-50 border-2 border-gray-200 rounded-2xl text-sm text-gray-700 font-bold">
-                    請先只選擇 1 個班級，才可選擇資料夾（資料夾屬於單一班別）。
-                  </div>
-                )}
-
-                {/* Target Groups (show if groups are available for the subject) */}
-                {availableGroups.length > 0 && (
-                  <div>
-                    <label className="block text-sm font-bold text-brand-brown mb-2">
-                      選擇分組 ({quizForm.subject})
-                    </label>
-                    <div className="flex flex-wrap gap-2">
-                      {availableGroups.map(groupName => (
-                        <button
-                          key={groupName}
-                          type="button"
-                          onClick={() => {
-                            setQuizForm(prev => ({
-                              ...prev,
-                              targetGroups: prev.targetGroups.includes(groupName)
-                                ? prev.targetGroups.filter(g => g !== groupName)
-                                : [...prev.targetGroups, groupName]
-                            }));
-                          }}
-                          className={`px-4 py-2 rounded-2xl border-2 font-bold transition-colors ${quizForm.targetGroups.includes(groupName)
-                            ? 'bg-[#FFF4E6] border-orange-500 text-orange-600'
-                            : 'bg-white border-gray-300 text-gray-600 hover:border-orange-500'
-                            }`}
-                        >
-                          {groupName}
-                        </button>
-                      ))}
-                    </div>
-                    <p className="text-xs text-gray-500 mt-1">
-                      選擇分組會精確派發給該分組的學生
-                    </p>
-                  </div>
-                )}
 
 	                {/* Questions Section */}
 	                <div className="border-t-4 border-gray-200 pt-6">
@@ -6885,12 +6460,14 @@ const TeacherDashboard: React.FC = () => {
 	                          }
 	                        })}
 	                        className="bg-blue-100 text-blue-700 hover:bg-blue-200 border-blue-300 flex items-center gap-2"
+                          disabled={quizDraftReadOnly}
 	                      >
 	                        🤖 AI 生成
 	                      </Button>
 	                      <Button
 	                        onClick={addQuestion}
 	                        className="bg-green-100 text-green-700 hover:bg-green-200 border-green-300 flex items-center gap-2"
+                          disabled={quizDraftReadOnly}
 	                      >
 	                        <Plus className="w-4 h-4" />
 	                        新增問題
@@ -6911,6 +6488,7 @@ const TeacherDashboard: React.FC = () => {
                             <button
                               onClick={() => removeQuestion(questionIndex)}
                               className="p-2 bg-red-100 text-red-700 rounded-xl hover:bg-red-200"
+                              disabled={quizDraftReadOnly}
                             >
                               <Trash className="w-4 h-4" />
                             </button>
@@ -6924,6 +6502,7 @@ const TeacherDashboard: React.FC = () => {
                               rows={3}
                               value={question.question}
                               onChange={(e) => updateQuestion(questionIndex, 'question', e.target.value)}
+                              disabled={quizDraftReadOnly}
                             />
 
                             {/* 圖片上傳區域 */}
@@ -6939,6 +6518,7 @@ const TeacherDashboard: React.FC = () => {
                                       accept="image/*"
                                       onChange={(e) => handleQuestionImageUpload(questionIndex, e)}
                                       className="hidden"
+                                      disabled={quizDraftReadOnly}
                                     />
                                     <span className="text-gray-600 font-medium">
                                       {question.image ? '更換圖片' : '上傳圖片'}
@@ -6976,6 +6556,7 @@ const TeacherDashboard: React.FC = () => {
                                         checked={question.correctAnswer === optionIndex}
                                         onChange={() => updateQuestion(questionIndex, 'correctAnswer', optionIndex)}
                                         className="w-4 h-4 text-green-600"
+                                        disabled={quizDraftReadOnly}
                                       />
                                       <span className="font-bold text-gray-600 min-w-[20px]">
                                         {String.fromCharCode(65 + optionIndex)}.
@@ -6986,6 +6567,7 @@ const TeacherDashboard: React.FC = () => {
                                         value={option}
                                         onChange={(e) => updateOption(questionIndex, optionIndex, e.target.value)}
                                         className="flex-1 px-3 py-2 border-2 border-gray-300 rounded-xl focus:border-brand-brown font-medium"
+                                        disabled={quizDraftReadOnly}
                                       />
                                     </div>
                                     {question.correctAnswer === optionIndex && (
@@ -7011,19 +6593,51 @@ const TeacherDashboard: React.FC = () => {
                 <div className="flex gap-4 pt-4 border-t-2 border-gray-200">
                   <Button
                     className="flex-1 bg-gray-300 text-gray-700 hover:bg-gray-400"
-                    onClick={() => setShowQuizModal(false)}
+                    onClick={async () => {
+                      const isOwner = String(quizDraftMeta?.ownerTeacherId || user?.id || '') === String(user?.id || '');
+                      const canDelete = !!quizDraftId && isOwner && !quizDraftReadOnly;
+                      if (canDelete) {
+                        const ok = window.confirm('取消＝刪除草稿。確定要刪除嗎？');
+                        if (!ok) return;
+                        try {
+                          await authService.deleteDraft(quizDraftId);
+                          alert('草稿已刪除');
+                        } catch (e: any) {
+                          alert(e?.message || '刪除失敗');
+                          return;
+                        }
+                      }
+                      setShowQuizModal(false);
+                      resetQuizEditor();
+                    }}
                   >
                     取消
                   </Button>
                   <Button
-                    className={`flex-1 border-brand-brown ${imageUploading
-                      ? 'bg-gray-400 text-white cursor-wait'
-                      : 'bg-[#FDEEAD] text-brand-brown hover:bg-[#FCE690]'
-                      }`}
-                    onClick={handleSubmitQuiz}
+                    className="flex-1 bg-white text-brand-brown hover:bg-gray-50 border-brand-brown"
+                    onClick={() => {
+                      const title = String(quizForm.title || '').trim();
+                      if (!title) return alert('請輸入標題');
+                      if (quizDraftReadOnly) return;
+                      setQuizWizardMode('save');
+                      setQuizWizardOpen(true);
+                    }}
+                    disabled={quizDraftReadOnly || imageUploading}
+                  >
+                    儲存
+                  </Button>
+                  <Button
+                    className={`flex-1 border-brand-brown ${imageUploading ? 'bg-gray-400 text-white cursor-wait' : 'bg-[#FDEEAD] text-brand-brown hover:bg-[#FCE690]'}`}
+                    onClick={() => {
+                      const title = String(quizForm.title || '').trim();
+                      if (!title) return alert('請輸入標題');
+                      if (!Array.isArray(quizForm.questions) || quizForm.questions.length === 0) return alert('請至少新增一題');
+                      setQuizWizardMode('publish');
+                      setQuizWizardOpen(true);
+                    }}
                     disabled={imageUploading}
                   >
-                    {imageUploading ? '圖片處理中...' : '創建小測驗'}
+                    {imageUploading ? '圖片處理中...' : '儲存及派發'}
                   </Button>
                 </div>
               </div>
@@ -7055,26 +6669,65 @@ const TeacherDashboard: React.FC = () => {
             setShowDiscussionModal(true);
             return;
           }
-          alert('此草稿工具尚未支援開啟（先完成「討論」後再逐個搬）。');
+          if (toolType === 'quiz') {
+            setShowDraftLibraryModal(false);
+            setQuizDraftId(id);
+            setShowQuizModal(true);
+            return;
+          }
+          if (toolType === 'contest') {
+            setShowDraftLibraryModal(false);
+            setContestDraftId(id);
+            setShowContestModal(true);
+            return;
+          }
+          if (toolType === 'game') {
+            setShowDraftLibraryModal(false);
+            setGameDraftId(id);
+            setShowGameModal(true);
+            return;
+          }
+          if (toolType === 'note') {
+            setShowDraftLibraryModal(false);
+            setNoteDraftId(id);
+            setShowNoteDraftModal(true);
+            return;
+          }
+          alert('此草稿工具尚未支援開啟。');
         }}
       />
 
       <CreateTaskModal
         open={showCreateTaskModal}
         onClose={() => setShowCreateTaskModal(false)}
-        onSelectTool={(tool) => {
-          setShowCreateTaskModal(false);
-          if (tool === 'discussion') {
-            resetDiscussionEditor();
-            return setShowDiscussionModal(true);
-          }
-          if (tool === 'note') return setShowNoteCreateModal(true);
-          if (tool === 'quiz') return setShowQuizModal(true);
-          if (tool === 'mathQuiz') return openMathQuizCreator();
-          if (tool === 'game') return openGameCreator();
-          if (tool === 'contest') return setShowContestModal(true);
-        }}
-      />
+	        onSelectTool={(tool) => {
+	          setShowCreateTaskModal(false);
+	          if (tool === 'discussion') {
+	            resetDiscussionEditor();
+	            return setShowDiscussionModal(true);
+	          }
+	          if (tool === 'note') {
+              initNewNoteDraftEditor();
+              return setShowNoteDraftModal(true);
+            }
+	          if (tool === 'quiz') {
+              resetQuizEditor();
+              return setShowQuizModal(true);
+            }
+	          if (tool === 'mathQuiz') {
+              resetGameEditor();
+              return openMathQuizCreator();
+            }
+	          if (tool === 'game') {
+              resetGameEditor();
+              return openGameCreator();
+            }
+	          if (tool === 'contest') {
+              resetContestEditor();
+              return setShowContestModal(true);
+            }
+	        }}
+	      />
 
       <DraftSavePublishWizardModal
         open={discussionWizardOpen}
@@ -7124,7 +6777,7 @@ const TeacherDashboard: React.FC = () => {
             scope: picked.scope,
             folderId: picked.folderId
           });
-          await authService.updateDraftContent(discussionDraftId, { contentSnapshot });
+          await authService.updateDraftContent(discussionDraftId, contentSnapshot);
           setDiscussionDraftMeta((prev) => ({ ...(prev || {}), title, subject: discussionForm.subject, grade: picked.grade, scope: picked.scope, folderId: picked.folderId }));
           return { draftId: discussionDraftId };
         }}
@@ -7135,16 +6788,469 @@ const TeacherDashboard: React.FC = () => {
         }}
       />
 
+      <DraftSavePublishWizardModal
+        open={quizWizardOpen}
+        mode={quizWizardMode}
+        onClose={() => setQuizWizardOpen(false)}
+        authService={authService}
+        availableGrades={teacherGradeOptions}
+        availableClasses={availableClasses}
+        title={quizForm.title}
+        allowShared={true}
+        initialLocation={{
+          scope: quizDraftMeta?.scope === 'shared' ? 'shared' : 'my',
+          grade: String(quizDraftMeta?.grade || teacherGradeOptions[0] || ''),
+          folderId: quizDraftMeta?.folderId ? String(quizDraftMeta.folderId) : null
+        }}
+        readOnlyLocation={quizDraftReadOnly}
+        keepDraftDefault={true}
+        keepDraftLocked={quizDraftReadOnly}
+        onSave={async (picked) => {
+          const title = String(quizForm.title || '').trim();
+          if (!title) throw new Error('請先輸入標題');
+          if (quizDraftReadOnly && quizDraftId) return { draftId: quizDraftId };
+
+          const contentSnapshot = {
+            quiz: {
+              description: String(quizForm.description || ''),
+              timeLimit: Number(quizForm.timeLimit) || 0,
+              questions: Array.isArray(quizForm.questions) ? quizForm.questions : []
+            }
+          };
+
+          if (!quizDraftId) {
+            const resp = await authService.createDraft({
+              toolType: 'quiz',
+              title,
+              subject: quizForm.subject,
+              grade: picked.grade,
+              scope: picked.scope,
+              folderId: picked.folderId,
+              contentSnapshot
+            });
+            const id = String(resp?.draft?.id || '');
+            if (!id) throw new Error('建立失敗（缺少 draftId）');
+            setQuizDraftId(id);
+            setQuizDraftMeta(resp?.draft || null);
+            setQuizDraftReadOnly(false);
+            return { draftId: id };
+          }
+
+          await authService.updateDraftMeta(quizDraftId, {
+            title,
+            subject: quizForm.subject,
+            grade: picked.grade,
+            scope: picked.scope,
+            folderId: picked.folderId
+          });
+          await authService.updateDraftContent(quizDraftId, contentSnapshot);
+          setQuizDraftMeta((prev) => ({ ...(prev || {}), title, subject: quizForm.subject, grade: picked.grade, scope: picked.scope, folderId: picked.folderId }));
+          return { draftId: quizDraftId };
+        }}
+        onPublished={() => {
+          setQuizWizardOpen(false);
+          setShowQuizModal(false);
+          resetQuizEditor();
+        }}
+      />
+
+      <DraftSavePublishWizardModal
+        open={contestWizardOpen}
+        mode={contestWizardMode}
+        onClose={() => setContestWizardOpen(false)}
+        authService={authService}
+        availableGrades={teacherGradeOptions}
+        availableClasses={availableClasses}
+        title={contestForm.title}
+        allowShared={true}
+        initialLocation={{
+          scope: contestDraftMeta?.scope === 'shared' ? 'shared' : 'my',
+          grade: String(contestDraftMeta?.grade || teacherGradeOptions[0] || ''),
+          folderId: contestDraftMeta?.folderId ? String(contestDraftMeta.folderId) : null
+        }}
+        readOnlyLocation={contestDraftReadOnly}
+        keepDraftDefault={true}
+        keepDraftLocked={contestDraftReadOnly}
+        onSave={async (picked) => {
+          const title = String(contestForm.title || '').trim();
+          if (!title) throw new Error('請先輸入標題');
+          if (contestDraftReadOnly && contestDraftId) return { draftId: contestDraftId };
+
+          const contentSnapshot = {
+            contest: {
+              topic: String(contestForm.topic || ''),
+              scopeText: String(contestForm.scopeText || ''),
+              advancedOnly: !!contestForm.advancedOnly,
+              grade: String(contestForm.grade || '小一'),
+              questionCount: Number(contestForm.questionCount) || 10,
+              timeLimitSeconds: contestForm.timeLimitSeconds ?? null
+            }
+          };
+
+          if (!contestDraftId) {
+            const resp = await authService.createDraft({
+              toolType: 'contest',
+              title,
+              subject: contestForm.subject,
+              grade: picked.grade,
+              scope: picked.scope,
+              folderId: picked.folderId,
+              contentSnapshot
+            });
+            const id = String(resp?.draft?.id || '');
+            if (!id) throw new Error('建立失敗（缺少 draftId）');
+            setContestDraftId(id);
+            setContestDraftMeta(resp?.draft || null);
+            setContestDraftReadOnly(false);
+            return { draftId: id };
+          }
+
+          await authService.updateDraftMeta(contestDraftId, {
+            title,
+            subject: contestForm.subject,
+            grade: picked.grade,
+            scope: picked.scope,
+            folderId: picked.folderId
+          });
+          await authService.updateDraftContent(contestDraftId, contentSnapshot);
+          setContestDraftMeta((prev) => ({ ...(prev || {}), title, subject: contestForm.subject, grade: picked.grade, scope: picked.scope, folderId: picked.folderId }));
+          return { draftId: contestDraftId };
+        }}
+        onPublished={() => {
+          setContestWizardOpen(false);
+          setShowContestModal(false);
+          resetContestEditor();
+        }}
+      />
+
+      <DraftSavePublishWizardModal
+        open={noteWizardOpen}
+        mode={noteWizardMode}
+        onClose={() => setNoteWizardOpen(false)}
+        authService={authService}
+        availableGrades={teacherGradeOptions}
+        availableClasses={availableClasses}
+        title={noteDraftForm.title}
+        allowShared={true}
+        initialLocation={{
+          scope: noteDraftMeta?.scope === 'shared' ? 'shared' : 'my',
+          grade: String(noteDraftMeta?.grade || teacherGradeOptions[0] || ''),
+          folderId: noteDraftMeta?.folderId ? String(noteDraftMeta.folderId) : null
+        }}
+        readOnlyLocation={noteDraftReadOnly}
+        keepDraftDefault={true}
+        keepDraftLocked={noteDraftReadOnly}
+        onSave={async (picked) => {
+          const title = String(noteDraftForm.title || '').trim();
+          const subject = String(noteDraftForm.subject || DEFAULT_SUBJECT).trim();
+          if (!title) throw new Error('請先輸入標題');
+          if (!subject) throw new Error('請先選擇科目');
+          if (noteDraftReadOnly && noteDraftId) return { draftId: noteDraftId };
+
+          const templateSnapshot = noteEditorRef.current?.getSnapshot?.();
+          if (!templateSnapshot) throw new Error('筆記畫布未就緒');
+
+          const contentSnapshot = { note: { templateSnapshot } };
+
+          if (!noteDraftId) {
+            const resp = await authService.createDraft({
+              toolType: 'note',
+              title,
+              subject,
+              grade: picked.grade,
+              scope: picked.scope,
+              folderId: picked.folderId,
+              contentSnapshot
+            });
+            const id = String(resp?.draft?.id || '');
+            if (!id) throw new Error('建立失敗（缺少 draftId）');
+            setNoteDraftId(id);
+            setNoteDraftMeta(resp?.draft || null);
+            setNoteDraftReadOnly(false);
+            return { draftId: id };
+          }
+
+          await authService.updateDraftMeta(noteDraftId, {
+            title,
+            subject,
+            grade: picked.grade,
+            scope: picked.scope,
+            folderId: picked.folderId
+          });
+          await authService.updateDraftContent(noteDraftId, contentSnapshot);
+          setNoteDraftMeta((prev) => ({ ...(prev || {}), title, subject, grade: picked.grade, scope: picked.scope, folderId: picked.folderId }));
+          return { draftId: noteDraftId };
+        }}
+        onPublished={() => {
+          setNoteWizardOpen(false);
+          resetNoteDraftEditor();
+        }}
+      />
+
+      <DraftSavePublishWizardModal
+        open={gameWizardOpen}
+        mode={gameWizardMode}
+        onClose={() => setGameWizardOpen(false)}
+        authService={authService}
+        availableGrades={teacherGradeOptions}
+        availableClasses={availableClasses}
+        title={getCurrentGameTitle()}
+        allowShared={true}
+        initialLocation={{
+          scope: gameDraftMeta?.scope === 'shared' ? 'shared' : 'my',
+          grade: String(gameDraftMeta?.grade || teacherGradeOptions[0] || ''),
+          folderId: gameDraftMeta?.folderId ? String(gameDraftMeta.folderId) : null
+        }}
+        readOnlyLocation={gameDraftReadOnly}
+        keepDraftDefault={true}
+        keepDraftLocked={gameDraftReadOnly}
+        onSave={async (picked) => {
+          const title = getCurrentGameTitle();
+          const subject = getCurrentGameSubject();
+          if (!title) throw new Error('請先輸入標題');
+          if (!gameType) throw new Error('請先選擇遊戲類型');
+          if (gameDraftReadOnly && gameDraftId) return { draftId: gameDraftId };
+
+          const forPublish = gameWizardMode === 'publish';
+
+          const buildGamePayload = () => {
+            if (gameType === 'maze') {
+              const questions = Array.isArray(gameForm.questions) ? gameForm.questions : [];
+              if (forPublish && questions.length === 0) throw new Error('請至少新增一個題目');
+              return {
+                gameType: 'maze',
+                description: getCurrentGameDescription(),
+                difficulty: gameForm.difficulty,
+                questions,
+                editorState: { gameForm }
+              };
+            }
+            if (gameType === 'matching') {
+              const rawPairs = Array.isArray(gameForm.questions) ? gameForm.questions : [];
+              const cleanedPairs = rawPairs
+                .map((q) => ({ question: String(q.question || '').trim(), answer: String(q.answer || '').trim() }))
+                .filter((q) => q.question && q.answer);
+              const requiredPairs = gameForm.difficulty === 'easy' ? 4 : gameForm.difficulty === 'hard' ? 8 : 6;
+              if (forPublish && cleanedPairs.length < requiredPairs) throw new Error(`請至少輸入 ${requiredPairs} 對配對內容`);
+              return {
+                gameType: 'matching',
+                description: getCurrentGameDescription(),
+                difficulty: gameForm.difficulty,
+                questions: forPublish ? cleanedPairs.slice(0, requiredPairs) : cleanedPairs,
+                editorState: { gameForm }
+              };
+            }
+            if (gameType === 'tower-defense') {
+              const cleanedQuestions: any[] = Array.isArray(towerDefenseQuestions)
+                ? towerDefenseQuestions
+                  .map((q: any) => {
+                    const options = (q.options || []).map((o: any) => String(o || '').trim());
+                    const correctIndex = Number.isInteger(q.correctIndex) ? q.correctIndex : 0;
+                    const safeCorrectIndex = Math.max(0, Math.min(3, correctIndex));
+                    if (q.type === 'match') {
+                      return { type: 'match', left: String(q.left || '').trim(), options, correctIndex: safeCorrectIndex };
+                    }
+                    return { type: 'mcq', prompt: String(q.prompt || '').trim(), options, correctIndex: safeCorrectIndex };
+                  })
+                  .filter((q: any) => {
+                    const filledOptions = Array.isArray(q.options) && q.options.length === 4 && q.options.every((o: any) => String(o || '').trim());
+                    if (!filledOptions) return false;
+                    return q.type === 'match' ? Boolean(q.left.trim()) : Boolean(q.prompt.trim());
+                  })
+                : [];
+              if (forPublish && cleanedQuestions.length === 0) throw new Error('請至少新增一個完整題目（四個選項都要填，且需選擇正確答案）');
+              return {
+                gameType: 'tower-defense',
+                description: getCurrentGameDescription(),
+                difficulty: gameForm.difficulty,
+                questions: cleanedQuestions,
+                timeLimitSeconds: clampTowerDefenseTimeSeconds(towerDefenseTimeSecondsText, towerDefenseTimeSeconds),
+                livesLimit: towerDefenseLivesEnabled ? towerDefenseLivesLimit : null,
+                editorState: { gameForm, towerDefenseQuestions, towerDefenseTimeSeconds, towerDefenseTimeSecondsText, towerDefenseLivesEnabled, towerDefenseLivesLimit }
+              };
+            }
+            if (gameType === 'ranger-td') {
+              const wrongTowerDamage = Math.max(1, Math.min(99, Number.parseInt(String(rangerWrongTowerDamageText || '2').trim(), 10) || 2));
+              const towerHp = Math.max(5, Math.min(999, Number.parseInt(String(rangerTowerHpText || '20').trim(), 10) || 20));
+              const isMcq = rangerAnswerMode === 'mcq';
+              const questionsPayload: any[] = (() => {
+                if (!isMcq) return [];
+                return (Array.isArray(rangerMcqQuestions) ? rangerMcqQuestions : [])
+                  .filter((q: any) => q.type === 'mcq')
+                  .map((q: any) => {
+                    const options = (q.options || []).map((o: any) => String(o || '').trim());
+                    const correctIndex = Number.isInteger(q.correctIndex) ? q.correctIndex : 0;
+                    const safeCorrectIndex = Math.max(0, Math.min(3, correctIndex));
+                    return { type: 'mcq', prompt: String(q.prompt || '').trim(), options, correctIndex: safeCorrectIndex };
+                  })
+                  .filter((q: any) => q.prompt && Array.isArray(q.options) && q.options.length === 4 && q.options.every((o: any) => String(o || '').trim()));
+              })();
+              if (forPublish && isMcq && questionsPayload.length === 0) throw new Error('請至少新增一個完整題目（四個選項都要填，且需選擇正確答案）');
+              if (forPublish && !isMcq && rangerAllowedOps.length === 0) throw new Error('請至少選擇一種運算（加/減/乘/除）');
+              const rangerTdPayload: any = {
+                answerMode: rangerAnswerMode,
+                perStageQuestionCount: rangerStageQuestionCount,
+                wrongTowerDamage,
+                towerHp
+              };
+              if (!isMcq) {
+                const eqPercent = Math.max(0, Math.min(100, Number.parseInt(String(rangerEquationPercentText || '0').trim(), 10) || 0));
+                const decPercent = Math.max(0, Math.min(100, Number.parseInt(String(rangerDecimalPercentText || '0').trim(), 10) || 0));
+                rangerTdPayload.grade = rangerGrade;
+                rangerTdPayload.equationPercent = eqPercent;
+                rangerTdPayload.decimalPercent = decPercent;
+                rangerTdPayload.allowedOps = rangerAllowedOps;
+                rangerTdPayload.allowParentheses = rangerOps.paren;
+                rangerTdPayload.constraints = rangerConstraints;
+                rangerTdPayload.promptText = rangerPromptText;
+              }
+              return {
+                gameType: 'ranger-td',
+                description: getCurrentGameDescription(),
+                difficulty: 'medium',
+                questions: questionsPayload,
+                timeLimitSeconds: clampTowerDefenseTimeSeconds(rangerRunSecondsText, rangerRunSeconds),
+                livesLimit: null,
+                rangerTd: rangerTdPayload,
+                editorState: {
+                  rangerForm,
+                  rangerAnswerMode,
+                  rangerGrade,
+                  rangerStageQuestionCount,
+                  rangerEquationPercentText,
+                  rangerDecimalPercentText,
+                  rangerOps,
+                  rangerRunSeconds,
+                  rangerRunSecondsText,
+                  rangerAllowNegative,
+                  rangerMinValueText,
+                  rangerMaxValueText,
+                  rangerMaxDenText,
+                  rangerMaxDecimalPlacesText,
+                  rangerEquationSteps,
+                  rangerEquationAnswerType,
+                  rangerMcqQuestions,
+                  rangerWrongTowerDamageText,
+                  rangerTowerHpText,
+                  rangerPromptText
+                }
+              };
+            }
+            if (gameType === 'math') {
+              if (forPublish && mathAllowedOps.length === 0 && mathQuestionType === 'calc') throw new Error('請至少選擇一種運算（加/減/乘/除）');
+              if (forPublish && !mathDrafts.length) throw new Error('請新增至少一題');
+              const questions = forPublish
+                ? (mathQuestionType === 'equation'
+                  ? finalizeMathEquationQuestions(
+                    mathDrafts.map((d) => {
+                      if (d.kind !== 'eq') throw new Error('題目類型不一致，請重新切換題目類型');
+                      return { equation: d.equation || '' };
+                    }),
+                    { answerMode: mathAnswerMode, allowedOps: mathAllowedOps, allowParentheses: mathOps.paren, constraints: mathConstraints }
+                  )
+                  : finalizeMathQuestions(
+                    mathDrafts.map((d) => {
+                      if (d.kind !== 'expr') throw new Error('題目類型不一致，請重新切換題目類型');
+                      return { tokens: d.tokens || [] };
+                    }),
+                    { answerMode: mathAnswerMode, allowedOps: mathAllowedOps, allowParentheses: mathOps.paren, constraints: mathConstraints }
+                  ))
+                : [];
+              const mathPayload = {
+                answerMode: mathAnswerMode,
+                questionType: mathQuestionType,
+                numberMode: mathNumberMode,
+                allowedOps: mathAllowedOps,
+                allowParentheses: mathOps.paren,
+                allowNegative: mathAllowNegative,
+                range: { min: mathConstraints.minValue, max: mathConstraints.maxValue },
+                maxDen: mathConstraints.maxDen,
+                maxDecimalPlaces: mathConstraints.maxDecimalPlaces,
+                equationSteps: mathConstraints.equationSteps,
+                equationAnswerType: mathConstraints.equationAnswerType,
+                grade: mathGrade
+              };
+              return {
+                gameType: 'math',
+                description: getCurrentGameDescription(),
+                difficulty: 'medium',
+                questions,
+                timeLimitSeconds: mathTimeEnabled ? clampTowerDefenseTimeSeconds(mathTimeSecondsText, mathTimeSeconds) : null,
+                livesLimit: null,
+                math: mathPayload,
+                editorState: {
+                  mathForm,
+                  mathGameTab,
+                  mathAnswerMode,
+                  mathQuestionType,
+                  mathGrade,
+                  mathOps,
+                  mathNumberMode,
+                  mathAllowNegative,
+                  mathMinValueText,
+                  mathMaxValueText,
+                  mathMaxDenText,
+                  mathMaxDecimalPlacesText,
+                  mathEquationSteps,
+                  mathEquationAnswerType,
+                  mathQuestionCount,
+                  mathTimeEnabled,
+                  mathTimeSeconds,
+                  mathTimeSecondsText,
+                  mathDrafts
+                }
+              };
+            }
+            throw new Error('未支援的遊戲類型');
+          };
+
+          const contentSnapshot = {
+            game: {
+              ...buildGamePayload()
+            }
+          };
+
+          if (!gameDraftId) {
+            const resp = await authService.createDraft({
+              toolType: 'game',
+              title,
+              subject,
+              grade: picked.grade,
+              scope: picked.scope,
+              folderId: picked.folderId,
+              contentSnapshot
+            });
+            const id = String(resp?.draft?.id || '');
+            if (!id) throw new Error('建立失敗（缺少 draftId）');
+            setGameDraftId(id);
+            setGameDraftMeta(resp?.draft || null);
+            setGameDraftReadOnly(false);
+            return { draftId: id };
+          }
+
+          await authService.updateDraftMeta(gameDraftId, {
+            title,
+            subject,
+            grade: picked.grade,
+            scope: picked.scope,
+            folderId: picked.folderId
+          });
+          await authService.updateDraftContent(gameDraftId, contentSnapshot);
+          setGameDraftMeta((prev) => ({ ...(prev || {}), title, subject, grade: picked.grade, scope: picked.scope, folderId: picked.folderId }));
+          return { draftId: gameDraftId };
+        }}
+        onPublished={() => {
+          setGameWizardOpen(false);
+          resetGameEditor();
+        }}
+      />
+
       <TemplateLibraryModal
         open={showTemplateLibrary}
         onClose={() => setShowTemplateLibrary(false)}
         authService={authService}
         userId={String(user?.id || '')}
         availableClasses={availableClasses}
-        onOpenNoteDraft={(noteId) => {
-          setNoteEditorNoteId(noteId);
-          setShowNoteEditorModal(true);
-        }}
       />
 
 		      {/* Settings Modal */}
@@ -7573,7 +7679,10 @@ const TeacherDashboard: React.FC = () => {
               <div className="flex justify-between items-center">
                 <h2 className="text-3xl font-black text-brand-brown">🏁 創建問答比賽</h2>
                 <button
-                  onClick={() => setShowContestModal(false)}
+                  onClick={() => {
+                    setShowContestModal(false);
+                    resetContestEditor();
+                  }}
                   className="w-10 h-10 rounded-full bg-white border-2 border-brand-brown hover:bg-gray-100 flex items-center justify-center"
                   aria-label="關閉"
                 >
@@ -7583,6 +7692,11 @@ const TeacherDashboard: React.FC = () => {
             </div>
 
             <div className="p-6">
+              {contestDraftReadOnly && (
+                <div className="p-4 bg-blue-50 border-2 border-blue-200 rounded-2xl text-sm text-gray-700 font-bold mb-6">
+                  共用草稿（唯讀）：你可以直接「儲存及派發」，但不可修改內容。如需修改請先在教師資料夾按「複製到我的」。
+                </div>
+              )}
               <div className="bg-orange-50 p-4 rounded-xl border-2 border-orange-200 mb-6">
                 <p className="text-orange-800 text-sm">
                   🏁 <strong>比賽說明：</strong>教師只需設定題目規則，學生點擊開始時由AI即時生成不同題目。每位學生可重複參賽，系統會記錄所有成績並提供3種排行榜。
@@ -7599,6 +7713,7 @@ const TeacherDashboard: React.FC = () => {
                     placeholder="輸入比賽標題..."
                     value={contestForm.title}
                     onChange={(e) => setContestForm(prev => ({ ...prev, title: e.target.value }))}
+                    disabled={contestDraftReadOnly}
                   />
 
                   <Input
@@ -7606,6 +7721,7 @@ const TeacherDashboard: React.FC = () => {
                     placeholder="例如：第一單元 - 自然景觀..."
                     value={contestForm.topic}
                     onChange={(e) => setContestForm(prev => ({ ...prev, topic: e.target.value }))}
+                    disabled={contestDraftReadOnly}
                   />
 
                   <div>
@@ -7615,10 +7731,9 @@ const TeacherDashboard: React.FC = () => {
                       value={contestForm.subject}
                       onChange={(e) => {
                         const newSubject = e.target.value as Subject;
-                        setContestForm(prev => ({ ...prev, subject: newSubject, targetClasses: [], targetGroups: [] }));
-                        setContestClassFolderId('');
-                        loadClassesAndGroups(newSubject);
+                        setContestForm(prev => ({ ...prev, subject: newSubject }));
                       }}
+                      disabled={contestDraftReadOnly}
                     >
                       {VISIBLE_SUBJECTS.map(subject => (
                         <option key={subject} value={subject}>{subject}</option>
@@ -7632,6 +7747,7 @@ const TeacherDashboard: React.FC = () => {
                       className="w-full px-4 py-2 border-4 border-gray-300 rounded-2xl bg-white font-bold"
                       value={contestForm.grade}
                       onChange={(e) => setContestForm(prev => ({ ...prev, grade: e.target.value }))}
+                      disabled={contestDraftReadOnly}
                     >
                       {['小一', '小二', '小三', '小四', '小五', '小六'].map(grade => (
                         <option key={grade} value={grade}>{grade}</option>
@@ -7682,6 +7798,7 @@ const TeacherDashboard: React.FC = () => {
                         checked={contestForm.advancedOnly}
                         onChange={(e) => setContestForm(prev => ({ ...prev, advancedOnly: e.target.checked }))}
                         className="w-5 h-5"
+                        disabled={contestDraftReadOnly}
                       />
                       <div>
                         <div className="font-bold text-brand-brown">進階模式</div>
@@ -7704,120 +7821,59 @@ const TeacherDashboard: React.FC = () => {
                   placeholder="例如：春天到了，樹木長出新芽，花朵綻放..."
                   value={contestForm.scopeText}
                   onChange={(e) => setContestForm(prev => ({ ...prev, scopeText: e.target.value }))}
+                  disabled={contestDraftReadOnly}
                 />
-              </div>
-
-              {/* 派發對象 */}
-              <div className="mt-6 grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div>
-                  <h3 className="text-xl font-bold text-brand-brown mb-2">目標班級</h3>
-                  <div className="space-y-2">
-                    {availableClasses.map((className) => (
-                      <label
-                        key={className}
-                        className={`flex items-center gap-3 p-3 rounded-xl border-2 cursor-pointer ${
-                          contestForm.targetClasses.includes(className)
-                            ? 'bg-[#FDEEAD] border-brand-brown'
-                            : 'bg-white border-gray-200 hover:border-brand-brown'
-                        }`}
-                      >
-                        <input
-                          type="checkbox"
-                          checked={contestForm.targetClasses.includes(className)}
-                          onChange={(e) => {
-                            if (e.target.checked) {
-                              setContestForm(prev => ({
-                                ...prev,
-                                targetClasses: [...prev.targetClasses, className]
-                              }));
-                            } else {
-                              setContestForm(prev => ({
-                                ...prev,
-                                targetClasses: prev.targetClasses.filter(c => c !== className)
-                              }));
-                            }
-                            setContestClassFolderId('');
-                          }}
-                          className="w-4 h-4"
-                        />
-                        <span className="font-bold text-gray-700">{className}</span>
-                      </label>
-                    ))}
-                  </div>
-                  <div className="mt-3">
-                    {contestForm.targetClasses.length === 1 ? (
-                      <ClassFolderSelectInline
-                        authService={authService}
-                        className={contestForm.targetClasses[0]}
-                        value={contestClassFolderId}
-                        onChange={setContestClassFolderId}
-                      />
-                    ) : (
-                      <div className="p-4 bg-gray-50 border-2 border-gray-200 rounded-2xl text-sm text-gray-700 font-bold">
-                        請先只選擇 1 個班級，才可選擇資料夾（資料夾屬於單一班別）。
-                      </div>
-                    )}
-                  </div>
-                </div>
-
-                <div>
-                  <h3 className="text-xl font-bold text-brand-brown mb-2">目標分組</h3>
-                  {availableGroups.length > 0 ? (
-                    <div className="space-y-2">
-                      {availableGroups.map((group) => (
-                        <label
-                          key={group}
-                          className={`flex items-center gap-3 p-3 rounded-xl border-2 cursor-pointer ${
-                            contestForm.targetGroups.includes(group)
-                              ? 'bg-[#E0D2F8] border-brand-brown'
-                              : 'bg-white border-gray-200 hover:border-brand-brown'
-                          }`}
-                        >
-                          <input
-                            type="checkbox"
-                            checked={contestForm.targetGroups.includes(group)}
-                            onChange={(e) => {
-                              if (e.target.checked) {
-                                setContestForm(prev => ({
-                                  ...prev,
-                                  targetGroups: [...prev.targetGroups, group]
-                                }));
-                              } else {
-                                setContestForm(prev => ({
-                                  ...prev,
-                                  targetGroups: prev.targetGroups.filter(g => g !== group)
-                                }));
-                              }
-                            }}
-                            className="w-4 h-4"
-                          />
-                          <span className="font-bold text-gray-700">{group}</span>
-                        </label>
-                      ))}
-                    </div>
-                  ) : (
-                    <div className="text-center py-6 text-gray-500 border-2 border-dashed border-gray-300 rounded-xl">
-                      該科目暫無分組
-                    </div>
-                  )}
-                </div>
               </div>
 
               {/* 按鈕區 */}
               <div className="flex gap-4 pt-6 mt-6 border-t-4 border-gray-200">
-                <button
-                  onClick={() => setShowContestModal(false)}
-                  className="flex-1 py-3 rounded-2xl border-4 border-gray-300 text-gray-600 font-bold hover:bg-gray-100"
-                >
-                  取消
-                </button>
-                <button
-                  onClick={handleSubmitContest}
-                  className="flex-1 py-3 rounded-2xl border-4 border-brand-brown bg-[#FFF2DC] text-brand-brown font-bold hover:bg-[#FCEBCD] shadow-comic active:translate-y-1 active:shadow-none"
-                >
-                  創建比賽
-                </button>
-              </div>
+                  <button
+                    onClick={async () => {
+                      const isOwner = String(contestDraftMeta?.ownerTeacherId || user?.id || '') === String(user?.id || '');
+                      const canDelete = !!contestDraftId && isOwner && !contestDraftReadOnly;
+                      if (canDelete) {
+                        const ok = window.confirm('取消＝刪除草稿。確定要刪除嗎？');
+                        if (!ok) return;
+                        try {
+                          await authService.deleteDraft(contestDraftId);
+                          alert('草稿已刪除');
+                        } catch (e: any) {
+                          alert(e?.message || '刪除失敗');
+                          return;
+                        }
+                      }
+                      setShowContestModal(false);
+                      resetContestEditor();
+                    }}
+                    className="flex-1 py-3 rounded-2xl border-4 border-gray-300 text-gray-600 font-bold hover:bg-gray-100"
+                  >
+                    取消
+                  </button>
+                  <button
+                    onClick={() => {
+                      const title = String(contestForm.title || '').trim();
+                      if (!title) return alert('請輸入標題');
+                      if (contestDraftReadOnly) return;
+                      setContestWizardMode('save');
+                      setContestWizardOpen(true);
+                    }}
+                    disabled={contestDraftReadOnly}
+                    className="flex-1 py-3 rounded-2xl border-4 border-brand-brown bg-white text-brand-brown font-bold hover:bg-gray-50 shadow-comic active:translate-y-1 active:shadow-none disabled:opacity-60"
+                  >
+                    儲存
+                  </button>
+                  <button
+                    onClick={() => {
+                      const title = String(contestForm.title || '').trim();
+                      if (!title) return alert('請輸入標題');
+                      setContestWizardMode('publish');
+                      setContestWizardOpen(true);
+                    }}
+                    className="flex-1 py-3 rounded-2xl border-4 border-brand-brown bg-[#FFF2DC] text-brand-brown font-bold hover:bg-[#FCEBCD] shadow-comic active:translate-y-1 active:shadow-none"
+                  >
+                    儲存及派發
+                  </button>
+                </div>
             </div>
           </div>
         </div>

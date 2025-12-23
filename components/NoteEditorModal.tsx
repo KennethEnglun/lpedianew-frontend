@@ -33,19 +33,35 @@ import { PDFDocument } from 'pdf-lib';
 import { get as idbGet, set as idbSet } from 'idb-keyval';
 import * as fabric from 'fabric';
 import { compressImageToMaxBytes } from '../services/imageCompression';
+import { VISIBLE_SUBJECTS } from '../platform';
 
-type Mode = 'student' | 'template' | 'teacher';
+type Mode = 'student' | 'template' | 'teacher' | 'draft';
+
+export type NoteEditorHandle = {
+  getSnapshot: () => any;
+};
 
 type Props = {
   open: boolean;
   onClose: () => void;
   authService: any;
   mode: Mode;
-  noteId: string;
+  noteId?: string;
   viewerId: string;
   viewerRole: 'student' | 'teacher' | 'admin';
   studentId?: string; // teacher view
   onPublished?: () => void;
+  // draft mode
+  draftId?: string;
+  draftReadOnly?: boolean;
+  draftTitle?: string;
+  draftSubject?: string;
+  draftSnapshot?: any;
+  onDraftTitleChange?: (next: string) => void;
+  onDraftSubjectChange?: (next: string) => void;
+  onDraftCancel?: () => void;
+  onDraftSave?: () => void;
+  onDraftSaveAndPublish?: () => void;
 };
 
 const A4_PORTRAIT_W = 595;
@@ -436,7 +452,31 @@ const insertMindmap = (
   canvas.requestRenderAll();
 };
 
-const NoteEditorModal: React.FC<Props> = ({ open, onClose, authService, mode, noteId, viewerId, viewerRole, studentId, onPublished }) => {
+const NoteEditorModal = React.forwardRef<NoteEditorHandle, Props>(
+  (
+    {
+      open,
+      onClose,
+      authService,
+      mode,
+      noteId,
+      viewerId,
+      viewerRole,
+      studentId,
+      onPublished,
+      draftId,
+      draftReadOnly,
+      draftTitle,
+      draftSubject,
+      draftSnapshot,
+      onDraftTitleChange,
+      onDraftSubjectChange,
+      onDraftCancel,
+      onDraftSave,
+      onDraftSaveAndPublish
+    },
+    ref
+  ) => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [noteTitle, setNoteTitle] = useState('筆記');
@@ -457,6 +497,10 @@ const NoteEditorModal: React.FC<Props> = ({ open, onClose, authService, mode, no
   const [activeTextColor, setActiveTextColor] = useState('#111827');
   const [docLoadedToken, setDocLoadedToken] = useState(0);
   const [selectionVersion, setSelectionVersion] = useState(0);
+
+  const effectiveNoteId = mode === 'draft' ? `draft:${String(draftId || 'new')}` : String(noteId || '').trim();
+  const isDraft = mode === 'draft';
+  const isDraftReadOnly = !!draftReadOnly;
 
   const containerRef = useRef<HTMLDivElement | null>(null);
   const canvasElRef = useRef<HTMLCanvasElement | null>(null);
@@ -484,8 +528,10 @@ const NoteEditorModal: React.FC<Props> = ({ open, onClose, authService, mode, no
     canTemplateEdit: false
   });
 
-  const canTemplateEdit = mode === 'template' && canEdit;
-  const canAddPage = (mode === 'template' && canEdit) || (mode === 'student' && canEdit && !submittedAt);
+  const canTemplateEdit = (mode === 'template' || mode === 'draft') && canEdit;
+  const canAddPage =
+    ((mode === 'template' || mode === 'draft') && canEdit) ||
+    (mode === 'student' && canEdit && !submittedAt);
   const canSubmit = mode === 'student' && canEdit && !submittedAt;
   const canAnnotate = mode === 'teacher' && (viewerRole === 'teacher' || viewerRole === 'admin');
 
@@ -588,22 +634,31 @@ const NoteEditorModal: React.FC<Props> = ({ open, onClose, authService, mode, no
     docRef.current.currentPage = clamp(docRef.current.currentPage ?? 0, 0, docRef.current.pages.length - 1);
   };
 
+  React.useImperativeHandle(ref, () => ({
+    getSnapshot: () => {
+      saveCanvasToDoc();
+      return { ...docRef.current, currentPage: docRef.current.currentPage };
+    }
+  }));
+
   const scheduleStudentSave = async () => {
     const canvas = fabricRef.current;
     if (!canvas) return;
     if (suppressSaveRef.current) return;
     if (mode !== 'student') return;
+    const nid = String(noteId || '').trim();
+    if (!nid) return;
 
     if (saveTimerRef.current) window.clearTimeout(saveTimerRef.current);
     saveTimerRef.current = window.setTimeout(async () => {
       try {
         saveCanvasToDoc();
         const doc = { ...docRef.current, currentPage: docRef.current.currentPage };
-        await idbSet(buildLocalKey(noteId, viewerId), { savedAt: new Date().toISOString(), snapshot: doc });
+        await idbSet(buildLocalKey(nid, viewerId), { savedAt: new Date().toISOString(), snapshot: doc });
 
         if (!navigator.onLine) return;
         if (submittedAt) return;
-        await authService.saveMyNoteDraft(noteId, doc);
+        await authService.saveMyNoteDraft(nid, doc);
       } catch {
         // keep silent (offline / network)
       }
@@ -616,16 +671,41 @@ const NoteEditorModal: React.FC<Props> = ({ open, onClose, authService, mode, no
     if (suppressSaveRef.current) return;
     if (mode !== 'template') return;
     if (!canTemplateEdit) return;
+    const nid = String(noteId || '').trim();
+    if (!nid) return;
 
     if (templateSaveTimerRef.current) window.clearTimeout(templateSaveTimerRef.current);
     templateSaveTimerRef.current = window.setTimeout(async () => {
       try {
         saveCanvasToDoc();
         const doc = { ...docRef.current, currentPage: docRef.current.currentPage };
-        await idbSet(buildLocalKey(noteId, viewerId), { savedAt: new Date().toISOString(), snapshot: doc });
+        await idbSet(buildLocalKey(nid, viewerId), { savedAt: new Date().toISOString(), snapshot: doc });
 
         if (!navigator.onLine) return;
-        await authService.updateNoteTemplate(noteId, doc);
+        await authService.updateNoteTemplate(nid, doc);
+      } catch {
+        // keep silent (offline / network)
+      }
+    }, 1200);
+  };
+
+  const scheduleDraftSave = async () => {
+    const canvas = fabricRef.current;
+    if (!canvas) return;
+    if (suppressSaveRef.current) return;
+    if (mode !== 'draft') return;
+    if (!canTemplateEdit) return;
+    if (!draftId) return;
+    if (isDraftReadOnly) return;
+
+    if (templateSaveTimerRef.current) window.clearTimeout(templateSaveTimerRef.current);
+    templateSaveTimerRef.current = window.setTimeout(async () => {
+      try {
+        saveCanvasToDoc();
+        const doc = { ...docRef.current, currentPage: docRef.current.currentPage };
+        await idbSet(buildLocalKey(effectiveNoteId, viewerId), { savedAt: new Date().toISOString(), snapshot: doc });
+        if (!navigator.onLine) return;
+        await authService.updateDraftContent(String(draftId), { note: { templateSnapshot: doc } });
       } catch {
         // keep silent (offline / network)
       }
@@ -635,6 +715,7 @@ const NoteEditorModal: React.FC<Props> = ({ open, onClose, authService, mode, no
   const scheduleAutoSave = async () => {
     if (mode === 'student') return scheduleStudentSave();
     if (mode === 'template') return scheduleTemplateSave();
+    if (mode === 'draft') return scheduleDraftSave();
     return;
   };
 
@@ -791,7 +872,7 @@ const NoteEditorModal: React.FC<Props> = ({ open, onClose, authService, mode, no
   };
 
   const canChangePageOrientation =
-    (mode === 'template' && canTemplateEdit) || (mode === 'student' && canEdit && !submittedAt);
+    ((mode === 'template' || mode === 'draft') && canTemplateEdit) || (mode === 'student' && canEdit && !submittedAt);
 
   const fitView = () => {
     const canvas = fabricRef.current;
@@ -938,7 +1019,7 @@ const NoteEditorModal: React.FC<Props> = ({ open, onClose, authService, mode, no
     const locked = Boolean((obj as any).lpediaLocked);
     const layer = String((obj as any).lpediaLayer || 'base');
     if (mode === 'student' && (locked || submittedAt)) return;
-    if (mode === 'template' && !canTemplateEdit) return;
+    if ((mode === 'template' || mode === 'draft') && !canTemplateEdit) return;
     if (mode === 'teacher' && (!annotationMode || layer !== 'annotation')) return;
     bringToFrontCompat(canvas, obj);
     canvas.requestRenderAll();
@@ -954,7 +1035,7 @@ const NoteEditorModal: React.FC<Props> = ({ open, onClose, authService, mode, no
     const locked = Boolean((obj as any).lpediaLocked);
     const layer = String((obj as any).lpediaLayer || 'base');
     if (mode === 'student' && (locked || submittedAt)) return;
-    if (mode === 'template' && !canTemplateEdit) return;
+    if ((mode === 'template' || mode === 'draft') && !canTemplateEdit) return;
     if (mode === 'teacher' && (!annotationMode || layer !== 'annotation')) return;
     sendToBackAbovePaper(canvas, obj);
     canvas.requestRenderAll();
@@ -970,7 +1051,7 @@ const NoteEditorModal: React.FC<Props> = ({ open, onClose, authService, mode, no
     const locked = Boolean((obj as any).lpediaLocked);
     const layer = String((obj as any).lpediaLayer || 'base');
     if (mode === 'student' && (locked || submittedAt)) return;
-    if (mode === 'template' && !canTemplateEdit) return;
+    if ((mode === 'template' || mode === 'draft') && !canTemplateEdit) return;
     if (mode === 'teacher' && (!annotationMode || layer !== 'annotation')) return;
     (canvas as any).bringObjectForward?.(obj);
     canvas.requestRenderAll();
@@ -986,7 +1067,7 @@ const NoteEditorModal: React.FC<Props> = ({ open, onClose, authService, mode, no
     const locked = Boolean((obj as any).lpediaLocked);
     const layer = String((obj as any).lpediaLayer || 'base');
     if (mode === 'student' && (locked || submittedAt)) return;
-    if (mode === 'template' && !canTemplateEdit) return;
+    if ((mode === 'template' || mode === 'draft') && !canTemplateEdit) return;
     if (mode === 'teacher' && (!annotationMode || layer !== 'annotation')) return;
     (canvas as any).sendObjectBackwards?.(obj);
     canvas.requestRenderAll();
@@ -1048,39 +1129,7 @@ const NoteEditorModal: React.FC<Props> = ({ open, onClose, authService, mode, no
 
       // Stop blocking UI as soon as the image is inserted
       setLoading(false);
-
-      // Background upload (best-effort), then replace src to remote url (smaller JSON, avoids huge base64 in snapshot)
-      if (navigator.onLine) {
-        // Abort any previous pending upload/load
-        if (pendingImgAbortRef.current) pendingImgAbortRef.current.abort();
-        const ac = new AbortController();
-        pendingImgAbortRef.current = ac;
-
-        void (async () => {
-          try {
-            const upload = authService.uploadNoteAsset(noteId, compressed) as Promise<any>;
-            const resp = await withTimeout(upload, 20000, '圖片上傳超時，已改用本機圖片', () => ac.abort());
-            const remoteUrl = String(resp?.asset?.url || '').trim();
-            if (!remoteUrl) return;
-            const crossOrigin = 'anonymous';
-            await withTimeout(
-              (localImg as any).setSrc(remoteUrl, { crossOrigin, signal: ac.signal }),
-              15000,
-              '圖片載入超時，已保留本機圖片',
-              () => ac.abort()
-            );
-            (localImg as any).crossOrigin = crossOrigin;
-            canvas.requestRenderAll();
-            await scheduleAutoSave();
-          } catch {
-            // Keep local image; do not block
-          } finally {
-            if (pendingImgAbortRef.current === ac) pendingImgAbortRef.current = null;
-          }
-        })();
-      } else {
-        await scheduleAutoSave();
-      }
+      await scheduleAutoSave();
     } catch (e: any) {
       setError(e?.message || '插入圖片失敗');
     } finally {
@@ -1092,13 +1141,15 @@ const NoteEditorModal: React.FC<Props> = ({ open, onClose, authService, mode, no
     setLoading(true);
     setError('');
     try {
+      const nid = String(noteId || '').trim();
+      if (!nid) throw new Error('缺少 noteId');
       let server: any = null;
       try {
-        server = await authService.getMyNote(noteId);
+        server = await authService.getMyNote(nid);
       } catch {
         server = null;
       }
-      const local = (await idbGet(buildLocalKey(noteId, viewerId)).catch(() => null)) as any;
+      const local = (await idbGet(buildLocalKey(nid, viewerId)).catch(() => null)) as any;
       const serverSnap = server?.submission?.snapshot;
       const localSnap = local?.snapshot;
       const localSavedAt = Date.parse(String(local?.savedAt || ''));
@@ -1132,6 +1183,8 @@ const NoteEditorModal: React.FC<Props> = ({ open, onClose, authService, mode, no
       setPageIndex(docRef.current.currentPage);
       setPageCount(docRef.current.pages.length);
       setDocLoadedToken(Date.now());
+    } catch (e: any) {
+      setError(e?.message || '載入失敗');
     } finally {
       setLoading(false);
     }
@@ -1141,7 +1194,9 @@ const NoteEditorModal: React.FC<Props> = ({ open, onClose, authService, mode, no
     setLoading(true);
     setError('');
     try {
-      const resp = await authService.getNoteDetail(noteId);
+      const nid = String(noteId || '').trim();
+      if (!nid) throw new Error('缺少 noteId');
+      const resp = await authService.getNoteDetail(nid);
       const note = resp?.note;
       setNoteTitle(String(note?.title || '筆記模板'));
       setSubmittedAt(null);
@@ -1171,9 +1226,11 @@ const NoteEditorModal: React.FC<Props> = ({ open, onClose, authService, mode, no
     setLoading(true);
     setError('');
     try {
+      const nid = String(noteId || '').trim();
+      if (!nid) throw new Error('缺少 noteId');
       const sid = String(studentId || '').trim();
       if (!sid) throw new Error('缺少 studentId');
-      const resp = await authService.getNoteSubmissionDetail(noteId, sid);
+      const resp = await authService.getNoteSubmissionDetail(nid, sid);
       const submission = resp?.submission;
       const snap = submission?.snapshot;
       if (looksLikeLegacyTldrawSnapshot(snap)) {
@@ -1210,6 +1267,38 @@ const NoteEditorModal: React.FC<Props> = ({ open, onClose, authService, mode, no
     }
   };
 
+  const loadForDraft = async () => {
+    setLoading(true);
+    setError('');
+    try {
+      setSubmittedAt(null);
+      setAnnotationMode(false);
+      setAnnotationsVisible(true);
+      setCanEdit(!isDraftReadOnly);
+
+      const local = (await idbGet(buildLocalKey(effectiveNoteId, viewerId)).catch(() => null)) as any;
+      const localSnap = local?.snapshot;
+      const chosen = draftSnapshot || localSnap;
+
+      if (looksLikeLegacyTldrawSnapshot(chosen)) {
+        docRef.current = emptyDoc();
+        setError('此筆記草稿為舊版格式（tldraw），已改用新方案（Fabric）。');
+      } else {
+        docRef.current = normalizeDoc(chosen);
+      }
+
+      setNoteTitle(String(draftTitle || '筆記'));
+      setPageOrientation(docRef.current?.page?.orientation === 'landscape' ? 'landscape' : 'portrait');
+      setPenColor('#111827');
+      setPenWidth(2);
+      setPageIndex(docRef.current.currentPage);
+      setPageCount(docRef.current.pages.length);
+      setDocLoadedToken(Date.now());
+    } finally {
+      setLoading(false);
+    }
+  };
+
   useEffect(() => {
     if (!open) return;
     setError('');
@@ -1229,9 +1318,17 @@ const NoteEditorModal: React.FC<Props> = ({ open, onClose, authService, mode, no
     }
     if (mode === 'student') void loadForStudent();
     else if (mode === 'template') void loadForTemplate();
+    else if (mode === 'draft') void loadForDraft();
     else void loadForTeacher();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, mode, noteId]);
+  }, [open, mode, noteId, draftId, draftSnapshot]);
+
+  useEffect(() => {
+    if (!open) return;
+    if (mode !== 'draft') return;
+    setCanEdit(!isDraftReadOnly);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, mode, isDraftReadOnly]);
 
   useEffect(() => {
     if (!open) return;
@@ -1319,7 +1416,7 @@ const NoteEditorModal: React.FC<Props> = ({ open, onClose, authService, mode, no
       if (!st.canEdit) return false;
       if (st.mode === 'student' && st.submittedAt) return false;
       if (st.mode === 'teacher' && !st.annotationMode) return false;
-      if (st.mode === 'template' && !st.canTemplateEdit) return false;
+      if ((st.mode === 'template' || st.mode === 'draft') && !st.canTemplateEdit) return false;
       return true;
     };
 
@@ -1476,7 +1573,7 @@ const NoteEditorModal: React.FC<Props> = ({ open, onClose, authService, mode, no
       canEdit &&
       !(mode === 'student' && !!submittedAt) &&
       !(mode === 'teacher' && !annotationMode) &&
-      !(mode === 'template' && !canTemplateEdit);
+      !((mode === 'template' || mode === 'draft') && !canTemplateEdit);
 
     if (allowEdit && tool === 'pen') {
       canvas.isDrawingMode = true;
@@ -1546,7 +1643,7 @@ const NoteEditorModal: React.FC<Props> = ({ open, onClose, authService, mode, no
     canEdit &&
     !(mode === 'student' && !!submittedAt) &&
     !(mode === 'teacher' && !annotationMode) &&
-    !(mode === 'template' && !canTemplateEdit);
+    !((mode === 'template' || mode === 'draft') && !canTemplateEdit);
 
   const layerItems = useMemo(() => {
     if (!open) return [];
@@ -1585,9 +1682,15 @@ const NoteEditorModal: React.FC<Props> = ({ open, onClose, authService, mode, no
           : '離線模式（只保存到本機）'
       : mode === 'teacher'
         ? '查看 / 批改'
-        : navigator.onLine
-          ? '模板編輯（自動保存中）'
-          : '模板編輯（離線：只保存到本機）';
+        : mode === 'draft'
+          ? draftId
+            ? navigator.onLine
+              ? '草稿（自動保存中）'
+              : '草稿（離線：只保存到本機）'
+            : '草稿（未儲存）'
+          : navigator.onLine
+            ? '模板編輯（自動保存中）'
+            : '模板編輯（離線：只保存到本機）';
 
   const showLegacyConvert = mode === 'template' && error.includes('舊版格式');
 
@@ -1596,8 +1699,35 @@ const NoteEditorModal: React.FC<Props> = ({ open, onClose, authService, mode, no
       <div className={`bg-white border-4 border-brand-brown w-full overflow-hidden shadow-comic flex flex-col ${fullscreen ? 'max-w-none h-full rounded-none' : 'max-w-6xl h-[90vh] rounded-3xl'}`}>
         <div className="p-4 border-b-4 border-brand-brown bg-[#C0E2BE] flex items-center justify-between gap-3">
           <div className="min-w-0">
-            <div className="text-xl font-black text-brand-brown truncate">{noteTitle}</div>
-            <div className="text-xs font-bold text-brand-brown/80">{statusText}</div>
+            {mode === 'draft' ? (
+              <div className="space-y-2">
+                <input
+                  className="w-full max-w-[360px] px-3 py-2 rounded-2xl border-2 border-brand-brown bg-white font-black text-brand-brown"
+                  value={String(draftTitle ?? noteTitle)}
+                  onChange={(e) => onDraftTitleChange?.(e.target.value)}
+                  placeholder="輸入標題..."
+                  disabled={isDraftReadOnly}
+                />
+                <div className="flex items-center gap-2 flex-wrap">
+                  <select
+                    className="px-3 py-2 rounded-2xl border-2 border-brand-brown bg-white font-black text-brand-brown"
+                    value={String(draftSubject || VISIBLE_SUBJECTS[0] || '科學')}
+                    onChange={(e) => onDraftSubjectChange?.(e.target.value)}
+                    disabled={isDraftReadOnly}
+                  >
+                    {VISIBLE_SUBJECTS.map((s) => (
+                      <option key={s} value={s}>{s}</option>
+                    ))}
+                  </select>
+                  <div className="text-xs font-bold text-brand-brown/80">{statusText}</div>
+                </div>
+              </div>
+            ) : (
+              <>
+                <div className="text-xl font-black text-brand-brown truncate">{noteTitle}</div>
+                <div className="text-xs font-bold text-brand-brown/80">{statusText}</div>
+              </>
+            )}
           </div>
 
           <div className="flex items-center gap-2 flex-wrap justify-end">
@@ -1896,7 +2026,7 @@ const NoteEditorModal: React.FC<Props> = ({ open, onClose, authService, mode, no
               </button>
             )}
 
-            {mode === 'template' && (
+            {(mode === 'template' || mode === 'draft') && (
               <button
                 type="button"
                 onClick={toggleLockSelected}
@@ -1925,11 +2055,13 @@ const NoteEditorModal: React.FC<Props> = ({ open, onClose, authService, mode, no
               <button
                 type="button"
                 onClick={async () => {
+                  const nid = String(noteId || '').trim();
+                  if (!nid) return;
                   setLoading(true);
                   setError('');
                   try {
                     saveCanvasToDoc();
-                    await authService.updateNoteTemplate(noteId, docRef.current);
+                    await authService.updateNoteTemplate(nid, docRef.current);
                     alert('已保存模板');
                   } catch (e: any) {
                     setError(e?.message || '保存失敗');
@@ -1950,12 +2082,14 @@ const NoteEditorModal: React.FC<Props> = ({ open, onClose, authService, mode, no
                 type="button"
                 onClick={async () => {
                   if (!window.confirm('確定要派發？派發後模板會固定，學生各自一份。')) return;
+                  const nid = String(noteId || '').trim();
+                  if (!nid) return;
                   setLoading(true);
                   setError('');
                   try {
                     saveCanvasToDoc();
-                    await authService.updateNoteTemplate(noteId, docRef.current);
-                    await authService.publishNote(noteId);
+                    await authService.updateNoteTemplate(nid, docRef.current);
+                    await authService.publishNote(nid);
                     alert('派發成功！');
                     onPublished?.();
                     onClose();
@@ -2001,6 +2135,8 @@ const NoteEditorModal: React.FC<Props> = ({ open, onClose, authService, mode, no
                   type="button"
                   onClick={async () => {
                     if (!canAnnotate) return;
+                    const nid = String(noteId || '').trim();
+                    if (!nid) return;
                     const sid = String(studentId || '').trim();
                     if (!sid) return;
                     setLoading(true);
@@ -2017,7 +2153,7 @@ const NoteEditorModal: React.FC<Props> = ({ open, onClose, authService, mode, no
 	                      };
 	                    }
 	                    saveCanvasAnnotationsToRef();
-	                    await authService.saveNoteAnnotations(noteId, sid, annotationDocRef.current);
+	                    await authService.saveNoteAnnotations(nid, sid, annotationDocRef.current);
 	                    alert('已保存批改');
 	                    setAnnotationMode(false);
 	                  } catch (e: any) {
@@ -2041,12 +2177,14 @@ const NoteEditorModal: React.FC<Props> = ({ open, onClose, authService, mode, no
                 onClick={async () => {
                   if (submittedAt) return;
                   if (!window.confirm('確定要交回？交回後不能再修改。')) return;
+                  const nid = String(noteId || '').trim();
+                  if (!nid) return;
                   setLoading(true);
                   setError('');
                   try {
                     saveCanvasToDoc();
-                    await authService.saveMyNoteDraft(noteId, docRef.current);
-                    const resp = await authService.submitMyNote(noteId);
+                    await authService.saveMyNoteDraft(nid, docRef.current);
+                    const resp = await authService.submitMyNote(nid);
                     setSubmittedAt(resp?.submission?.submittedAt || new Date().toISOString());
                     setCanEdit(false);
                     alert('已交回！');
@@ -2062,6 +2200,38 @@ const NoteEditorModal: React.FC<Props> = ({ open, onClose, authService, mode, no
                 <Send className="w-4 h-4" />
                 交回
               </button>
+            )}
+
+            {mode === 'draft' && (
+              <>
+                <button
+                  type="button"
+                  onClick={() => (onDraftCancel ? onDraftCancel() : onClose())}
+                  className="px-3 py-2 rounded-2xl border-4 border-gray-400 bg-white text-gray-700 font-black shadow-comic hover:bg-gray-50 flex items-center gap-2"
+                  disabled={loading}
+                >
+                  <Trash2 className="w-4 h-4" />
+                  取消
+                </button>
+                <button
+                  type="button"
+                  onClick={() => onDraftSave?.()}
+                  className="px-3 py-2 rounded-2xl border-4 border-brand-brown bg-white text-brand-brown font-black shadow-comic hover:bg-gray-50 flex items-center gap-2 disabled:opacity-60"
+                  disabled={loading || isDraftReadOnly}
+                >
+                  <Save className="w-4 h-4" />
+                  儲存
+                </button>
+                <button
+                  type="button"
+                  onClick={() => onDraftSaveAndPublish?.()}
+                  className="px-3 py-2 rounded-2xl border-4 border-blue-700 bg-blue-600 text-white font-black shadow-comic hover:bg-blue-700 flex items-center gap-2"
+                  disabled={loading}
+                >
+                  <Send className="w-4 h-4" />
+                  儲存及派發
+                </button>
+              </>
             )}
 
             <button
@@ -2225,6 +2395,6 @@ const NoteEditorModal: React.FC<Props> = ({ open, onClose, authService, mode, no
       </div>
     </div>
   );
-};
+});
 
 export default NoteEditorModal;
