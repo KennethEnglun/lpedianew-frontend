@@ -11,7 +11,7 @@ import ClassFolderManagerModal from '../components/ClassFolderManagerModal';
 import TemplateLibraryModal from '../components/TemplateLibraryModal';
 import CreateTaskModal from '../components/CreateTaskModal';
 import DraftLibraryModal from '../components/DraftLibraryModal';
-import DiscussionDraftEditorModal from '../components/DiscussionDraftEditorModal';
+import DraftSavePublishWizardModal from '../components/DraftSavePublishWizardModal';
 import ClassFolderSelectInline from '../components/ClassFolderSelectInline';
 import AssignmentExplorerModal from '../components/AssignmentExplorerModal';
 import NoteCreateModal from '../components/NoteCreateModal';
@@ -74,6 +74,17 @@ const TeacherDashboard: React.FC = () => {
     targetGroups: [] as string[],
     content: ''
   });
+  const [discussionDraftId, setDiscussionDraftId] = useState('');
+  const [discussionDraftMeta, setDiscussionDraftMeta] = useState<any | null>(null);
+  const [discussionDraftReadOnly, setDiscussionDraftReadOnly] = useState(false);
+  const [discussionWizardOpen, setDiscussionWizardOpen] = useState(false);
+  const [discussionWizardMode, setDiscussionWizardMode] = useState<'save' | 'publish'>('save');
+  const [pendingDiscussionHtml, setPendingDiscussionHtml] = useState<string | null>(null);
+
+  const parseGradeFromClassName = (className?: string) => {
+    const match = String(className || '').match(/^(\d+)/);
+    return match ? match[1] : '';
+  };
 
   // 小測驗相關狀態
   const [showQuizModal, setShowQuizModal] = useState(false);
@@ -103,6 +114,19 @@ const TeacherDashboard: React.FC = () => {
   const [editorRef, setEditorRef] = useState<HTMLDivElement | null>(null);
   const [currentFontSize, setCurrentFontSize] = useState('16');
   const [currentTextColor, setCurrentTextColor] = useState('#000000');
+
+  const applyDiscussionHtmlToEditor = (html: string) => {
+    setDiscussionForm((prev) => ({ ...prev, content: html }));
+    if (editorRef) editorRef.innerHTML = html;
+    else setPendingDiscussionHtml(html);
+  };
+
+  useEffect(() => {
+    if (!editorRef) return;
+    if (pendingDiscussionHtml === null) return;
+    editorRef.innerHTML = pendingDiscussionHtml;
+    setPendingDiscussionHtml(null);
+  }, [editorRef, pendingDiscussionHtml]);
 
   // 作業管理相關狀態
 	  const [showAssignmentModal, setShowAssignmentModal] = useState(false);
@@ -144,6 +168,11 @@ const TeacherDashboard: React.FC = () => {
   const [availableSubjects, setAvailableSubjects] = useState<string[]>([]);
   const [availableClasses, setAvailableClasses] = useState<string[]>([]);
   const [availableGroups, setAvailableGroups] = useState<string[]>([]);
+  const teacherGradeOptions = useMemo(() => {
+    const grades = Array.from(new Set(availableClasses.map((c) => parseGradeFromClassName(c)).filter(Boolean)));
+    grades.sort((a, b) => Number(a) - Number(b));
+    return grades;
+  }, [availableClasses]);
   const [isEditingContent, setIsEditingContent] = useState(false);
   const [editedContent, setEditedContent] = useState('');
   const [viewingResultDetails, setViewingResultDetails] = useState<any>(null); // State for viewing specific student result details
@@ -331,6 +360,7 @@ const TeacherDashboard: React.FC = () => {
 
   // 執行富文本格式化命令
   const execCommand = (command: string, value?: string) => {
+    if (discussionDraftReadOnly) return;
     document.execCommand(command, false, value);
     if (editorRef) {
       setDiscussionForm(prev => ({
@@ -369,6 +399,7 @@ const TeacherDashboard: React.FC = () => {
 
   // 處理圖片上傳
   const handleImageUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
+    if (discussionDraftReadOnly) return;
     const file = event.target.files?.[0];
     if (file) {
       const reader = new FileReader();
@@ -395,6 +426,7 @@ const TeacherDashboard: React.FC = () => {
 
   // 插入連結
   const insertLink = () => {
+    if (discussionDraftReadOnly) return;
     const linkUrl = prompt('請輸入連結URL:');
     if (linkUrl) {
       const linkText = prompt('請輸入連結文字:') || linkUrl;
@@ -526,11 +558,6 @@ const TeacherDashboard: React.FC = () => {
   };
 
   // === 作業管理功能 ===
-
-  const parseGradeFromClassName = (className?: string) => {
-    const match = String(className || '').match(/^(\d+)/);
-    return match ? match[1] : '';
-  };
 
   // 載入作業列表（包含小測驗和遊戲）
   const loadAssignments = async () => {
@@ -1522,18 +1549,64 @@ const TeacherDashboard: React.FC = () => {
 	    setShowGameModal(true);
 	  };
 
-	  // 監聽篩選條件變化
+  // 監聽篩選條件變化
 	  useEffect(() => {
 	    if (showAssignmentModal) {
 	      loadAssignments();
     }
   }, [filterSubject, filterClass, filterGroup, showAssignmentModal]);
 
+  const resetDiscussionEditor = () => {
+    setDiscussionDraftId('');
+    setDiscussionDraftMeta(null);
+    setDiscussionDraftReadOnly(false);
+    setDiscussionForm({
+      title: '',
+      subject: DEFAULT_SUBJECT,
+      targetClasses: [],
+      targetGroups: [],
+      content: ''
+    });
+    applyDiscussionHtmlToEditor('');
+  };
+
+  const loadDiscussionDraft = async (draftId: string) => {
+    const id = String(draftId || '').trim();
+    if (!id) return;
+    try {
+      const resp = await authService.getDraft(id);
+      const d = resp?.draft;
+      if (!d) throw new Error('找不到草稿');
+      setDiscussionDraftMeta(d);
+      setDiscussionDraftId(String(d.id || id));
+      const isOwner = String(d.ownerTeacherId || '') === String(user?.id || '');
+      const isShared = String(d.scope || 'my') === 'shared';
+      setDiscussionDraftReadOnly(isShared && !isOwner);
+      const html = Array.isArray(d.contentSnapshot?.content) && d.contentSnapshot.content[0]?.type === 'html' ? String(d.contentSnapshot.content[0].value || '') : '';
+      setDiscussionForm((prev) => ({
+        ...prev,
+        title: String(d.title || ''),
+        subject: String(d.subject || DEFAULT_SUBJECT) as any,
+        content: html,
+        targetClasses: [],
+        targetGroups: []
+      }));
+      applyDiscussionHtmlToEditor(html);
+    } catch (e: any) {
+      alert(e?.message || '載入草稿失敗');
+      resetDiscussionEditor();
+      setShowDiscussionModal(false);
+    }
+  };
+
   // 監聽討論串模態框開啟
   useEffect(() => {
     if (showDiscussionModal) {
-      loadClassesAndGroups(discussionForm.subject);
-      setDiscussionClassFolderId('');
+      if (discussionDraftId) {
+        void loadDiscussionDraft(discussionDraftId);
+      } else {
+        resetDiscussionEditor();
+      }
     }
   }, [showDiscussionModal]);
 
@@ -5209,7 +5282,10 @@ const TeacherDashboard: React.FC = () => {
                 <div className="flex justify-between items-center">
                   <h2 className="text-3xl font-black text-brand-brown">創建討論串</h2>
                   <button
-                    onClick={() => setShowDiscussionModal(false)}
+                    onClick={() => {
+                      setShowDiscussionModal(false);
+                      resetDiscussionEditor();
+                    }}
                     className="w-10 h-10 rounded-full bg-white border-2 border-brand-brown hover:bg-gray-100 flex items-center justify-center"
                   >
                     <X className="w-6 h-6 text-brand-brown" />
@@ -5219,12 +5295,19 @@ const TeacherDashboard: React.FC = () => {
 
               <div className="p-6 space-y-6">
                 {/* Basic Info */}
+                {discussionDraftReadOnly && (
+                  <div className="p-4 bg-blue-50 border-2 border-blue-200 rounded-2xl text-sm text-gray-700 font-bold">
+                    共用草稿（唯讀）：你可以直接「儲存及派發」，但不可修改內容。如需修改請先在教師資料夾按「複製到我的」。
+                  </div>
+                )}
+
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <Input
                     label="討論串標題"
                     placeholder="輸入討論串標題..."
                     value={discussionForm.title}
                     onChange={(e) => setDiscussionForm(prev => ({ ...prev, title: e.target.value }))}
+                    disabled={discussionDraftReadOnly}
                   />
                   <div>
                     <label className="block text-sm font-bold text-brand-brown mb-2">選擇科目</label>
@@ -5233,10 +5316,9 @@ const TeacherDashboard: React.FC = () => {
                       value={discussionForm.subject}
                       onChange={(e) => {
                         const newSubject = e.target.value as Subject;
-                        setDiscussionForm(prev => ({ ...prev, subject: newSubject, targetClasses: [], targetGroups: [] }));
-                        setDiscussionClassFolderId('');
-                        loadClassesAndGroups(newSubject);
+                        setDiscussionForm(prev => ({ ...prev, subject: newSubject }));
                       }}
+                      disabled={discussionDraftReadOnly}
                     >
                       {VISIBLE_SUBJECTS.map(subject => (
                         <option key={subject} value={subject}>{subject}</option>
@@ -5245,86 +5327,12 @@ const TeacherDashboard: React.FC = () => {
                   </div>
                 </div>
 
-                {/* Target Classes */}
-                <div>
-                  <label className="block text-sm font-bold text-brand-brown mb-2">派發至班級</label>
-                  <div className="flex flex-wrap gap-2">
-                    {availableClasses.map(className => (
-                      <button
-                        key={className}
-                        type="button"
-                        onClick={() => {
-                          setDiscussionForm(prev => ({
-                            ...prev,
-                            targetClasses: prev.targetClasses.includes(className)
-                              ? prev.targetClasses.filter(c => c !== className)
-                              : [...prev.targetClasses, className]
-                          }));
-                        }}
-                        className={`px-4 py-2 rounded-2xl border-2 font-bold transition-colors ${discussionForm.targetClasses.includes(className)
-                          ? 'bg-[#F8C5C5] border-brand-brown text-brand-brown'
-                          : 'bg-white border-gray-300 text-gray-600 hover:border-brand-brown'
-                          }`}
-                      >
-                        {className}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                {discussionForm.targetClasses.length === 1 ? (
-                  <ClassFolderSelectInline
-                    authService={authService}
-                    className={discussionForm.targetClasses[0]}
-                    value={discussionClassFolderId}
-                    onChange={setDiscussionClassFolderId}
-                  />
-                ) : (
-                  <div className="p-4 bg-gray-50 border-2 border-gray-200 rounded-2xl text-sm text-gray-700 font-bold">
-                    請先只選擇 1 個班級，才可選擇資料夾（資料夾屬於單一班別）。
-                  </div>
-                )}
-
-                {/* Target Groups (show if groups are available for the subject) */}
-                {availableGroups.length > 0 && (
-                  <div>
-                    <label className="block text-sm font-bold text-brand-brown mb-2">
-                      選擇分組 ({discussionForm.subject})
-                    </label>
-                    <div className="flex flex-wrap gap-2">
-                      {availableGroups.map(groupName => (
-                        <button
-                          key={groupName}
-                          type="button"
-                          onClick={() => {
-                            setDiscussionForm(prev => ({
-                              ...prev,
-                              targetGroups: prev.targetGroups.includes(groupName)
-                                ? prev.targetGroups.filter(g => g !== groupName)
-                                : [...prev.targetGroups, groupName]
-                            }));
-                          }}
-                          className={`px-4 py-2 rounded-2xl border-2 font-bold transition-colors ${discussionForm.targetGroups.includes(groupName)
-                            ? 'bg-[#E8F4FD] border-blue-500 text-blue-600'
-                            : 'bg-white border-gray-300 text-gray-600 hover:border-blue-500'
-                            }`}
-                        >
-                          {groupName}
-                        </button>
-                      ))}
-                    </div>
-                    <p className="text-xs text-gray-500 mt-1">
-                      選擇分組會精確派發給該分組的學生
-                    </p>
-                  </div>
-                )}
-
                 {/* Rich Text Editor */}
                 <div>
                   <label className="block text-sm font-bold text-brand-brown mb-2">討論串內容</label>
 
                   {/* Editor Toolbar */}
-                  <div className="border-2 border-gray-300 rounded-t-xl p-3 bg-gray-50 flex flex-wrap gap-2 items-center">
+                  <div className={`border-2 border-gray-300 rounded-t-xl p-3 bg-gray-50 flex flex-wrap gap-2 items-center ${discussionDraftReadOnly ? 'opacity-60 pointer-events-none' : ''}`}>
                     {/* 格式化按鈕 */}
                     <button
                       type="button"
@@ -5412,10 +5420,12 @@ const TeacherDashboard: React.FC = () => {
                   {/* Rich Text Editor */}
                   <div
                     ref={setEditorRef}
-                    contentEditable
+                    contentEditable={!discussionDraftReadOnly}
+                    suppressContentEditableWarning
                     className="w-full min-h-[300px] px-4 py-3 border-2 border-t-0 border-gray-300 rounded-b-xl bg-white font-sans text-sm leading-relaxed focus:outline-none"
                     style={{ fontSize: currentFontSize + 'px', color: currentTextColor }}
                     onPaste={(e) => {
+                      if (discussionDraftReadOnly) return;
                       const plain = e.clipboardData?.getData('text/plain') || '';
                       const html = e.clipboardData?.getData('text/html') || '';
                       const candidate = plain || html;
@@ -5438,13 +5448,14 @@ const TeacherDashboard: React.FC = () => {
                       }
                     }}
                     onInput={(e) => {
+                      if (discussionDraftReadOnly) return;
                       const target = e.target as HTMLDivElement;
                       setDiscussionForm(prev => ({
                         ...prev,
                         content: target.innerHTML
                       }));
                     }}
-                    placeholder="開始輸入您的討論串內容...&#10;&#10;💡 使用方式：&#10;• 直接打字輸入內容&#10;• 選擇文字後點擊工具列按鈕進行格式化&#10;• 使用 B (粗體)、I (斜體)、U (底線) 快速格式化&#10;• 上傳圖片或插入連結來豐富內容"
+                    placeholder="開始輸入內容..."
                   />
                 </div>
 
@@ -5452,15 +5463,51 @@ const TeacherDashboard: React.FC = () => {
                 <div className="flex gap-4 pt-4 border-t-2 border-gray-200">
                   <Button
                     className="flex-1 bg-gray-300 text-gray-700 hover:bg-gray-400"
-                    onClick={() => setShowDiscussionModal(false)}
+                    onClick={async () => {
+                      const isOwner = String(discussionDraftMeta?.ownerTeacherId || user?.id || '') === String(user?.id || '');
+                      const canDelete = !!discussionDraftId && isOwner && !discussionDraftReadOnly;
+                      if (canDelete) {
+                        const ok = window.confirm('取消＝刪除草稿。確定要刪除嗎？');
+                        if (!ok) return;
+                        try {
+                          await authService.deleteDraft(discussionDraftId);
+                          alert('草稿已刪除');
+                        } catch (e: any) {
+                          alert(e?.message || '刪除失敗');
+                          return;
+                        }
+                      }
+                      setShowDiscussionModal(false);
+                      resetDiscussionEditor();
+                    }}
                   >
                     取消
                   </Button>
                   <Button
-                    className="flex-1 bg-[#F8C5C5] text-brand-brown hover:bg-[#F0B5B5] border-brand-brown"
-                    onClick={handleSubmitDiscussion}
+                    className="flex-1 bg-white text-brand-brown hover:bg-gray-50 border-brand-brown"
+                    onClick={() => {
+                      const title = String(discussionForm.title || '').trim();
+                      if (!title) return alert('請輸入標題');
+                      if (discussionDraftReadOnly) return;
+                      setDiscussionWizardMode('save');
+                      setDiscussionWizardOpen(true);
+                    }}
+                    disabled={discussionDraftReadOnly}
                   >
-                    派發討論串
+                    儲存
+                  </Button>
+                  <Button
+                    className="flex-1 bg-[#F8C5C5] text-brand-brown hover:bg-[#F0B5B5] border-brand-brown"
+                    onClick={() => {
+                      const title = String(discussionForm.title || '').trim();
+                      if (!title) return alert('請輸入標題');
+                      const safe = sanitizeHtml(discussionForm.content || '');
+                      if (!safe.trim()) return alert('請輸入討論串內容');
+                      setDiscussionWizardMode('publish');
+                      setDiscussionWizardOpen(true);
+                    }}
+                  >
+                    儲存及派發
                   </Button>
                 </div>
               </div>
@@ -6999,8 +7046,16 @@ const TeacherDashboard: React.FC = () => {
         userId={String(user?.id || '')}
         availableClasses={availableClasses}
         onOpenDraft={(d) => {
-          setActiveDraftToolType(String(d?.toolType || ''));
-          setActiveDraftId(String(d?.id || ''));
+          const toolType = String(d?.toolType || '');
+          const id = String(d?.id || '');
+          if (!id) return;
+          if (toolType === 'discussion') {
+            setShowDraftLibraryModal(false);
+            setDiscussionDraftId(id);
+            setShowDiscussionModal(true);
+            return;
+          }
+          alert('此草稿工具尚未支援開啟（先完成「討論」後再逐個搬）。');
         }}
       />
 
@@ -7009,7 +7064,10 @@ const TeacherDashboard: React.FC = () => {
         onClose={() => setShowCreateTaskModal(false)}
         onSelectTool={(tool) => {
           setShowCreateTaskModal(false);
-          if (tool === 'discussion') return setShowDiscussionModal(true);
+          if (tool === 'discussion') {
+            resetDiscussionEditor();
+            return setShowDiscussionModal(true);
+          }
           if (tool === 'note') return setShowNoteCreateModal(true);
           if (tool === 'quiz') return setShowQuizModal(true);
           if (tool === 'mathQuiz') return openMathQuizCreator();
@@ -7018,27 +7076,64 @@ const TeacherDashboard: React.FC = () => {
         }}
       />
 
-      {activeDraftToolType === 'discussion' && !!activeDraftId && (
-        <DiscussionDraftEditorModal
-          open={!!activeDraftId}
-          onClose={() => {
-            setActiveDraftId('');
-            setActiveDraftToolType('');
-          }}
-          authService={authService}
-          viewerId={String(user?.id || '')}
-          availableClasses={availableClasses}
-          draftId={activeDraftId}
-          availableGrades={[]}
-          onDeleted={() => {
-            setActiveDraftId('');
-            setActiveDraftToolType('');
-          }}
-          onPublished={() => {
-            // after publish, keep the editor open (draft may remain). Teacher can close manually.
-          }}
-        />
-      )}
+      <DraftSavePublishWizardModal
+        open={discussionWizardOpen}
+        mode={discussionWizardMode}
+        onClose={() => setDiscussionWizardOpen(false)}
+        authService={authService}
+        availableGrades={teacherGradeOptions}
+        availableClasses={availableClasses}
+        title={discussionForm.title}
+        allowShared={true}
+        initialLocation={{
+          scope: discussionDraftMeta?.scope === 'shared' ? 'shared' : 'my',
+          grade: String(discussionDraftMeta?.grade || teacherGradeOptions[0] || ''),
+          folderId: discussionDraftMeta?.folderId ? String(discussionDraftMeta.folderId) : null
+        }}
+        readOnlyLocation={discussionDraftReadOnly}
+        keepDraftDefault={true}
+        keepDraftLocked={discussionDraftReadOnly}
+        onSave={async (picked) => {
+          const title = String(discussionForm.title || '').trim();
+          if (!title) throw new Error('請先輸入標題');
+          if (discussionDraftReadOnly && discussionDraftId) return { draftId: discussionDraftId };
+
+          const safe = sanitizeHtml(discussionForm.content || '');
+          const contentSnapshot = { content: [{ type: 'html', value: safe }] };
+          if (!discussionDraftId) {
+            const resp = await authService.createDraft({
+              toolType: 'discussion',
+              title,
+              subject: discussionForm.subject,
+              grade: picked.grade,
+              scope: picked.scope,
+              folderId: picked.folderId,
+              contentSnapshot
+            });
+            const id = String(resp?.draft?.id || '');
+            if (!id) throw new Error('建立失敗（缺少 draftId）');
+            setDiscussionDraftId(id);
+            setDiscussionDraftMeta(resp?.draft || null);
+            setDiscussionDraftReadOnly(false);
+            return { draftId: id };
+          }
+          await authService.updateDraftMeta(discussionDraftId, {
+            title,
+            subject: discussionForm.subject,
+            grade: picked.grade,
+            scope: picked.scope,
+            folderId: picked.folderId
+          });
+          await authService.updateDraftContent(discussionDraftId, { contentSnapshot });
+          setDiscussionDraftMeta((prev) => ({ ...(prev || {}), title, subject: discussionForm.subject, grade: picked.grade, scope: picked.scope, folderId: picked.folderId }));
+          return { draftId: discussionDraftId };
+        }}
+        onPublished={() => {
+          setDiscussionWizardOpen(false);
+          setShowDiscussionModal(false);
+          resetDiscussionEditor();
+        }}
+      />
 
       <TemplateLibraryModal
         open={showTemplateLibrary}
