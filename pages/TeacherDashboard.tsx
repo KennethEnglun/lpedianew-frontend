@@ -9,6 +9,9 @@ import AiChatModal from '../components/AiChatModal';
 import AppStudioModal from '../components/AppStudioModal';
 import ClassFolderManagerModal from '../components/ClassFolderManagerModal';
 import TemplateLibraryModal from '../components/TemplateLibraryModal';
+import CreateTaskModal from '../components/CreateTaskModal';
+import DraftLibraryModal from '../components/DraftLibraryModal';
+import DiscussionDraftEditorModal from '../components/DiscussionDraftEditorModal';
 import ClassFolderSelectInline from '../components/ClassFolderSelectInline';
 import AssignmentExplorerModal from '../components/AssignmentExplorerModal';
 import NoteCreateModal from '../components/NoteCreateModal';
@@ -105,6 +108,10 @@ const TeacherDashboard: React.FC = () => {
 	  const [showAssignmentModal, setShowAssignmentModal] = useState(false);
 	  const [showClassFolderManager, setShowClassFolderManager] = useState(false);
 	  const [showTemplateLibrary, setShowTemplateLibrary] = useState(false);
+    const [showCreateTaskModal, setShowCreateTaskModal] = useState(false);
+    const [showDraftLibraryModal, setShowDraftLibraryModal] = useState(false);
+    const [activeDraftId, setActiveDraftId] = useState('');
+    const [activeDraftToolType, setActiveDraftToolType] = useState<string>('');
 	  const [showNoteCreateModal, setShowNoteCreateModal] = useState(false);
 	  const [showNoteEditorModal, setShowNoteEditorModal] = useState(false);
 	  const [noteEditorNoteId, setNoteEditorNoteId] = useState('');
@@ -2609,7 +2616,7 @@ const TeacherDashboard: React.FC = () => {
                   fullWidth
                   className="bg-[#D2EFFF] hover:bg-[#BCE0FF]"
                   onClick={() => {
-                    setShowTemplateLibrary(true);
+                    setShowDraftLibraryModal(true);
                     closeSidebar();
                   }}
                 >
@@ -2630,13 +2637,13 @@ const TeacherDashboard: React.FC = () => {
 	                  fullWidth
 	                  className="bg-[#F8C5C5] hover:bg-[#F0B5B5] flex items-center justify-center gap-2"
 	                  onClick={() => {
-	                    setShowDiscussionModal(true);
-                    closeSidebar();
-                  }}
-                >
-                  <MessageSquare className="w-5 h-5" />
-                  派發討論串
-                </Button>
+	                    setShowCreateTaskModal(true);
+                      closeSidebar();
+                    }}
+	                >
+	                  <MessageSquare className="w-5 h-5" />
+	                  建立任務
+	                </Button>
 	                <Button
 	                  fullWidth
 	                  className="bg-[#FDEEAD] hover:bg-[#FCE690] flex items-center justify-center gap-2"
@@ -6984,6 +6991,51 @@ const TeacherDashboard: React.FC = () => {
         authService={authService}
         availableClasses={availableClasses}
       />
+
+      <DraftLibraryModal
+        open={showDraftLibraryModal}
+        onClose={() => setShowDraftLibraryModal(false)}
+        authService={authService}
+        userId={String(user?.id || '')}
+        availableClasses={availableClasses}
+        onOpenDraft={(d) => {
+          setActiveDraftToolType(String(d?.toolType || ''));
+          setActiveDraftId(String(d?.id || ''));
+        }}
+      />
+
+      <CreateTaskModal
+        open={showCreateTaskModal}
+        onClose={() => setShowCreateTaskModal(false)}
+        authService={authService}
+        availableClasses={availableClasses}
+        onCreatedDraft={({ toolType, draftId }) => {
+          setActiveDraftToolType(toolType);
+          setActiveDraftId(draftId);
+        }}
+      />
+
+      {activeDraftToolType === 'discussion' && !!activeDraftId && (
+        <DiscussionDraftEditorModal
+          open={!!activeDraftId}
+          onClose={() => {
+            setActiveDraftId('');
+            setActiveDraftToolType('');
+          }}
+          authService={authService}
+          viewerId={String(user?.id || '')}
+          availableClasses={availableClasses}
+          draftId={activeDraftId}
+          availableGrades={[]}
+          onDeleted={() => {
+            setActiveDraftId('');
+            setActiveDraftToolType('');
+          }}
+          onPublished={() => {
+            // after publish, keep the editor open (draft may remain). Teacher can close manually.
+          }}
+        />
+      )}
 
       <TemplateLibraryModal
         open={showTemplateLibrary}

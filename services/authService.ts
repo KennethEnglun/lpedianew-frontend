@@ -1002,6 +1002,94 @@ class AuthService {
     return this.handleResponse(response);
   }
 
+  // === 教師草稿（d r a f t s）===
+  async listMyDrafts(params: { grade: string; folderId?: string | null }): Promise<{ drafts: any[]; total: number }> {
+    const search = new URLSearchParams();
+    search.append('grade', params.grade);
+    if (params.folderId !== undefined) search.append('folderId', params.folderId ? params.folderId : '');
+    const response = await fetch(`${this.API_BASE}/drafts/my?${search.toString()}`, {
+      headers: this.getAuthHeaders()
+    });
+    return this.handleResponse(response);
+  }
+
+  async listSharedDrafts(params: { grade: string; folderId?: string | null }): Promise<{ drafts: any[]; total: number }> {
+    const search = new URLSearchParams();
+    search.append('grade', params.grade);
+    if (params.folderId !== undefined) search.append('folderId', params.folderId ? params.folderId : '');
+    const response = await fetch(`${this.API_BASE}/drafts/shared?${search.toString()}`, {
+      headers: this.getAuthHeaders()
+    });
+    return this.handleResponse(response);
+  }
+
+  async createDraft(payload: {
+    toolType: string;
+    title: string;
+    subject: string;
+    grade: string;
+    scope?: 'my' | 'shared';
+    folderId?: string | null;
+    contentSnapshot?: any;
+  }): Promise<{ draft: any }> {
+    const response = await fetch(`${this.API_BASE}/drafts`, {
+      method: 'POST',
+      headers: this.getAuthHeaders(),
+      body: JSON.stringify(payload)
+    });
+    return this.handleResponse(response);
+  }
+
+  async getDraft(draftId: string): Promise<{ draft: any }> {
+    const response = await fetch(`${this.API_BASE}/drafts/${encodeURIComponent(draftId)}`, {
+      headers: this.getAuthHeaders()
+    });
+    return this.handleResponse(response);
+  }
+
+  async updateDraftMeta(draftId: string, patch: { title?: string; subject?: string; grade?: string; scope?: 'my' | 'shared'; folderId?: string | null }): Promise<{ draft: any }> {
+    const response = await fetch(`${this.API_BASE}/drafts/${encodeURIComponent(draftId)}`, {
+      method: 'PATCH',
+      headers: this.getAuthHeaders(),
+      body: JSON.stringify(patch)
+    });
+    return this.handleResponse(response);
+  }
+
+  async updateDraftContent(draftId: string, contentSnapshot: any): Promise<{ draft: any }> {
+    const response = await fetch(`${this.API_BASE}/drafts/${encodeURIComponent(draftId)}/content`, {
+      method: 'PUT',
+      headers: this.getAuthHeaders(),
+      body: JSON.stringify({ contentSnapshot })
+    });
+    return this.handleResponse(response);
+  }
+
+  async deleteDraft(draftId: string): Promise<{ result: any }> {
+    const response = await fetch(`${this.API_BASE}/drafts/${encodeURIComponent(draftId)}`, {
+      method: 'DELETE',
+      headers: this.getAuthHeaders()
+    });
+    return this.handleResponse(response);
+  }
+
+  async copyDraftToMy(draftId: string): Promise<{ draft: any }> {
+    const response = await fetch(`${this.API_BASE}/drafts/${encodeURIComponent(draftId)}/copy-to-my`, {
+      method: 'POST',
+      headers: this.getAuthHeaders()
+    });
+    return this.handleResponse(response);
+  }
+
+  async publishDraft(draftId: string, payload: { className: string; classFolderId: string; keepDraft?: boolean }): Promise<any> {
+    const response = await fetch(`${this.API_BASE}/drafts/${encodeURIComponent(draftId)}/publish`, {
+      method: 'POST',
+      headers: this.getAuthHeaders(),
+      body: JSON.stringify(payload)
+    });
+    return this.handleResponse(response);
+  }
+
   // === 派發筆記（notes）===
   async createDraftNote(payload: { title: string; subject: string; className: string; classFolderId: string; targetClasses?: string[]; targetGroups?: string[] }): Promise<{ note: any }> {
     const response = await fetch(`${this.API_BASE}/notes`, {
