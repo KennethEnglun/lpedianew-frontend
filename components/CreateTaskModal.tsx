@@ -1,41 +1,16 @@
-import React, { useEffect, useMemo, useState } from 'react';
-import { MessageSquare, X } from 'lucide-react';
-import { VISIBLE_SUBJECTS } from '../platform';
+import React, { useEffect } from 'react';
+import { Calculator, FileText, Gamepad2, HelpCircle, MessageSquare, Trophy, X } from 'lucide-react';
 
 type Props = {
   open: boolean;
   onClose: () => void;
-  authService: any;
-  availableClasses: string[];
-  onCreatedDraft: (payload: { toolType: string; draftId: string }) => void;
+  onSelectTool: (tool: 'discussion' | 'note' | 'quiz' | 'mathQuiz' | 'game' | 'contest') => void;
 };
 
-const parseGradeFromClassName = (className?: string) => {
-  const match = String(className || '').match(/^(\d+)/);
-  return match ? match[1] : '';
-};
-
-const CreateTaskModal: React.FC<Props> = ({ open, onClose, authService, availableClasses, onCreatedDraft }) => {
-  const [title, setTitle] = useState('');
-  const [subject, setSubject] = useState(VISIBLE_SUBJECTS[0] || '科學');
-  const [grade, setGrade] = useState('');
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
-
-  const gradeOptions = useMemo(() => {
-    const grades = Array.from(new Set(availableClasses.map((c) => parseGradeFromClassName(c)).filter(Boolean)));
-    grades.sort((a, b) => Number(a) - Number(b));
-    return grades;
-  }, [availableClasses]);
-
+const CreateTaskModal: React.FC<Props> = ({ open, onClose, onSelectTool }) => {
   useEffect(() => {
     if (!open) return;
-    setTitle('');
-    setSubject(VISIBLE_SUBJECTS[0] || '科學');
-    setGrade(gradeOptions[0] || '');
-    setLoading(false);
-    setError('');
-  }, [open, gradeOptions]);
+  }, [open]);
 
   if (!open) return null;
 
@@ -45,7 +20,7 @@ const CreateTaskModal: React.FC<Props> = ({ open, onClose, authService, availabl
         <div className="p-6 border-b-4 border-brand-brown bg-[#C0E2BE] flex items-center justify-between">
           <div>
             <div className="text-2xl font-black text-brand-brown">建立任務</div>
-            <div className="text-sm text-brand-brown/80 font-bold">先建立草稿（存入教師資料夾），再儲存/派發</div>
+            <div className="text-sm text-brand-brown/80 font-bold">選擇工具後，會開啟對應的編輯介面</div>
           </div>
           <button
             onClick={onClose}
@@ -56,91 +31,95 @@ const CreateTaskModal: React.FC<Props> = ({ open, onClose, authService, availabl
         </div>
 
         <div className="p-6 space-y-4">
-          <div className="text-sm font-black text-brand-brown">工具：討論（第一階段）</div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-            <div>
-              <div className="text-sm font-black text-brand-brown mb-2">年級</div>
-              <select
-                value={grade}
-                onChange={(e) => setGrade(e.target.value)}
-                className="w-full px-4 py-3 border-2 border-brand-brown rounded-2xl font-bold"
-              >
-                {gradeOptions.map((g) => (
-                  <option key={g} value={g}>
-                    {g}年級
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <div className="text-sm font-black text-brand-brown mb-2">科目</div>
-              <select
-                value={subject}
-                onChange={(e) => setSubject(e.target.value)}
-                className="w-full px-4 py-3 border-2 border-brand-brown rounded-2xl font-bold"
-              >
-                {VISIBLE_SUBJECTS.map((s) => (
-                  <option key={s} value={s}>
-                    {s}
-                  </option>
-                ))}
-              </select>
-            </div>
-          </div>
-
-          <div>
-            <div className="text-sm font-black text-brand-brown mb-2">標題</div>
-            <input
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              className="w-full px-4 py-3 border-2 border-brand-brown rounded-2xl font-bold"
-              placeholder="輸入標題..."
-            />
-          </div>
-
-          {error && <div className="text-red-700 font-bold">{error}</div>}
-
-          <div className="flex justify-end gap-2 pt-2">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <button
-              onClick={onClose}
-              className="px-4 py-2 rounded-xl bg-white border-2 border-gray-300 font-black text-gray-700 hover:border-blue-500"
-              disabled={loading}
-            >
-              取消
-            </button>
-            <button
-              onClick={async () => {
-                const t = title.trim();
-                if (!grade) return setError('請選擇年級');
-                if (!subject) return setError('請選擇科目');
-                if (!t) return setError('請輸入標題');
-                setLoading(true);
-                setError('');
-                try {
-                  const resp = await authService.createDraft({
-                    toolType: 'discussion',
-                    title: t,
-                    subject,
-                    grade,
-                    scope: 'my',
-                    contentSnapshot: { content: [{ type: 'html', value: '' }] }
-                  });
-                  const id = String(resp?.draft?.id || '');
-                  if (!id) throw new Error('建立失敗（缺少 draftId）');
-                  onCreatedDraft({ toolType: 'discussion', draftId: id });
-                  onClose();
-                } catch (e: any) {
-                  setError(e?.message || '建立失敗');
-                } finally {
-                  setLoading(false);
-                }
+              type="button"
+              onClick={() => {
+                onSelectTool('discussion');
+                onClose();
               }}
-              className="px-4 py-2 rounded-xl bg-blue-600 text-white font-black border-2 border-blue-700 hover:bg-blue-700 disabled:opacity-60 flex items-center gap-2"
-              disabled={loading}
+              className="p-5 rounded-3xl border-4 border-brand-brown bg-[#F8C5C5] hover:bg-[#F0B5B5] text-left shadow-comic"
             >
-              <MessageSquare className="w-4 h-4" />
-              建立草稿並編輯
+              <div className="flex items-center gap-3">
+                <MessageSquare className="w-7 h-7 text-brand-brown" />
+                <div className="text-xl font-black text-brand-brown">討論</div>
+              </div>
+              <div className="mt-2 text-sm font-bold text-brand-brown/80">建立討論串內容（文字 / 圖片 / 連結）</div>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => {
+                onSelectTool('note');
+                onClose();
+              }}
+              className="p-5 rounded-3xl border-4 border-brand-brown bg-[#E9E6FF] hover:bg-[#DCD6FF] text-left shadow-comic"
+            >
+              <div className="flex items-center gap-3">
+                <FileText className="w-7 h-7 text-brand-brown" />
+                <div className="text-xl font-black text-brand-brown">筆記</div>
+              </div>
+              <div className="mt-2 text-sm font-bold text-brand-brown/80">A4 筆記（文字 / 圖片 / 手寫）</div>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => {
+                onSelectTool('quiz');
+                onClose();
+              }}
+              className="p-5 rounded-3xl border-4 border-brand-brown bg-[#FDEEAD] hover:bg-[#FCE690] text-left shadow-comic"
+            >
+              <div className="flex items-center gap-3">
+                <HelpCircle className="w-7 h-7 text-brand-brown" />
+                <div className="text-xl font-black text-brand-brown">小測驗</div>
+              </div>
+              <div className="mt-2 text-sm font-bold text-brand-brown/80">題目 + 選項 + 圖片</div>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => {
+                onSelectTool('mathQuiz');
+                onClose();
+              }}
+              className="p-5 rounded-3xl border-4 border-brand-brown bg-[#DFF6FF] hover:bg-[#CDEFFF] text-left shadow-comic"
+            >
+              <div className="flex items-center gap-3">
+                <Calculator className="w-7 h-7 text-brand-brown" />
+                <div className="text-xl font-black text-brand-brown">數學測驗</div>
+              </div>
+              <div className="mt-2 text-sm font-bold text-brand-brown/80">算式 / 分數 / 進階設定</div>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => {
+                onSelectTool('game');
+                onClose();
+              }}
+              className="p-5 rounded-3xl border-4 border-brand-brown bg-[#E8F5E9] hover:bg-[#C8E6C9] text-left shadow-comic"
+            >
+              <div className="flex items-center gap-3">
+                <Gamepad2 className="w-7 h-7 text-brand-brown" />
+                <div className="text-xl font-black text-brand-brown">小遊戲</div>
+              </div>
+              <div className="mt-2 text-sm font-bold text-brand-brown/80">以遊戲形式完成題目</div>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => {
+                onSelectTool('contest');
+                onClose();
+              }}
+              className="p-5 rounded-3xl border-4 border-brand-brown bg-[#FFF2DC] hover:bg-[#FCEBCD] text-left shadow-comic"
+            >
+              <div className="flex items-center gap-3">
+                <Trophy className="w-7 h-7 text-brand-brown" />
+                <div className="text-xl font-black text-brand-brown">問答比賽</div>
+              </div>
+              <div className="mt-2 text-sm font-bold text-brand-brown/80">限時 / 排名 / 多題目</div>
             </button>
           </div>
         </div>
@@ -150,4 +129,3 @@ const CreateTaskModal: React.FC<Props> = ({ open, onClose, authService, availabl
 };
 
 export default CreateTaskModal;
-

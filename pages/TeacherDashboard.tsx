@@ -7007,11 +7007,14 @@ const TeacherDashboard: React.FC = () => {
       <CreateTaskModal
         open={showCreateTaskModal}
         onClose={() => setShowCreateTaskModal(false)}
-        authService={authService}
-        availableClasses={availableClasses}
-        onCreatedDraft={({ toolType, draftId }) => {
-          setActiveDraftToolType(toolType);
-          setActiveDraftId(draftId);
+        onSelectTool={(tool) => {
+          setShowCreateTaskModal(false);
+          if (tool === 'discussion') return setShowDiscussionModal(true);
+          if (tool === 'note') return setShowNoteCreateModal(true);
+          if (tool === 'quiz') return setShowQuizModal(true);
+          if (tool === 'mathQuiz') return openMathQuizCreator();
+          if (tool === 'game') return openGameCreator();
+          if (tool === 'contest') return setShowContestModal(true);
         }}
       />
 
