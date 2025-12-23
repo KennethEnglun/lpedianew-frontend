@@ -2760,7 +2760,7 @@ const TeacherDashboard: React.FC = () => {
           <Button
             fullWidth
             className="bg-[#D2EFFF] hover:bg-[#BCE0FF] text-lg"
-            onClick={() => setShowTemplateLibrary(true)}
+            onClick={() => setShowDraftLibraryModal(true)}
           >
             教師資料夾
           </Button>
@@ -2775,10 +2775,10 @@ const TeacherDashboard: React.FC = () => {
 	          <Button
 	            fullWidth
 	            className="bg-[#F8C5C5] hover:bg-[#F0B5B5] text-lg flex items-center justify-center gap-2"
-	            onClick={() => setShowDiscussionModal(true)}
+	            onClick={() => setShowCreateTaskModal(true)}
 	          >
             <MessageSquare className="w-5 h-5" />
-            派發討論串
+            建立任務
           </Button>
 	          <Button
 	            fullWidth
