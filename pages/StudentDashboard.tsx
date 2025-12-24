@@ -150,7 +150,7 @@ const StudentDashboard: React.FC = () => {
 
     .science-icon {
       position: absolute;
-      opacity: 0.1;
+      opacity: 0.15;
       animation: float 6s ease-in-out infinite;
     }
 
@@ -191,8 +191,8 @@ const StudentDashboard: React.FC = () => {
     }
 
     @keyframes pulse {
-      0%, 100% { opacity: 0.1; }
-      50% { opacity: 0.3; }
+      0%, 100% { opacity: 0.15; }
+      50% { opacity: 0.4; }
     }
   `;
 
@@ -302,25 +302,29 @@ const StudentDashboard: React.FC = () => {
 
       {/* Header */}
       <header className="max-w-[1200px] mx-auto flex justify-end items-center mb-8 gap-4">
-        {/* Right: User Actions with Logo */}
+        {/* Right: User Actions */}
         <div className="flex items-center gap-4">
           <button
             onClick={() => setShowUiSettings(true)}
-            className="bg-[#FFF9F0] p-2 rounded-full border-2 border-[#E6D2B5] text-[#DCC098] hover:text-[#F4A261] hover:-translate-y-1 transition-all shadow-sm"
+            className="bg-[#FFF9F0] p-3 rounded-full border-3 border-[#E6D2B5] text-[#DCC098] hover:text-[#F4A261] hover:-translate-y-1 transition-all shadow-md"
+            title="音效設定"
           >
             <Volume2 className="h-6 w-6" />
           </button>
-          <button className="bg-[#FFF9F0] p-2 rounded-full border-2 border-[#E6D2B5] text-[#DCC098] hover:text-[#F4A261] hover:-translate-y-1 transition-all shadow-sm">
+          <button
+            className="bg-[#FFF9F0] p-3 rounded-full border-3 border-[#E6D2B5] text-[#DCC098] hover:text-[#F4A261] hover:-translate-y-1 transition-all shadow-md"
+            title="訊息"
+          >
             <MessageSquare className="h-6 w-6" />
           </button>
-          {/* Logo in place of student avatar */}
-          <div className="flex-shrink-0">
-            <img
-              src="/lpsparklogo.png"
-              alt="LP科樂園 Logo"
-              className="h-12 object-contain drop-shadow-sm hover:scale-105 transition-transform duration-300"
-            />
-          </div>
+          {/* Logout Button */}
+          <button
+            onClick={logout}
+            className="bg-[#FFE5E5] hover:bg-[#FFCCCB] p-3 rounded-full border-3 border-[#FF6B6B] text-[#D63384] hover:text-[#B02A37] hover:-translate-y-1 transition-all shadow-md group"
+            title="登出"
+          >
+            <LogOut className="h-6 w-6 group-hover:rotate-12 transition-transform" />
+          </button>
         </div>
       </header>
 
@@ -328,6 +332,14 @@ const StudentDashboard: React.FC = () => {
       <main className="max-w-[1200px] mx-auto grid grid-cols-1 lg:grid-cols-12 gap-8 pb-10">
         {/* Left Sidebar */}
         <aside className="lg:col-span-4 bg-[#FEF7EC] border-4 border-[#5E4C40] rounded-3xl p-6 shadow-lg flex-shrink-0 flex flex-col min-h-fit">
+          {/* Logo Section */}
+          <div className="text-center mb-6">
+            <img
+              src="/lpsparklogo.png"
+              alt="LP科樂園 Logo"
+              className="h-16 mx-auto object-contain drop-shadow-sm hover:scale-105 transition-transform duration-300"
+            />
+          </div>
 
           <div className="text-center mb-4 border-b-4 border-[#5E4C40] pb-2">
             <h3 className="text-xl font-bold text-[#5E4C40]">我的學科</h3>
