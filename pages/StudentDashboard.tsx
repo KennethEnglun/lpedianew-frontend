@@ -1,5 +1,5 @@
 import React, { useMemo, useState, useEffect, useRef, useCallback } from 'react';
-import { Settings, LogOut, MessageSquare, HelpCircle, Bot, RefreshCw, X, Eye, EyeOff, Code2, Search, Volume2, CheckCircle2, Star, Award } from 'lucide-react';
+import { Settings, LogOut, MessageSquare, HelpCircle, Bot, RefreshCw, X, Eye, EyeOff, Code2, Search, Volume2, CheckCircle2, Star, Award, ClipboardList } from 'lucide-react';
 import { Subject, SUBJECT_CONFIG, Task } from '../types';
 import { DEFAULT_SUBJECT, SINGLE_SUBJECT_MODE, VISIBLE_SUBJECTS } from '../platform';
 import { useNavigate } from 'react-router-dom';
@@ -19,6 +19,43 @@ const StudentDashboard: React.FC = () => {
   const [showAppStudio, setShowAppStudio] = useState(false);
   const [selectedBotTaskId, setSelectedBotTaskId] = useState<string | null>(null);
   const [selectedSubject, setSelectedSubject] = useState<Subject>(DEFAULT_SUBJECT);
+  const [showTaskView, setShowTaskView] = useState(false);
+  const [selectedStageId, setSelectedStageId] = useState<string>('');
+  const [selectedTopicId, setSelectedTopicId] = useState<string>('');
+  const [selectedSubfolderId, setSelectedSubfolderId] = useState<string>('');
+  const [classFolders, setClassFolders] = useState<any[]>([]);
+  const [loading, setLoading] = useState(false);
+
+  // Compute folder hierarchies
+  const stageFolders = useMemo(
+    () => classFolders.filter((f) => f && f.level === 1 && !f.archivedAt),
+    [classFolders]
+  );
+  const topicFolders = useMemo(
+    () => classFolders.filter((f) => f && f.level === 2 && !f.archivedAt && String(f.parentId || '') === String(selectedStageId || '')),
+    [classFolders, selectedStageId]
+  );
+  const subFolders = useMemo(
+    () => classFolders.filter((f) => f && f.level === 3 && !f.archivedAt && String(f.parentId || '') === String(selectedTopicId || '')),
+    [classFolders, selectedTopicId]
+  );
+
+  // Fetch folders data
+  useEffect(() => {
+    const loadFoldersData = async () => {
+      if (!showTaskView) return;
+      setLoading(true);
+      try {
+        const response = await authService.getMyClassFolders();
+        setClassFolders(response.folders || []);
+      } catch (error) {
+        console.error('Failed to load folders:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+    loadFoldersData();
+  }, [showTaskView]);
 
   // Sample progress data
   const overallProgress = { total: 15, completed: 8, pending: 7 };
@@ -209,30 +246,13 @@ const StudentDashboard: React.FC = () => {
               <span className="text-lg font-bold text-[#5E4C40] flex-1 text-left">小程式工作坊</span>
             </button>
 
-            {VISIBLE_SUBJECTS.map((subject) => {
-              const config = SUBJECT_CONFIG[subject];
-              const isSelected = selectedSubject === subject;
-              const stats = subjectProgress.get(subject) ?? { total: 0, completed: 0 };
-              return (
-                <button
-                  key={subject}
-                  onClick={() => (SINGLE_SUBJECT_MODE ? null : setSelectedSubject(subject))}
-                  className={`w-[calc(100%-10px)] flex items-center gap-3 px-4 py-2 rounded-2xl border-4 transition-all duration-150 ${isSelected
-                    ? 'border-[#5E4C40] translate-x-2 bg-opacity-100 shadow-sm'
-                    : 'border-transparent hover:border-[#5E4C40]/30 bg-opacity-70'
-                    }`}
-                  style={{ backgroundColor: config.color }}
-                >
-                  <span className="text-2xl">{config.icon}</span>
-                  <span className="text-lg font-bold text-[#5E4C40] flex-1 text-left">{subject}</span>
-                  {stats.total > 0 && (
-                    <span className="text-xs font-black text-[#5E4C40] bg-white/70 border-2 border-[#5E4C40] rounded-xl px-2 py-1">
-                      {stats.completed}/{stats.total}
-                    </span>
-                  )}
-                </button>
-              );
-            })}
+            <button
+              onClick={() => setShowTaskView(true)}
+              className="w-[calc(100%-10px)] flex items-center gap-3 px-4 py-2 rounded-2xl border-4 transition-all duration-150 border-[#5E4C40] bg-[#B5F8CE] hover:bg-white shadow-sm"
+            >
+              <ClipboardList className="w-6 h-6 text-[#5E4C40]" />
+              <span className="text-lg font-bold text-[#5E4C40] flex-1 text-left">我的任務</span>
+            </button>
           </nav>
 
           <div className="mt-4 pt-4 border-t-4 border-[#5E4C40]">
@@ -242,41 +262,167 @@ const StudentDashboard: React.FC = () => {
 
         {/* Right Content */}
         <section className="lg:col-span-8 flex flex-col gap-8">
-          {/* Top Banner */}
-          <div className="cartoon-card relative h-64 md:h-72 w-full group overflow-hidden">
-            <div className="absolute inset-0 border-[6px] border-[#DCC098]/30 rounded-[20px] pointer-events-none z-10"></div>
-
-            {/* Rainbow background */}
-            <div className="w-full h-full rainbow-gradient" />
-
-            {/* Character illustrations */}
-            <div className="absolute inset-0 flex justify-center items-center z-10">
-              <div className="flex gap-8">
-                <div className="w-20 h-20 bg-white/80 border-3 border-[#5D4037] rounded-full flex items-center justify-center text-3xl">
-                  👦
-                </div>
-                <div className="w-20 h-20 bg-white/80 border-3 border-[#5D4037] rounded-full flex items-center justify-center text-3xl">
-                  👧
-                </div>
+          {showTaskView ? (
+            /* Task View */
+            <div className="cartoon-card h-full">
+              <div className="bg-[#F9E4C8] p-4 border-b-4 border-[#E6D2B5] flex justify-between items-center">
+                <h3 className="text-2xl font-bold text-[#5D4037]">我的任務</h3>
+                <button
+                  onClick={() => {
+                    setShowTaskView(false);
+                    setSelectedStageId('');
+                    setSelectedTopicId('');
+                    setSelectedSubfolderId('');
+                    setClassFolders([]);
+                  }}
+                  className="text-[#5D4037] hover:text-red-600"
+                >
+                  <X className="w-6 h-6" />
+                </button>
+              </div>
+              <div className="p-6 bg-white/60 min-h-[500px]">
+                {loading ? (
+                  <div className="flex items-center justify-center py-12">
+                    <RefreshCw className="w-8 h-8 animate-spin text-[#5D4037]" />
+                    <span className="ml-3 text-[#5D4037] font-bold">載入中...</span>
+                  </div>
+                ) : !selectedStageId && !selectedTopicId ? (
+                  /* Stage Folders */
+                  <div>
+                    <div className="text-lg font-bold text-[#5D4037] mb-4">學段</div>
+                    {stageFolders.length === 0 ? (
+                      <div className="text-center py-12 text-gray-500 border-4 border-dashed border-gray-300 rounded-3xl">
+                        未有學段資料夾
+                      </div>
+                    ) : (
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        {stageFolders.map((folder: any) => (
+                          <div
+                            key={folder.id}
+                            onClick={() => setSelectedStageId(folder.id)}
+                            className="bg-white border-4 border-[#5D4037] rounded-2xl p-4 shadow-sm cursor-pointer hover:shadow-lg transition-shadow"
+                          >
+                            <div className="text-xl font-bold text-[#5D4037]">📁 {folder.name}</div>
+                            <div className="mt-2 text-sm text-gray-600">點擊查看課題</div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                    <div className="mt-4 text-xs text-gray-600">
+                      按「學段」→「課題」→（子folder 可選）進入後才會看到任務。
+                    </div>
+                  </div>
+                ) : selectedStageId && !selectedTopicId ? (
+                  /* Topic Folders */
+                  <div>
+                    <div className="flex items-center gap-3 mb-4">
+                      <button
+                        onClick={() => setSelectedStageId('')}
+                        className="text-[#5D4037] hover:text-blue-600 text-sm font-bold"
+                      >
+                        ← 返回學段選擇
+                      </button>
+                    </div>
+                    <div className="text-lg font-bold text-[#5D4037] mb-4">
+                      課題 - {stageFolders.find(f => f.id === selectedStageId)?.name}
+                    </div>
+                    {topicFolders.length === 0 ? (
+                      <div className="text-center py-12 text-gray-500 border-4 border-dashed border-gray-300 rounded-3xl">
+                        目前未有課題資料夾
+                      </div>
+                    ) : (
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        {topicFolders.map((folder: any) => (
+                          <div
+                            key={folder.id}
+                            onClick={() => setSelectedTopicId(folder.id)}
+                            className="bg-white border-4 border-[#5D4037] rounded-2xl p-4 shadow-sm cursor-pointer hover:shadow-lg transition-shadow"
+                          >
+                            <div className="text-xl font-bold text-[#5D4037]">📂 {folder.name}</div>
+                            <div className="mt-2 text-sm text-gray-600">點擊查看內容</div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  /* Sub Folders or Tasks */
+                  <div>
+                    <div className="flex items-center gap-3 mb-4">
+                      <button
+                        onClick={() => setSelectedTopicId('')}
+                        className="text-[#5D4037] hover:text-blue-600 text-sm font-bold"
+                      >
+                        ← 返回課題選擇
+                      </button>
+                    </div>
+                    <div className="text-lg font-bold text-[#5D4037] mb-4">
+                      {topicFolders.find(f => f.id === selectedTopicId)?.name}
+                    </div>
+                    {subFolders.length > 0 ? (
+                      /* Sub Folders */
+                      <div>
+                        <div className="text-md font-bold text-[#5D4037] mb-3">子資料夾</div>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+                          {subFolders.map((folder: any) => (
+                            <div
+                              key={folder.id}
+                              onClick={() => setSelectedSubfolderId(folder.id)}
+                              className="bg-white border-4 border-[#5D4037] rounded-2xl p-4 shadow-sm cursor-pointer hover:shadow-lg transition-shadow"
+                            >
+                              <div className="text-lg font-bold text-[#5D4037]">📁 {folder.name}</div>
+                              <div className="mt-2 text-sm text-gray-600">點擊查看任務</div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="text-center py-12 text-gray-500">
+                        此課題暫無子資料夾或任務
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
             </div>
+          ) : (
+            /* Original Dashboard Content */
+            <>
+              {/* Top Banner */}
+              <div className="cartoon-card relative h-64 md:h-72 w-full group overflow-hidden">
+                <div className="absolute inset-0 border-[6px] border-[#DCC098]/30 rounded-[20px] pointer-events-none z-10"></div>
 
-            {/* Overlay Text */}
-            <div className="absolute inset-0 flex flex-col justify-center items-center z-20">
-              <h1
-                className="text-4xl md:text-6xl font-extrabold text-outline-thick text-center tracking-wider"
-                style={{
-                  animation: 'bounce 2s infinite',
-                  textShadow: '4px 4px 0 #8D6E63, -2px -2px 0 #8D6E63, 2px -2px 0 #8D6E63, -2px 2px 0 #8D6E63, 2px 2px 0 #8D6E63'
-                }}
-              >
-                歡迎回到科學之旅!
-              </h1>
-            </div>
-          </div>
+                {/* Rainbow background */}
+                <div className="w-full h-full rainbow-gradient" />
 
-          {/* Bottom Grid (Challenges & Rewards) */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                {/* Character illustrations */}
+                <div className="absolute inset-0 flex justify-center items-center z-10">
+                  <div className="flex gap-8">
+                    <div className="w-20 h-20 bg-white/80 border-3 border-[#5D4037] rounded-full flex items-center justify-center text-3xl">
+                      👦
+                    </div>
+                    <div className="w-20 h-20 bg-white/80 border-3 border-[#5D4037] rounded-full flex items-center justify-center text-3xl">
+                      👧
+                    </div>
+                  </div>
+                </div>
+
+                {/* Overlay Text */}
+                <div className="absolute inset-0 flex flex-col justify-center items-center z-20">
+                  <h1
+                    className="text-4xl md:text-6xl font-extrabold text-outline-thick text-center tracking-wider"
+                    style={{
+                      animation: 'bounce 2s infinite',
+                      textShadow: '4px 4px 0 #8D6E63, -2px -2px 0 #8D6E63, 2px -2px 0 #8D6E63, -2px 2px 0 #8D6E63, 2px 2px 0 #8D6E63'
+                    }}
+                  >
+                    歡迎回到科學之旅!
+                  </h1>
+                </div>
+              </div>
+
+              {/* Bottom Grid (Challenges & Rewards) */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             {/* My Progress Card */}
             <div className="cartoon-card">
               <div className="bg-[#F9E4C8] p-3 border-b-4 border-[#E6D2B5] text-center">
@@ -390,7 +536,9 @@ const StudentDashboard: React.FC = () => {
                 </div>
               </div>
             </div>
-          </div>
+              </div>
+            </>
+          )}
         </section>
       </main>
 
