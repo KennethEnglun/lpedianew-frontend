@@ -88,9 +88,11 @@ const StudentDashboard: React.FC = () => {
       <header className="max-w-[1200px] mx-auto flex flex-col md:flex-row justify-between items-center mb-8 gap-4">
         {/* Left: Logo */}
         <div className="flex-shrink-0">
-          <div className="h-20 w-32 bg-white/90 border-4 border-[#E6D2B5] rounded-xl flex items-center justify-center shadow-sm">
-            <span className="text-sm font-bold text-[#5D4037]">LP科樂園</span>
-          </div>
+          <img
+            src="/lpsparklogo.png"
+            alt="LP科樂園 Logo"
+            className="h-20 object-contain drop-shadow-sm hover:scale-105 transition-transform duration-300"
+          />
         </div>
 
         {/* Center: Search Bar */}
@@ -275,86 +277,116 @@ const StudentDashboard: React.FC = () => {
 
           {/* Bottom Grid (Challenges & Rewards) */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            {/* Daily Challenges Card */}
+            {/* My Progress Card */}
             <div className="cartoon-card">
               <div className="bg-[#F9E4C8] p-3 border-b-4 border-[#E6D2B5] text-center">
-                <h3 className="text-xl font-bold text-[#5D4037]">每日挑戰</h3>
-              </div>
-              <div className="p-4 flex justify-around items-end h-full bg-white/60 pb-6">
-                {dailyChallenges.map((challenge) => (
-                  <div key={challenge.id} className="flex flex-col items-center gap-2 group">
-                    <div className="w-16 h-20 bg-white border-4 border-[#E6D2B5] rounded-xl flex items-center justify-center shadow-sm group-hover:-translate-y-2 transition-transform">
-                      <CheckCircle2 className="h-10 w-10 text-[#90BE6D]" strokeWidth={3} />
-                    </div>
-                    <span className="text-sm font-bold text-[#5D4037] text-center w-16 leading-tight px-2 whitespace-pre">
-                      {challenge.name}
-                    </span>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            {/* My Progress & Rewards Card */}
-            <div className="cartoon-card">
-              <div className="bg-[#F9E4C8] p-3 border-b-4 border-[#E6D2B5] text-center">
-                <h3 className="text-xl font-bold text-[#5D4037]">我的進度 & 獎勵</h3>
+                <h3 className="text-xl font-bold text-[#5D4037]">我的進度</h3>
               </div>
               <div className="p-4 bg-white/60 h-full flex flex-col justify-center">
-                {/* Progress section */}
+                {/* Overall Progress */}
                 <div className="mb-6">
                   <div className="flex items-center justify-between mb-2">
-                    <div className="text-sm font-black text-[#5D4037]">整體進度</div>
-                    <div className="text-xs font-bold text-gray-600">
+                    <div className="text-lg font-black text-[#5D4037]">整體進度</div>
+                    <div className="text-sm font-bold text-gray-600">
                       {overallProgress.total > 0 ? Math.round((overallProgress.completed / overallProgress.total) * 100) : 0}%
                     </div>
                   </div>
-                  <div className="h-3 bg-gray-200 rounded-full border-2 border-[#E6D2B5] overflow-hidden">
+                  <div className="h-4 bg-gray-200 rounded-full border-2 border-[#E6D2B5] overflow-hidden">
                     <div
-                      className="h-full bg-[#93C47D]"
+                      className="h-full bg-[#93C47D] transition-all"
                       style={{
                         width: `${overallProgress.total > 0 ? Math.round((overallProgress.completed / overallProgress.total) * 100) : 0}%`
                       }}
                     />
                   </div>
-                  <div className="mt-2 flex justify-between text-xs font-bold text-gray-600">
+                  <div className="mt-2 flex justify-between text-sm font-bold text-gray-600">
                     <span>完成 {overallProgress.completed}</span>
                     <span>剩餘 {overallProgress.pending}</span>
                   </div>
                 </div>
 
+                {/* Course Progress */}
+                <div className="space-y-3">
+                  {VISIBLE_SUBJECTS.slice(0, 3).map((subject) => {
+                    const config = SUBJECT_CONFIG[subject];
+                    const stats = subjectProgress.get(subject) ?? { total: 3, completed: 2 };
+                    const percentage = stats.total > 0 ? (stats.completed / stats.total) * 100 : 0;
+
+                    return (
+                      <div key={subject} className="flex items-center gap-3">
+                        <span className="text-lg">{config.icon}</span>
+                        <div className="flex-1">
+                          <div className="flex justify-between items-center mb-1">
+                            <span className="text-sm font-bold text-[#5D4037]">{subject}</span>
+                            <span className="text-xs font-bold text-gray-600">{stats.completed}/{stats.total}</span>
+                          </div>
+                          <div className="h-2 bg-gray-200 rounded-full border border-[#E6D2B5]">
+                            <div
+                              className="h-full rounded-full transition-all"
+                              style={{
+                                width: `${percentage}%`,
+                                backgroundColor: config.color
+                              }}
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+
+            {/* My Rewards Card */}
+            <div className="cartoon-card">
+              <div className="bg-[#F9E4C8] p-3 border-b-4 border-[#E6D2B5] text-center">
+                <h3 className="text-xl font-bold text-[#5D4037]">我的獎勵</h3>
+              </div>
+              <div className="p-4 bg-white/60 h-full flex flex-col justify-center">
                 {/* Awards section */}
-                <div className="grid grid-cols-4 gap-2 justify-items-center mb-4">
+                <div className="grid grid-cols-4 gap-3 justify-items-center mb-6">
                   <div className="flex flex-col items-center gap-1 group">
-                    <div className="w-full aspect-square rounded-full flex items-center justify-center group-hover:rotate-12 transition-transform">
-                      <Award className="w-8 h-8 text-yellow-500 drop-shadow-md" />
+                    <div className="w-12 h-12 rounded-full flex items-center justify-center group-hover:rotate-12 transition-transform">
+                      <Award className="w-10 h-10 text-yellow-500 drop-shadow-md" />
                     </div>
+                    <span className="text-xs font-bold text-[#8D6E63] text-center">金獎</span>
                   </div>
                   <div className="flex flex-col items-center gap-1 group">
-                    <div className="w-full aspect-square rounded-full flex items-center justify-center group-hover:rotate-12 transition-transform">
-                      <Award className="w-8 h-8 text-blue-500 drop-shadow-md opacity-50 grayscale" />
+                    <div className="w-12 h-12 rounded-full flex items-center justify-center group-hover:rotate-12 transition-transform">
+                      <Award className="w-10 h-10 text-blue-500 drop-shadow-md opacity-50 grayscale hover:opacity-100 hover:grayscale-0 transition-all" />
                     </div>
+                    <span className="text-xs font-bold text-[#8D6E63] text-center">銀獎</span>
                   </div>
                   <div className="flex flex-col items-center gap-1 group">
-                    <div className="w-full aspect-square rounded-full flex items-center justify-center group-hover:rotate-12 transition-transform">
-                      <Award className="w-8 h-8 text-purple-500 drop-shadow-md opacity-50 grayscale" />
+                    <div className="w-12 h-12 rounded-full flex items-center justify-center group-hover:rotate-12 transition-transform">
+                      <Award className="w-10 h-10 text-purple-500 drop-shadow-md opacity-50 grayscale hover:opacity-100 hover:grayscale-0 transition-all" />
                     </div>
+                    <span className="text-xs font-bold text-[#8D6E63] text-center">銅獎</span>
                   </div>
                   <div className="flex flex-col items-center gap-1 group">
-                    <div className="w-full aspect-square rounded-full flex items-center justify-center group-hover:rotate-12 transition-transform">
-                      <Award className="w-8 h-8 text-red-500 drop-shadow-md opacity-50 grayscale" />
+                    <div className="w-12 h-12 rounded-full flex items-center justify-center group-hover:rotate-12 transition-transform">
+                      <Award className="w-10 h-10 text-red-500 drop-shadow-md opacity-50 grayscale hover:opacity-100 hover:grayscale-0 transition-all" />
                     </div>
+                    <span className="text-xs font-bold text-[#8D6E63] text-center">特殊</span>
                   </div>
                 </div>
 
-                <div className="grid grid-cols-2 gap-2">
-                  <div className="flex flex-col items-center gap-1">
-                    <Star className="w-6 h-6 text-yellow-500" />
-                    <span className="text-sm font-bold text-[#8D6E63]">收集獎勵</span>
+                {/* Achievement badges */}
+                <div className="grid grid-cols-2 gap-4 mb-4">
+                  <div className="bg-yellow-100 border-2 border-yellow-300 rounded-xl p-3 text-center">
+                    <Star className="w-8 h-8 text-yellow-500 mx-auto mb-1" />
+                    <div className="text-lg font-bold text-[#5D4037]">200</div>
+                    <div className="text-xs font-bold text-[#8D6E63]">收集獎勵</div>
                   </div>
-                  <div className="flex flex-col items-center gap-1">
-                    <span className="text-lg font-bold text-[#5D4037]">200分</span>
-                    <span className="text-sm font-bold text-[#8D6E63]">積分</span>
+                  <div className="bg-blue-100 border-2 border-blue-300 rounded-xl p-3 text-center">
+                    <div className="text-2xl mb-1">🏆</div>
+                    <div className="text-lg font-bold text-[#5D4037]">0</div>
+                    <div className="text-xs font-bold text-[#8D6E63]">總獎章</div>
                   </div>
+                </div>
+
+                <div className="text-center">
+                  <div className="text-sm font-bold text-[#8D6E63]">繼續努力獲得更多獎勵！</div>
                 </div>
               </div>
             </div>
