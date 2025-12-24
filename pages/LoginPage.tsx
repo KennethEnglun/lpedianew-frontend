@@ -116,11 +116,16 @@ const LoginPage: React.FC = () => {
           </div>
 
           <div className="relative flex-1 min-h-[240px] border-t-4 lg:border-t-0 lg:border-l-4 border-brand-brown">
-            <div
-              className="absolute inset-0 bg-cover bg-center"
-              style={{ backgroundImage: `url('/bg.gif')` }}
+            <video
+              className="absolute inset-0 w-full h-full object-cover"
+              autoPlay
+              loop
+              muted
+              playsInline
               aria-hidden="true"
-            />
+            >
+              <source src="/loginmov.mp4" type="video/mp4" />
+            </video>
             <div className="absolute inset-0 bg-gradient-to-br from-white/10 via-transparent to-black/15" aria-hidden="true" />
           </div>
         </div>
