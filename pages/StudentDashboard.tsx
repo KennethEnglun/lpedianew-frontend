@@ -1328,7 +1328,7 @@ const StudentDashboard: React.FC = () => {
       <header className="relative z-20 bg-[#A1D9AE] border-b-4 border-brand-brown py-2 px-6 flex justify-between items-center shadow-md">
         <div className="w-10"></div>
         <div className="text-center">
-          <h1 className="text-4xl font-black text-brand-brown font-rounded tracking-wider">LPedia</h1>
+          <h1 className="text-4xl font-black text-brand-brown font-rounded tracking-wider">LP科樂園</h1>
         </div>
         <div className="flex gap-3">
           <button

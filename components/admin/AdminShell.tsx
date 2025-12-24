@@ -20,7 +20,7 @@ export default function AdminShell(props: {
     <div className="min-h-screen bg-gray-50 font-sans flex">
       <aside className="w-64 bg-white border-r border-gray-200 flex flex-col">
         <div className="px-5 py-5 border-b border-gray-200">
-          <div className="text-2xl font-black text-brand-brown font-rounded leading-tight">LPedia Admin</div>
+          <div className="text-2xl font-black text-brand-brown font-rounded leading-tight">LP科樂園 Admin</div>
           <div className="text-xs font-bold text-gray-500 mt-1">管理後台</div>
         </div>
 

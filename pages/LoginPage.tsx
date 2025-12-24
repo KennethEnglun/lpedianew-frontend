@@ -77,10 +77,16 @@ const LoginPage: React.FC = () => {
             <div className="w-full max-w-sm max-h-full overflow-y-auto">
               <div className="mb-10 text-center">
                 <h1 className="text-6xl sm:text-7xl font-rounded font-black text-brand-brown leading-none tracking-tight">
-                  LPedia
+                  LP科樂園
                 </h1>
-                <div className="mt-3 text-sm sm:text-base font-bold text-brand-brown/80">
-                  九龍婦女福利會李炳紀念學校校本AI學習平台
+                <div className="text-lg sm:text-xl font-bold text-brand-brown/90 mb-2">
+                  LP S‧PARK
+                </div>
+                <div className="text-sm sm:text-base font-bold text-brand-brown/80">
+                  李炳科學AI學習平台
+                </div>
+                <div className="mt-4 text-xs text-brand-brown/60">
+                  © 九龍婦女福利會李炳紀念學校
                 </div>
               </div>
 

@@ -2997,7 +2997,7 @@ const TeacherDashboard: React.FC = () => {
           <aside className="absolute inset-y-0 left-0 w-[min(22rem,85vw)] bg-[#D9F3D5] border-r-4 border-brand-brown shadow-2xl overflow-y-auto">
             <div className="p-6">
               <div className="flex items-center justify-between mb-4">
-                <h1 className="text-2xl font-black text-brand-brown font-rounded">LPedia</h1>
+                <h1 className="text-2xl font-black text-brand-brown font-rounded">LP科樂園</h1>
                 <button
                   onClick={closeSidebar}
                   className="w-10 h-10 rounded-full bg-white border-2 border-brand-brown hover:bg-gray-100 flex items-center justify-center"
@@ -3095,7 +3095,7 @@ const TeacherDashboard: React.FC = () => {
       {/* Sidebar */}
       <aside className="hidden lg:flex relative z-10 w-full lg:w-80 bg-[#D9F3D5] min-h-fit my-0 lg:my-auto ml-0 rounded-b-[3rem] lg:rounded-b-none lg:rounded-r-[3rem] border-4 lg:border-l-0 border-brand-brown shadow-2xl flex-col p-6">
         <div className="flex items-center justify-center mb-2">
-          <h1 className="text-4xl font-black text-brand-brown font-rounded">LPedia</h1>
+          <h1 className="text-4xl font-black text-brand-brown font-rounded">LP科樂園</h1>
         </div>
 
         {/* User Profile Section */}
