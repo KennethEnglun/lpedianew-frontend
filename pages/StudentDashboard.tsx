@@ -1,5 +1,5 @@
 import React, { useMemo, useState, useEffect, useRef, useCallback } from 'react';
-import { Settings, LogOut, MessageSquare, HelpCircle, Bot, RefreshCw, X, Eye, EyeOff, Code2, Search, Volume2, CheckCircle2, Star, Award, ClipboardList } from 'lucide-react';
+import { Settings, LogOut, MessageSquare, HelpCircle, Bot, RefreshCw, X, Eye, EyeOff, Code2, Volume2, CheckCircle2, Star, Award, ClipboardList } from 'lucide-react';
 import { Subject, SUBJECT_CONFIG, Task } from '../types';
 import { DEFAULT_SUBJECT, SINGLE_SUBJECT_MODE, VISIBLE_SUBJECTS } from '../platform';
 import { useNavigate } from 'react-router-dom';
@@ -25,6 +25,8 @@ const StudentDashboard: React.FC = () => {
   const [selectedSubfolderId, setSelectedSubfolderId] = useState<string>('');
   const [classFolders, setClassFolders] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
+  const [tasks, setTasks] = useState<Task[]>([]);
+  const [responseStatus, setResponseStatus] = useState<any>({});
 
   // Compute folder hierarchies
   const stageFolders = useMemo(
@@ -40,7 +42,39 @@ const StudentDashboard: React.FC = () => {
     [classFolders, selectedTopicId]
   );
 
-  // Fetch folders data
+  // Calculate task completion status
+  const isTaskCompleted = (task: Task) => {
+    if (task.type === 'discussion') return !!responseStatus[task.id]?.hasResponded;
+    if (task.type === 'quiz' || task.type === 'game') return !!task.completed;
+    if (task.type === 'contest') return false;
+    return false;
+  };
+
+  // Calculate overall progress
+  const overallProgress = useMemo(() => {
+    const total = tasks.length;
+    const completed = tasks.filter(isTaskCompleted).length;
+    return { total, completed, pending: Math.max(0, total - completed) };
+  }, [tasks, responseStatus]);
+
+  // Fetch all data
+  useEffect(() => {
+    const loadData = async () => {
+      try {
+        // Always load tasks for progress calculation
+        const [tasksResponse, statusResponse] = await Promise.all([
+          authService.getStudentTasks().catch(() => ({ tasks: [] })),
+          authService.getDiscussionResponseStatus().catch(() => ({}))
+        ]);
+        setTasks(tasksResponse.tasks || []);
+        setResponseStatus(statusResponse);
+      } catch (error) {
+        console.error('Failed to load tasks:', error);
+      }
+    };
+    loadData();
+  }, []);
+
   useEffect(() => {
     const loadFoldersData = async () => {
       if (!showTaskView) return;
@@ -57,8 +91,7 @@ const StudentDashboard: React.FC = () => {
     loadFoldersData();
   }, [showTaskView]);
 
-  // Sample progress data
-  const overallProgress = { total: 15, completed: 8, pending: 7 };
+  // Progress data now calculated from real tasks above
   const subjectProgress = new Map([
     ['數學', { total: 5, completed: 3 }],
     ['科學', { total: 4, completed: 2 }],
@@ -128,23 +161,10 @@ const StudentDashboard: React.FC = () => {
           <img
             src="/lpsparklogo.png"
             alt="LP科樂園 Logo"
-            className="h-20 object-contain drop-shadow-sm hover:scale-105 transition-transform duration-300"
+            className="h-40 object-contain drop-shadow-sm hover:scale-105 transition-transform duration-300"
           />
         </div>
 
-        {/* Center: Search Bar */}
-        <div className="w-full max-w-lg mx-4">
-          <div className="relative group">
-            <input
-              className="w-full bg-white border-4 border-[#E6D2B5] text-[#5D4037] text-lg rounded-full py-2 pl-6 pr-12 focus:outline-none focus:border-[#F4A261] focus:ring-0 placeholder-[#C4A484] shadow-sm transition-colors"
-              placeholder="搜尋課程..."
-              type="text"
-            />
-            <button className="absolute right-3 top-1/2 transform -translate-y-1/2 text-[#E6D2B5] group-hover:text-[#F4A261] transition-colors">
-              <Search className="h-7 w-7" strokeWidth={3} />
-            </button>
-          </div>
-        </div>
 
         {/* Right: User Actions */}
         <div className="flex items-center gap-4">
@@ -445,9 +465,10 @@ const StudentDashboard: React.FC = () => {
                       }}
                     />
                   </div>
-                  <div className="mt-2 flex justify-between text-sm font-bold text-gray-600">
+                  <div className="mt-3 flex justify-between text-xs font-bold text-[#5D4037]">
+                    <span>收到 {overallProgress.total}</span>
                     <span>完成 {overallProgress.completed}</span>
-                    <span>剩餘 {overallProgress.pending}</span>
+                    <span>未完成 {overallProgress.pending}</span>
                   </div>
                 </div>
 
