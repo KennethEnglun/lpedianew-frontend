@@ -137,6 +137,35 @@ const StudentDashboard: React.FC = () => {
       animation: rainbow 3s ease infinite;
     }
 
+    .science-background {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      z-index: -1;
+      overflow: hidden;
+      pointer-events: none;
+    }
+
+    .science-icon {
+      position: absolute;
+      opacity: 0.1;
+      animation: float 6s ease-in-out infinite;
+    }
+
+    .science-icon:nth-child(odd) {
+      animation-direction: reverse;
+    }
+
+    .science-icon.rotate {
+      animation: float 6s ease-in-out infinite, rotate 8s linear infinite;
+    }
+
+    .science-icon.pulse {
+      animation: float 6s ease-in-out infinite, pulse 4s ease-in-out infinite;
+    }
+
     @keyframes rainbow {
       0% { background-position: 0% 50%; }
       50% { background-position: 100% 50%; }
@@ -148,25 +177,132 @@ const StudentDashboard: React.FC = () => {
       40% { transform: translateY(-10px); }
       60% { transform: translateY(-5px); }
     }
+
+    @keyframes float {
+      0%, 100% { transform: translateY(0px) translateX(0px); }
+      25% { transform: translateY(-20px) translateX(10px); }
+      50% { transform: translateY(-10px) translateX(-5px); }
+      75% { transform: translateY(-15px) translateX(15px); }
+    }
+
+    @keyframes rotate {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 0.1; }
+      50% { opacity: 0.3; }
+    }
   `;
+
+  // Science Background Component
+  const ScienceBackground = () => {
+    const scienceElements = [
+      // Molecule (DNA)
+      <svg key="dna-1" className="science-icon rotate" style={{ top: '10%', left: '15%', width: '60px', height: '60px' }} viewBox="0 0 100 100" fill="#B5F8CE">
+        <path d="M20 20 Q50 10 80 20 Q50 30 20 40 Q50 50 80 60 Q50 70 20 80" stroke="#4CAF50" strokeWidth="3" fill="none"/>
+        <circle cx="20" cy="20" r="4" fill="#4CAF50"/>
+        <circle cx="80" cy="20" r="4" fill="#4CAF50"/>
+        <circle cx="20" cy="40" r="4" fill="#4CAF50"/>
+        <circle cx="80" cy="40" r="4" fill="#4CAF50"/>
+        <circle cx="20" cy="60" r="4" fill="#4CAF50"/>
+        <circle cx="80" cy="60" r="4" fill="#4CAF50"/>
+        <circle cx="20" cy="80" r="4" fill="#4CAF50"/>
+        <circle cx="80" cy="80" r="4" fill="#4CAF50"/>
+      </svg>,
+
+      // Atom
+      <svg key="atom-1" className="science-icon pulse" style={{ top: '25%', right: '20%', width: '50px', height: '50px' }} viewBox="0 0 100 100" fill="#FFB74D">
+        <circle cx="50" cy="50" r="8" fill="#FF9800"/>
+        <ellipse cx="50" cy="50" rx="35" ry="15" fill="none" stroke="#FF9800" strokeWidth="2"/>
+        <ellipse cx="50" cy="50" rx="15" ry="35" fill="none" stroke="#FF9800" strokeWidth="2"/>
+        <ellipse cx="50" cy="50" rx="25" ry="25" fill="none" stroke="#FF9800" strokeWidth="2" transform="rotate(45 50 50)"/>
+        <circle cx="85" cy="50" r="3" fill="#FF5722"/>
+        <circle cx="15" cy="50" r="3" fill="#FF5722"/>
+        <circle cx="50" cy="15" r="3" fill="#FF5722"/>
+        <circle cx="50" cy="85" r="3" fill="#FF5722"/>
+      </svg>,
+
+      // Test Tube
+      <svg key="testtube-1" className="science-icon" style={{ top: '60%', left: '25%', width: '40px', height: '40px' }} viewBox="0 0 100 100" fill="#E1BEE7">
+        <rect x="40" y="10" width="20" height="60" rx="10" ry="10" fill="none" stroke="#9C27B0" strokeWidth="3"/>
+        <rect x="40" y="45" width="20" height="25" fill="#9C27B0" opacity="0.3"/>
+        <circle cx="50" cy="15" r="8" fill="none" stroke="#9C27B0" strokeWidth="2"/>
+      </svg>,
+
+      // Microscope
+      <svg key="microscope-1" className="science-icon rotate" style={{ top: '35%', left: '70%', width: '55px', height: '55px' }} viewBox="0 0 100 100" fill="#81C784">
+        <rect x="20" y="80" width="60" height="8" rx="4" fill="#4CAF50"/>
+        <rect x="45" y="30" width="8" height="50" fill="#4CAF50"/>
+        <circle cx="49" cy="25" r="15" fill="none" stroke="#4CAF50" strokeWidth="3"/>
+        <circle cx="49" cy="25" r="8" fill="#4CAF50"/>
+        <rect x="25" y="20" width="15" height="4" fill="#4CAF50"/>
+        <rect x="60" y="35" width="15" height="4" fill="#4CAF50"/>
+      </svg>,
+
+      // Chemical Formula (H2O)
+      <svg key="formula-1" className="science-icon pulse" style={{ top: '15%', left: '45%', width: '70px', height: '30px' }} viewBox="0 0 140 60" fill="#42A5F5">
+        <text x="10" y="35" fontSize="24" fontWeight="bold" fill="#2196F3">H</text>
+        <text x="35" y="45" fontSize="16" fill="#2196F3">2</text>
+        <text x="50" y="35" fontSize="24" fontWeight="bold" fill="#2196F3">O</text>
+      </svg>,
+
+      // Beaker
+      <svg key="beaker-1" className="science-icon" style={{ top: '70%', right: '15%', width: '45px', height: '45px' }} viewBox="0 0 100 100" fill="#FFC107">
+        <path d="M30 20 L30 40 L15 80 L85 80 L70 40 L70 20 Z" fill="none" stroke="#FF9800" strokeWidth="3"/>
+        <rect x="25" y="15" width="50" height="8" fill="#FF9800"/>
+        <path d="M30 45 L70 45 L65 65 L35 65 Z" fill="#FF9800" opacity="0.3"/>
+        <circle cx="45" cy="55" r="2" fill="#FF9800"/>
+        <circle cx="55" cy="52" r="1.5" fill="#FF9800"/>
+      </svg>,
+
+      // Gear (representing mechanics/physics)
+      <svg key="gear-1" className="science-icon rotate" style={{ top: '50%', left: '5%', width: '35px', height: '35px' }} viewBox="0 0 100 100" fill="#90A4AE">
+        <path d="M50,10 L60,20 L70,15 L75,25 L85,30 L80,40 L90,50 L80,60 L85,70 L75,75 L70,85 L60,80 L50,90 L40,80 L30,85 L25,75 L15,70 L20,60 L10,50 L20,40 L15,30 L25,25 L30,15 L40,20 Z" fill="#607D8B"/>
+        <circle cx="50" cy="50" r="15" fill="none" stroke="#455A64" strokeWidth="3"/>
+      </svg>,
+
+      // Additional DNA
+      <svg key="dna-2" className="science-icon pulse" style={{ top: '80%', left: '50%', width: '50px', height: '50px' }} viewBox="0 0 100 100" fill="#B5F8CE">
+        <path d="M25 15 Q50 5 75 15 Q50 25 25 35 Q50 45 75 55 Q50 65 25 75" stroke="#4CAF50" strokeWidth="2" fill="none"/>
+        <circle cx="25" cy="15" r="3" fill="#4CAF50"/>
+        <circle cx="75" cy="15" r="3" fill="#4CAF50"/>
+        <circle cx="25" cy="35" r="3" fill="#4CAF50"/>
+        <circle cx="75" cy="35" r="3" fill="#4CAF50"/>
+        <circle cx="25" cy="55" r="3" fill="#4CAF50"/>
+        <circle cx="75" cy="55" r="3" fill="#4CAF50"/>
+        <circle cx="25" cy="75" r="3" fill="#4CAF50"/>
+        <circle cx="75" cy="75" r="3" fill="#4CAF50"/>
+      </svg>,
+
+      // Small Atom
+      <svg key="atom-2" className="science-icon rotate" style={{ top: '5%', left: '80%', width: '35px', height: '35px' }} viewBox="0 0 100 100" fill="#FFB74D">
+        <circle cx="50" cy="50" r="6" fill="#FF9800"/>
+        <ellipse cx="50" cy="50" rx="30" ry="12" fill="none" stroke="#FF9800" strokeWidth="2"/>
+        <ellipse cx="50" cy="50" rx="12" ry="30" fill="none" stroke="#FF9800" strokeWidth="2"/>
+        <circle cx="80" cy="50" r="2" fill="#FF5722"/>
+        <circle cx="20" cy="50" r="2" fill="#FF5722"/>
+        <circle cx="50" cy="20" r="2" fill="#FF5722"/>
+        <circle cx="50" cy="80" r="2" fill="#FF5722"/>
+      </svg>
+    ];
+
+    return (
+      <div className="science-background">
+        {scienceElements}
+      </div>
+    );
+  };
 
   return (
     <div className="min-h-screen p-4 md:p-6 font-sans" style={{ backgroundColor: '#FDF6E3', color: '#5D4037' }}>
       <style>{style}</style>
+      <ScienceBackground />
 
       {/* Header */}
-      <header className="max-w-[1200px] mx-auto flex flex-col md:flex-row justify-between items-center mb-8 gap-4">
-        {/* Left: Logo */}
-        <div className="flex-shrink-0">
-          <img
-            src="/lpsparklogo.png"
-            alt="LP科樂園 Logo"
-            className="h-40 object-contain drop-shadow-sm hover:scale-105 transition-transform duration-300"
-          />
-        </div>
-
-
-        {/* Right: User Actions */}
+      <header className="max-w-[1200px] mx-auto flex justify-end items-center mb-8 gap-4">
+        {/* Right: User Actions with Logo */}
         <div className="flex items-center gap-4">
           <button
             onClick={() => setShowUiSettings(true)}
@@ -177,16 +313,14 @@ const StudentDashboard: React.FC = () => {
           <button className="bg-[#FFF9F0] p-2 rounded-full border-2 border-[#E6D2B5] text-[#DCC098] hover:text-[#F4A261] hover:-translate-y-1 transition-all shadow-sm">
             <MessageSquare className="h-6 w-6" />
           </button>
-          <button
-            onClick={logout}
-            className="h-12 w-12 rounded-full border-4 border-[#E6D2B5] bg-white overflow-hidden shadow-sm cursor-pointer hover:scale-110 transition-transform"
-          >
-            <div className="h-full w-full flex items-center justify-center">
-              <div className="h-8 w-8 rounded-full bg-[#8D6E63] flex items-center justify-center text-white text-sm font-bold">
-                {user?.profile?.name?.charAt(0) || user?.username?.charAt(0) || 'S'}
-              </div>
-            </div>
-          </button>
+          {/* Logo in place of student avatar */}
+          <div className="flex-shrink-0">
+            <img
+              src="/lpsparklogo.png"
+              alt="LP科樂園 Logo"
+              className="h-12 object-contain drop-shadow-sm hover:scale-105 transition-transform duration-300"
+            />
+          </div>
         </div>
       </header>
 
@@ -194,52 +328,6 @@ const StudentDashboard: React.FC = () => {
       <main className="max-w-[1200px] mx-auto grid grid-cols-1 lg:grid-cols-12 gap-8 pb-10">
         {/* Left Sidebar */}
         <aside className="lg:col-span-4 bg-[#FEF7EC] border-4 border-[#5E4C40] rounded-3xl p-6 shadow-lg flex-shrink-0 flex flex-col min-h-fit">
-          {/* Avatar Group */}
-          <div className="mb-4 relative h-24 flex justify-center">
-            <img
-              src="/student_login.png"
-              alt="Students"
-              className="h-full object-contain"
-            />
-          </div>
-
-          {/* User Profile Section */}
-          <div className="text-center mb-6">
-            <div className="text-lg font-bold text-[#5E4C40]">
-              {user?.profile?.name || '學生'}
-            </div>
-            <div className="text-sm text-gray-600">
-              {user?.username}
-            </div>
-            {user?.profile?.class && (
-              <div className="text-sm text-gray-600">
-                班級: {user.profile.class}
-              </div>
-            )}
-          </div>
-
-          {/* Progress Summary */}
-          <div className="mb-6 bg-white/90 border-4 border-[#5E4C40] rounded-3xl p-4 shadow-sm">
-            <div className="flex items-center justify-between mb-2">
-              <div className="text-sm font-black text-[#5E4C40]">我的進度</div>
-              <div className="text-xs font-bold text-gray-600">
-                {overallProgress.total > 0 ? Math.round((overallProgress.completed / overallProgress.total) * 100) : 0}%
-              </div>
-            </div>
-            <div className="h-3 bg-gray-200 rounded-full border-2 border-[#5E4C40] overflow-hidden">
-              <div
-                className="h-full bg-[#93C47D]"
-                style={{
-                  width: `${overallProgress.total > 0 ? Math.round((overallProgress.completed / overallProgress.total) * 100) : 0}%`
-                }}
-              />
-            </div>
-            <div className="mt-2 flex justify-between text-xs font-bold text-gray-700">
-              <span>收到 {overallProgress.total}</span>
-              <span>完成 {overallProgress.completed}</span>
-              <span>未完成 {overallProgress.pending}</span>
-            </div>
-          </div>
 
           <div className="text-center mb-4 border-b-4 border-[#5E4C40] pb-2">
             <h3 className="text-xl font-bold text-[#5E4C40]">我的學科</h3>
