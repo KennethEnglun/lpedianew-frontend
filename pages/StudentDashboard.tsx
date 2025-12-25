@@ -113,27 +113,6 @@ const StudentDashboard: React.FC = () => {
       flex-direction: column;
     }
 
-    .text-outline-thick {
-      color: white;
-      text-shadow:
-        4px 4px 0 #8D6E63,
-        -2px -2px 0 #8D6E63,
-        2px -2px 0 #8D6E63,
-        -2px 2px 0 #8D6E63,
-        2px 2px 0 #8D6E63;
-    }
-
-    .rainbow-gradient {
-      background: linear-gradient(135deg,
-        #ff9a9e 0%,
-        #fecfef 20%,
-        #fecfef 40%,
-        #a8edea 60%,
-        #fed6e3 80%,
-        #ff9a9e 100%);
-      background-size: 400% 400%;
-      animation: rainbow 3s ease infinite;
-    }
 
     .science-background {
       position: fixed;
@@ -164,17 +143,6 @@ const StudentDashboard: React.FC = () => {
       animation: float 6s ease-in-out infinite, pulse 4s ease-in-out infinite;
     }
 
-    @keyframes rainbow {
-      0% { background-position: 0% 50%; }
-      50% { background-position: 100% 50%; }
-      100% { background-position: 0% 50%; }
-    }
-
-    @keyframes bounce {
-      0%, 20%, 50%, 80%, 100% { transform: translateY(0); }
-      40% { transform: translateY(-10px); }
-      60% { transform: translateY(-5px); }
-    }
 
     @keyframes float {
       0%, 100% { transform: translateY(0px) translateX(0px); }
@@ -581,35 +549,11 @@ const StudentDashboard: React.FC = () => {
             <>
               {/* Top Banner */}
               <div className="cartoon-card relative h-64 md:h-72 w-full group overflow-hidden">
-                <div className="absolute inset-0 border-[6px] border-[#DCC098]/30 rounded-[20px] pointer-events-none z-10"></div>
-
-                {/* Rainbow background */}
-                <div className="w-full h-full rainbow-gradient" />
-
-                {/* Character illustrations */}
-                <div className="absolute inset-0 flex justify-center items-center z-10">
-                  <div className="flex gap-8">
-                    <div className="w-20 h-20 bg-white/80 border-3 border-[#5D4037] rounded-full flex items-center justify-center text-3xl">
-                      👦
-                    </div>
-                    <div className="w-20 h-20 bg-white/80 border-3 border-[#5D4037] rounded-full flex items-center justify-center text-3xl">
-                      👧
-                    </div>
-                  </div>
-                </div>
-
-                {/* Overlay Text */}
-                <div className="absolute inset-0 flex flex-col justify-center items-center z-20">
-                  <h1
-                    className="text-4xl md:text-6xl font-extrabold text-outline-thick text-center tracking-wider"
-                    style={{
-                      animation: 'bounce 2s infinite',
-                      textShadow: '4px 4px 0 #8D6E63, -2px -2px 0 #8D6E63, 2px -2px 0 #8D6E63, -2px 2px 0 #8D6E63, 2px 2px 0 #8D6E63'
-                    }}
-                  >
-                    歡迎回到科學之旅!
-                  </h1>
-                </div>
+                <img
+                  src="/banner.png"
+                  alt="歡迎回到科學之旅!"
+                  className="w-full h-full object-cover"
+                />
               </div>
 
               {/* Bottom Grid (Challenges & Rewards) */}
