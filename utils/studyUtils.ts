@@ -213,7 +213,7 @@ export const studyAnalytics = {
         accuracy,
         averageTime: stats.total > 0 ? stats.totalTime / stats.total : 0,
         lastPracticed: stats.lastPracticed,
-        masteryLevel: accuracy >= 0.8 ? 'strong' : accuracy >= 0.6 ? 'average' : 'weak'
+        masteryLevel: (accuracy >= 0.8 ? 'strong' : accuracy >= 0.6 ? 'average' : 'weak') as 'strong' | 'average' | 'weak'
       };
     }).sort((a, b) => b.accuracy - a.accuracy); // 按正确率排序
   },

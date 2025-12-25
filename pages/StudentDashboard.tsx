@@ -11,6 +11,10 @@ import BotTaskChatModal from '../components/BotTaskChatModal';
 import AppStudioModal from '../components/AppStudioModal';
 import ImageGenerationConfirmModal from '../components/student/ImageGenerationConfirmModal';
 import StudyPracticeModal from '../components/student/StudyPracticeModal';
+import { StudyHistoryPanel } from '../components/student/StudyHistoryPanel';
+import { StudyAnalyticsModal } from '../components/student/StudyAnalyticsModal';
+import { aiAnalyticsService } from '../services/aiAnalyticsService';
+import type { StudyAnalytics } from '../types/study';
 
 const StudentDashboard: React.FC = () => {
   const navigate = useNavigate();
@@ -20,6 +24,11 @@ const StudentDashboard: React.FC = () => {
   const [showBotTaskChat, setShowBotTaskChat] = useState(false);
   const [showAppStudio, setShowAppStudio] = useState(false);
   const [showStudyPractice, setShowStudyPractice] = useState(false);
+  const [showStudyHistory, setShowStudyHistory] = useState(false);
+  const [showAnalyticsModal, setShowAnalyticsModal] = useState(false);
+  const [analyticsData, setAnalyticsData] = useState<StudyAnalytics | null>(null);
+  const [analyticsLoading, setAnalyticsLoading] = useState(false);
+  const [activeTab, setActiveTab] = useState<'practice' | 'history'>('practice');
   const [selectedBotTaskId, setSelectedBotTaskId] = useState<string | null>(null);
   const [selectedSubject, setSelectedSubject] = useState<Subject>(DEFAULT_SUBJECT);
   const [showTaskView, setShowTaskView] = useState(false);
@@ -213,6 +222,33 @@ const StudentDashboard: React.FC = () => {
       console.error('Failed to load points:', error);
     }
   }, []);
+
+  // 處理學習分析報告
+  const handleViewAnalytics = useCallback(async (analytics: StudyAnalytics) => {
+    setAnalyticsData(analytics);
+    setShowAnalyticsModal(true);
+  }, []);
+
+  // 重新生成分析報告
+  const handleRegenerateAnalytics = useCallback(async () => {
+    if (!user?.id || !user?.username) return;
+
+    setAnalyticsLoading(true);
+    try {
+      const response = await aiAnalyticsService.generateEnhancedAnalytics(
+        user.id.toString(),
+        user.username
+      );
+
+      if (response.success && response.data) {
+        setAnalyticsData(response.data);
+      }
+    } catch (error) {
+      console.error('重新生成分析報告失敗:', error);
+    } finally {
+      setAnalyticsLoading(false);
+    }
+  }, [user?.id, user?.username]);
 
   // 處理圖片生成確認
   const handleImageGeneration = (prompt: string) => {
@@ -684,13 +720,33 @@ const StudentDashboard: React.FC = () => {
               onClick={(e) => {
                 e.preventDefault();
                 e.stopPropagation();
+                setActiveTab('practice');
                 setShowStudyPractice(true);
               }}
-              className="w-[calc(100%-10px)] flex items-center gap-3 px-4 py-2 rounded-2xl border-4 transition-all duration-150 border-[#E6D2B5] bg-[#FFF3E0] hover:bg-white hover:-translate-y-1 shadow-sm"
+              className={`w-[calc(100%-10px)] flex items-center gap-3 px-4 py-2 rounded-2xl border-4 transition-all duration-150 border-[#E6D2B5] hover:bg-white hover:-translate-y-1 shadow-sm ${
+                activeTab === 'practice' ? 'bg-white ring-2 ring-blue-300' : 'bg-[#FFF3E0]'
+              }`}
               title="學習練習"
             >
               <Brain className="w-6 h-6 text-[#5E4C40]" />
               <span className="text-lg font-bold text-[#5E4C40] flex-1 text-left">學習練習</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                setActiveTab('history');
+                setShowStudyHistory(true);
+              }}
+              className={`w-[calc(100%-10px)] flex items-center gap-3 px-4 py-2 rounded-2xl border-4 transition-all duration-150 border-[#E6D2B5] hover:bg-white hover:-translate-y-1 shadow-sm ${
+                activeTab === 'history' ? 'bg-white ring-2 ring-blue-300' : 'bg-[#E3F2FD]'
+              }`}
+              title="學習記錄"
+            >
+              <ClipboardList className="w-6 h-6 text-[#5E4C40]" />
+              <span className="text-lg font-bold text-[#5E4C40] flex-1 text-left">學習記錄</span>
             </button>
 
             <button
@@ -987,6 +1043,41 @@ const StudentDashboard: React.FC = () => {
       <StudyPracticeModal
         open={showStudyPractice}
         onClose={() => setShowStudyPractice(false)}
+      />
+
+      {/* 學習歷史面板模態框 */}
+      {showStudyHistory && user && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-3xl max-w-6xl w-full max-h-[90vh] overflow-hidden shadow-lg">
+            <div className="bg-brand-brown text-white p-6 flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <ClipboardList className="w-8 h-8" />
+                <h2 className="text-2xl font-bold">學習記錄</h2>
+              </div>
+              <button
+                onClick={() => setShowStudyHistory(false)}
+                className="bg-white/20 hover:bg-white/30 p-2 rounded-xl transition-all"
+              >
+                <X className="w-6 h-6" />
+              </button>
+            </div>
+            <div className="p-6 overflow-y-auto max-h-[70vh]">
+              <StudyHistoryPanel
+                studentId={user.id.toString()}
+                studentName={user.username || user.profile?.name || '學生'}
+                onViewAnalytics={handleViewAnalytics}
+              />
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* AI分析報告模態框 */}
+      <StudyAnalyticsModal
+        isOpen={showAnalyticsModal}
+        onClose={() => setShowAnalyticsModal(false)}
+        analytics={analyticsData}
+        onRegenerateAnalytics={handleRegenerateAnalytics}
       />
     </div>
   );
