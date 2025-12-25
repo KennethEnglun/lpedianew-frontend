@@ -7,12 +7,15 @@ cmds = [
   # Railway/Nixpacks sometimes runs with production=true which omits devDependencies (breaks Vite build).
   # Also, some npm versions fail parsing certain lockfiles in the build environment.
   # Use an explicit install that includes dev deps and ignores package-lock.json.
-  'npm install --include=dev --no-package-lock'
+  'npm ci --include=dev || npm install --include=dev --no-package-lock',
+  'npm cache clean --force'
 ]
 
 [phases.build]
 cmds = [
-  'npm run build',
+  # Set memory limit and disable some optimizations to avoid build daemon issues
+  'export NODE_OPTIONS="--max-old-space-size=4096"',
+  'npm run build:railway',
   'echo "Frontend build completed"'
 ]
 
