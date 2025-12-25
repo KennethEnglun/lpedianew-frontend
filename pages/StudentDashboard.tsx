@@ -246,6 +246,11 @@ const StudentDashboard: React.FC = () => {
           // 觸發 AI 圖片生成
           setExecuteImagePrompt(imagePrompt + '_' + Date.now()); // 添加時間戳確保觸發
 
+          // 延遲重置以確保 AiChatModal 已接收到觸發
+          setTimeout(() => {
+            setExecuteImagePrompt('');
+          }, 1000);
+
           alert(`圖片生成中！消耗了 1 點數。提示詞：${imagePrompt}`);
           // 不關閉 AI 對話框，讓用戶可以繼續對話
         } else {

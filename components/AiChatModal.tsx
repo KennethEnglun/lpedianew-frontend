@@ -200,18 +200,28 @@ const AiChatModal: React.FC<{
   const endRef = useRef<HTMLDivElement | null>(null);
 
   // 處理外部觸發的圖片生成（點數扣減後）
+  const [isExecutingConfirmedGeneration, setIsExecutingConfirmedGeneration] = useState(false);
+
   useEffect(() => {
     if (executeImageGeneration && executeImageGeneration.trim()) {
       // 提取真正的提示詞（移除時間戳）
       const prompt = executeImageGeneration.split('_').slice(0, -1).join('_');
       setImagePrompt(prompt);
       setMySidebarView('image');
+      setIsExecutingConfirmedGeneration(true);
       // 延遲一下確保狀態更新後再執行
       setTimeout(() => {
         generateImage();
       }, 100);
     }
   }, [executeImageGeneration]);
+
+  // 在生成完成後重置標記
+  useEffect(() => {
+    if (isExecutingConfirmedGeneration && !imageLoading) {
+      setIsExecutingConfirmedGeneration(false);
+    }
+  }, [imageLoading, isExecutingConfirmedGeneration]);
   useEffect(() => {
     if (!open) return;
     endRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -419,8 +429,8 @@ const AiChatModal: React.FC<{
       return;
     }
 
-    // 學生端需要點數確認（除非是外部已確認的生成）
-    if (!isTeacher && onImageGeneration && !executeImageGeneration) {
+    // 學生端需要點數確認（除非正在執行已確認的生成）
+    if (!isTeacher && onImageGeneration && !isExecutingConfirmedGeneration) {
       onImageGeneration(prompt);
       return;
     }
