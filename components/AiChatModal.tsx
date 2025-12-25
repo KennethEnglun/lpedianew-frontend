@@ -141,7 +141,8 @@ const AiChatModal: React.FC<{
   onClose: () => void;
   onImageGeneration?: (prompt: string) => void;
   userPoints?: number;
-}> = ({ open, onClose, onImageGeneration, userPoints = 0 }) => {
+  executeImageGeneration?: string; // 如果有提示詞，直接執行生成
+}> = ({ open, onClose, onImageGeneration, userPoints = 0, executeImageGeneration }) => {
   const { user } = useAuth();
   const isTeacher = user?.role === 'teacher' || user?.role === 'admin';
 
@@ -197,6 +198,20 @@ const AiChatModal: React.FC<{
   const effectiveTeacherBotId = isTeacher ? (mySidebarView === 'bot' ? myChatBotId : 'global') : 'global';
 
   const endRef = useRef<HTMLDivElement | null>(null);
+
+  // 處理外部觸發的圖片生成（點數扣減後）
+  useEffect(() => {
+    if (executeImageGeneration && executeImageGeneration.trim()) {
+      // 提取真正的提示詞（移除時間戳）
+      const prompt = executeImageGeneration.split('_').slice(0, -1).join('_');
+      setImagePrompt(prompt);
+      setMySidebarView('image');
+      // 延遲一下確保狀態更新後再執行
+      setTimeout(() => {
+        generateImage();
+      }, 100);
+    }
+  }, [executeImageGeneration]);
   useEffect(() => {
     if (!open) return;
     endRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -404,8 +419,8 @@ const AiChatModal: React.FC<{
       return;
     }
 
-    // 學生端需要點數確認
-    if (!isTeacher && onImageGeneration) {
+    // 學生端需要點數確認（除非是外部已確認的生成）
+    if (!isTeacher && onImageGeneration && !executeImageGeneration) {
       onImageGeneration(prompt);
       return;
     }

@@ -67,6 +67,7 @@ const StudentDashboard: React.FC = () => {
   const [pointsTransactions, setPointsTransactions] = useState(loadTransactionsFromStorage);
   const [showImageConfirm, setShowImageConfirm] = useState(false);
   const [imagePrompt, setImagePrompt] = useState('');
+  const [executeImagePrompt, setExecuteImagePrompt] = useState('');
 
   // 保存點數變化到 localStorage
   useEffect(() => {
@@ -242,7 +243,10 @@ const StudentDashboard: React.FC = () => {
             ...prev
           ]);
 
-          alert(`圖片生成成功！消耗了 1 點數。提示詞：${imagePrompt}`);
+          // 觸發 AI 圖片生成
+          setExecuteImagePrompt(imagePrompt + '_' + Date.now()); // 添加時間戳確保觸發
+
+          alert(`圖片生成中！消耗了 1 點數。提示詞：${imagePrompt}`);
           // 不關閉 AI 對話框，讓用戶可以繼續對話
         } else {
           alert('點數不足！請聯繫老師獲取更多點數。');
@@ -280,6 +284,7 @@ const StudentDashboard: React.FC = () => {
       lastUpdate: new Date().toISOString()
     }));
   };
+
 
   // 使用 localStorage，不載入遠端數據
   // useEffect(() => {
@@ -915,6 +920,7 @@ const StudentDashboard: React.FC = () => {
         onClose={() => setShowAiChat(false)}
         onImageGeneration={handleImageGeneration}
         userPoints={userPoints.currentPoints}
+        executeImageGeneration={executeImagePrompt}
       />
       <AppStudioModal
         open={showAppStudio}
