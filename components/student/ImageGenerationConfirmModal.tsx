@@ -1,4 +1,5 @@
 import React from 'react';
+import { createPortal } from 'react-dom';
 import { Coins, Image, AlertTriangle } from 'lucide-react';
 import Button from '../Button';
 
@@ -28,8 +29,8 @@ export default function ImageGenerationConfirmModal(props: ImageGenerationConfir
   const hasEnoughPoints = currentPoints >= costPerGeneration;
   const remainingPoints = currentPoints - costPerGeneration;
 
-  return (
-    <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
+  const modalContent = (
+    <div className="fixed inset-0 bg-black/40 z-[9999] flex items-center justify-center p-4">
       <div className="bg-white rounded-2xl p-6 w-full max-w-md">
         <div className="flex items-center gap-3 mb-4">
           <div className="w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center">
@@ -115,4 +116,6 @@ export default function ImageGenerationConfirmModal(props: ImageGenerationConfir
       </div>
     </div>
   );
+
+  return createPortal(modalContent, document.body);
 }
