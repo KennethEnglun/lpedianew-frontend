@@ -5,7 +5,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { Calendar, BookOpen, TrendingUp, Clock, Target, BarChart3 } from 'lucide-react';
-import type { StudySession, StudyAnalytics } from '../../types/study';
+import type { StudySession, StudyAnalytics, StudyScope } from '../../types/study';
 import { studyStorage, studyAnalytics, formatUtils } from '../../utils/studyUtils';
 
 interface StudyHistoryPanelProps {
@@ -46,12 +46,22 @@ export const StudyHistoryPanel: React.FC<StudyHistoryPanelProps> = ({
   // 獲取所有科目
   const subjects = Array.from(new Set(sessions.map(s => s.scope.subject))).filter(Boolean);
 
-  // 生成分析報告
-  const handleGenerateAnalytics = () => {
+  // 生成特定範圍的分析報告
+  const handleGenerateAnalytics = (scope?: StudyScope) => {
     const analytics = studyAnalytics.generateStudyAnalytics(
       studentId,
       studentName,
-      selectedSubject === 'all' ? undefined : selectedSubject
+      scope
+    );
+    onViewAnalytics(analytics);
+  };
+
+  // 生成整體分析報告
+  const handleGenerateOverallAnalytics = () => {
+    const analytics = studyAnalytics.generateStudyAnalytics(
+      studentId,
+      studentName,
+      selectedSubject === 'all' ? undefined : { subject: selectedSubject }
     );
     onViewAnalytics(analytics);
   };
@@ -109,7 +119,7 @@ export const StudyHistoryPanel: React.FC<StudyHistoryPanelProps> = ({
         {/* 生成分析按鈕 */}
         <div className="mt-4 text-center">
           <button
-            onClick={handleGenerateAnalytics}
+            onClick={handleGenerateOverallAnalytics}
             disabled={completedSessions.length === 0}
             className="bg-brand-green hover:bg-brand-green-dark text-white px-6 py-2 rounded-xl font-medium shadow-comic transition-all transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed inline-flex items-center gap-2"
           >
@@ -223,13 +233,22 @@ export const StudyHistoryPanel: React.FC<StudyHistoryPanelProps> = ({
                 {/* 操作按鈕 */}
                 <div className="flex flex-col sm:flex-row gap-2">
                   {session.completed && (
-                    <button
-                      onClick={() => handleRetrySession(session)}
-                      className="bg-brand-blue hover:bg-blue-600 text-white px-4 py-2 rounded-xl font-medium transition-all transform hover:scale-105 inline-flex items-center gap-2"
-                    >
-                      <Clock className="w-4 h-4" />
-                      重新練習
-                    </button>
+                    <>
+                      <button
+                        onClick={() => handleRetrySession(session)}
+                        className="bg-brand-blue hover:bg-blue-600 text-white px-4 py-2 rounded-xl font-medium transition-all transform hover:scale-105 inline-flex items-center gap-2"
+                      >
+                        <Clock className="w-4 h-4" />
+                        重新練習
+                      </button>
+                      <button
+                        onClick={() => handleGenerateAnalytics(session.scope)}
+                        className="bg-brand-green hover:bg-brand-green-dark text-white px-4 py-2 rounded-xl font-medium transition-all transform hover:scale-105 inline-flex items-center gap-2"
+                      >
+                        <BarChart3 className="w-4 h-4" />
+                        分析此範圍
+                      </button>
+                    </>
                   )}
                 </div>
               </div>

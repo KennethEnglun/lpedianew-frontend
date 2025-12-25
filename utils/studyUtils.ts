@@ -221,10 +221,10 @@ export const studyAnalytics = {
   /**
    * 生成学习分析报告
    */
-  generateStudyAnalytics: (studentId: string, studentName: string, subject?: string): StudyAnalytics => {
+  generateStudyAnalytics: (studentId: string, studentName: string, scope?: Partial<StudyScope>): StudyAnalytics => {
     const allSessions = studyStorage.getAllSessions(studentId);
-    const sessions = subject
-      ? allSessions.filter(s => s.scope.subject === subject)
+    const sessions = scope
+      ? allSessions.filter(s => studyAnalytics.isSimilarScope(s.scope, scope))
       : allSessions;
 
     const completedSessions = sessions.filter(s => s.completed);
@@ -234,7 +234,7 @@ export const studyAnalytics = {
         id: `analytics_${studentId}_${Date.now()}`,
         studentId,
         studentName,
-        subject: subject || '全部科目',
+        subject: scope ? studyAnalytics.getScopeDescription(scope) : '全部學習記錄',
         analysisDate: new Date().toISOString(),
         totalSessions: 0,
         totalQuestions: 0,
@@ -273,7 +273,7 @@ export const studyAnalytics = {
       id: `analytics_${studentId}_${Date.now()}`,
       studentId,
       studentName,
-      subject: subject || '全部科目',
+      subject: scope ? studyAnalytics.getScopeDescription(scope) : '全部學習記錄',
       analysisDate: new Date().toISOString(),
       totalSessions: completedSessions.length,
       totalQuestions,
@@ -316,6 +316,53 @@ export const studyAnalytics = {
     }
 
     return recommendations;
+  },
+
+  /**
+   * 判斷兩個學習範圍是否相似（用於分析分組）
+   */
+  isSimilarScope: (scope1: StudyScope, scope2: Partial<StudyScope>): boolean => {
+    // 科目必須相同
+    if (scope1.subject !== scope2.subject) return false;
+
+    // 如果是自定義內容，比較內容
+    if (scope2.contentSource === 'custom' && scope1.contentSource === 'custom') {
+      return scope1.customContent === scope2.customContent;
+    }
+
+    // 如果是章節內容，比較章節和知識點
+    if (scope2.contentSource === 'chapters' && scope1.contentSource === 'chapters') {
+      const chapters1 = scope1.chapters?.sort().join(',') || '';
+      const chapters2 = scope2.chapters?.sort().join(',') || '';
+      const topics1 = scope1.topics?.sort().join(',') || '';
+      const topics2 = scope2.topics?.sort().join(',') || '';
+
+      return chapters1 === chapters2 && topics1 === topics2;
+    }
+
+    return false;
+  },
+
+  /**
+   * 生成學習範圍的描述文字
+   */
+  getScopeDescription: (scope: Partial<StudyScope>): string => {
+    if (!scope.subject) return '未指定學習範圍';
+
+    let description = scope.subject;
+
+    if (scope.contentSource === 'custom') {
+      description += ' - 自定義內容';
+    } else if (scope.chapters && scope.chapters.length > 0) {
+      description += ` - ${scope.chapters.join('、')}`;
+      if (scope.topics && scope.topics.length > 0) {
+        description += ` (${scope.topics.join('、')})`;
+      }
+    } else if (scope.topics && scope.topics.length > 0) {
+      description += ` - ${scope.topics.join('、')}`;
+    }
+
+    return description;
   }
 };
 

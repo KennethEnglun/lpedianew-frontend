@@ -35,7 +35,7 @@ export default function StudyPracticeModal({ open, onClose, initialScope }: Stud
     subject: '數學', // 預設科目
     chapters: [],
     topics: [],
-    difficulty: 'medium',
+    difficulty: '小三',
     questionCount: 10,
     contentSource: 'chapters',
     customContent: ''
@@ -68,7 +68,7 @@ export default function StudyPracticeModal({ open, onClose, initialScope }: Stud
       subject: '數學',
       chapters: [],
       topics: [],
-      difficulty: 'medium',
+      difficulty: '小三',
       questionCount: 10,
       contentSource: 'chapters',
       customContent: ''
@@ -369,13 +369,16 @@ export default function StudyPracticeModal({ open, onClose, initialScope }: Stud
                 <div>
                   <label className="block text-sm font-bold text-gray-700 mb-2">難度級別</label>
                   <select
-                    value={scope.difficulty || 'medium'}
+                    value={scope.difficulty || '小三'}
                     onChange={(e) => setScope(prev => ({ ...prev, difficulty: e.target.value as any }))}
                     className="w-full px-3 py-2 border-2 border-gray-300 rounded-xl focus:outline-none focus:border-brand-brown"
                   >
-                    <option value="easy">簡單</option>
-                    <option value="medium">中等</option>
-                    <option value="hard">困難</option>
+                    <option value="小一">小一程度</option>
+                    <option value="小二">小二程度</option>
+                    <option value="小三">小三程度</option>
+                    <option value="小四">小四程度</option>
+                    <option value="小五">小五程度</option>
+                    <option value="小六">小六程度</option>
                   </select>
                 </div>
 
@@ -424,7 +427,7 @@ export default function StudyPracticeModal({ open, onClose, initialScope }: Stud
               <div className="text-center">
                 <div className="text-xl font-bold text-brand-brown mb-2">AI 正在為您生成題目</div>
                 <div className="text-gray-600">
-                  正在根據您的學習範圍生成 {scope.questionCount} 道{scope.difficulty === 'easy' ? '簡單' : scope.difficulty === 'medium' ? '中等' : '困難'}難度的題目...
+                  正在根據您的學習範圍生成 {scope.questionCount} 道{scope.difficulty}程度的題目...
                 </div>
               </div>
             </div>
@@ -485,7 +488,7 @@ export default function StudyPracticeModal({ open, onClose, initialScope }: Stud
               <div className="flex items-center justify-between text-sm text-gray-600">
                 <div className="flex items-center gap-4">
                   <span>📚 {currentQuestion.topic}</span>
-                  <span>📊 {currentQuestion.difficulty === 'easy' ? '簡單' : currentQuestion.difficulty === 'medium' ? '中等' : '困難'}</span>
+                  <span>📊 {currentQuestion.difficulty}程度</span>
                 </div>
                 <div>
                   題目來源：{currentQuestion.source}

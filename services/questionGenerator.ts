@@ -57,11 +57,7 @@ export class QuestionGeneratorService {
    * 构建AI生成题目的提示词
    */
   private static buildGenerationPrompt(scope: StudyScope): string {
-    const difficultyText = {
-      easy: '简单',
-      medium: '中等',
-      hard: '困难'
-    }[scope.difficulty];
+    const difficultyText = `${scope.difficulty}程度`;
 
     let contentSection = '';
     if (scope.contentSource === 'custom' && scope.customContent) {
@@ -78,23 +74,23 @@ ${scope.customContent}
 - 知识点：${scope.topics.join('、')}`;
     }
 
-    return `你是一位专业的教育专家，需要为学生生成 ${scope.questionCount} 道${difficultyText}难度的选择题。
+    return `你是一位专业的小學教育专家，需要为学生生成 ${scope.questionCount} 道${difficultyText}的选择题。
 
 ${contentSection}
 
 请严格按照以下要求生成题目：
 
 1. 每道题目必须包含：
-   - 题目内容（清晰、准确、有针对性）
+   - 题目内容（清晰、准确、适合小學生理解）
    - 4个选项（标记为A、B、C、D）
    - 正确答案（明确指出是A、B、C或D）
-   - 详细解释（说明为什么这个答案正确，其他选项为什么错误）
+   - 详细解释（用小學生能懂的語言說明為什麼這個答案正確）
 
 2. 题目要求：
-   - ${difficultyText}难度，适合学生水平
+   - ${difficultyText}，適合小學生認知水平和語言習慣
    - 覆盖不同知识点，避免重复
-   - 题目表述清晰，避免歧义
-   - 选项长度适中，干扰项合理
+   - 题目表述清晰簡單，避免歧义和複雜詞彙
+   - 選項長度適中，干擾項合理但不混淆
 
 3. 输出格式（严格按照JSON格式）：
 \`\`\`json
@@ -253,7 +249,7 @@ ${contentSection}
 
       previewQuestions.push({
         id: generateId.question(),
-        content: `这是关于"${topic}"的${scope.difficulty === 'easy' ? '基础' : scope.difficulty === 'medium' ? '中等' : '高级'}题目示例`,
+        content: `这是关于"${topic}"的${scope.difficulty}程度题目示例`,
         options: [
           '这是选项 A',
           '这是选项 B',

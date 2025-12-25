@@ -9,7 +9,7 @@ export interface StudyScope {
   subject: string;           // 科目 (数学、英语、中文等)
   chapters: string[];        // 章节列表
   topics: string[];          // 具体主题/知识点
-  difficulty: 'easy' | 'medium' | 'hard';  // 难度级别
+  difficulty: '小一' | '小二' | '小三' | '小四' | '小五' | '小六';  // 难度级别
   questionCount: number;     // 题目数量 (5-50题)
   customContent?: string;    // 自定义学习内容 (最多2000字)
   contentSource: 'chapters' | 'custom';  // 内容来源：章节选择或自定义内容
@@ -24,7 +24,7 @@ export interface StudyQuestion {
   correctAnswer: number;     // 正确答案索引 (0-3)
   explanation: string;       // 答案解释
   topic: string;            // 所属知识点
-  difficulty: 'easy' | 'medium' | 'hard';
+  difficulty: '小一' | '小二' | '小三' | '小四' | '小五' | '小六';
   source: string;           // 题目来源 (章节名称或"自定义内容")
   generatedAt: string;      // 生成时间
 }
