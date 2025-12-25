@@ -1,6 +1,6 @@
 import type React from 'react';
 
-export type AdminSection = 'users' | 'assignments' | 'folders' | 'yearEnd' | 'points';
+export type AdminSection = 'users' | 'assignments' | 'folders' | 'yearEnd' | 'points' | 'moderation';
 export type UserRoleFilter = 'all' | 'teacher' | 'student';
 
 export interface AdminUser {

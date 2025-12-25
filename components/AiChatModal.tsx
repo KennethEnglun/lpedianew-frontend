@@ -4,6 +4,8 @@ import Button from './Button';
 import Input from './Input';
 import { useAuth } from '../contexts/AuthContext';
 import { authService } from '../services/authService';
+import { moderateContent, hasContentModerationBypass, logModerationAttempt, RiskLevel, type ModerationResult } from '../utils/contentModeration';
+import ContentModerationModal from './student/ContentModerationModal';
 
 type ChatMessage = {
   id: string;
@@ -184,6 +186,11 @@ const AiChatModal: React.FC<{
   const [imageUrls, setImageUrls] = useState<string[]>([]);
   const [imageLoading, setImageLoading] = useState(false);
   const [imageError, setImageError] = useState('');
+
+  // Content moderation
+  const [showModerationModal, setShowModerationModal] = useState(false);
+  const [currentModerationResult, setCurrentModerationResult] = useState<ModerationResult | null>(null);
+  const [pendingPrompt, setPendingPrompt] = useState('');
 
   // Teacher view
   const [studentSearch, setStudentSearch] = useState('');
@@ -443,6 +450,30 @@ const AiChatModal: React.FC<{
       return;
     }
 
+    // 內容審核檢查（學生端必須，教師端可選）
+    if (!isTeacher || !hasContentModerationBypass(user?.role || '')) {
+      const moderationResult = moderateContent(prompt);
+
+      // 記錄審核嘗試
+      if (user?.id) {
+        logModerationAttempt(
+          user.id,
+          prompt,
+          moderationResult,
+          moderationResult.riskLevel === RiskLevel.BLOCKED ? 'blocked' : 'warned'
+        );
+      }
+
+      // 如果內容被封鎖或需要警告
+      if (moderationResult.riskLevel === RiskLevel.BLOCKED ||
+          moderationResult.riskLevel === RiskLevel.WARNING) {
+        setCurrentModerationResult(moderationResult);
+        setPendingPrompt(prompt);
+        setShowModerationModal(true);
+        return;
+      }
+    }
+
     // 學生端需要點數確認
     if (!isTeacher && onImageGeneration) {
       onImageGeneration(prompt);
@@ -451,6 +482,42 @@ const AiChatModal: React.FC<{
 
     // 教師/管理員可以直接生成
     await doImageGeneration(prompt);
+  };
+
+  // 內容審核處理函數
+  const handleModerationCancel = () => {
+    setShowModerationModal(false);
+    setCurrentModerationResult(null);
+    setPendingPrompt('');
+  };
+
+  const handleModerationProceed = async () => {
+    // 只有警告級別允許繼續
+    if (currentModerationResult?.riskLevel === RiskLevel.WARNING) {
+      setShowModerationModal(false);
+
+      // 記錄用戶選擇繼續的行為
+      if (user?.id && currentModerationResult) {
+        logModerationAttempt(user.id, pendingPrompt, currentModerationResult, 'bypassed');
+      }
+
+      // 繼續原本的生成流程
+      if (!isTeacher && onImageGeneration) {
+        onImageGeneration(pendingPrompt);
+      } else {
+        await doImageGeneration(pendingPrompt);
+      }
+    }
+
+    setCurrentModerationResult(null);
+    setPendingPrompt('');
+  };
+
+  const handleUseSuggestion = (suggestion: string) => {
+    setImagePrompt(suggestion);
+    setShowModerationModal(false);
+    setCurrentModerationResult(null);
+    setPendingPrompt('');
   };
 
   const renameThread = async (threadId: string, title: string) => {
@@ -1343,6 +1410,16 @@ const AiChatModal: React.FC<{
 	          </div>
 		      </div>
 		    </div>
+
+      {/* 內容審核對話框 */}
+      <ContentModerationModal
+        open={showModerationModal}
+        moderationResult={currentModerationResult!}
+        originalPrompt={pendingPrompt}
+        onCancel={handleModerationCancel}
+        onProceed={currentModerationResult?.riskLevel === RiskLevel.WARNING ? handleModerationProceed : undefined}
+        onUseSuggestion={handleUseSuggestion}
+      />
 	  );
 };
 

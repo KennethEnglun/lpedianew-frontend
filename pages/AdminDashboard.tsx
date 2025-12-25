@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { ClipboardList, FolderArchive, ShieldAlert, Users, Coins } from 'lucide-react';
+import { ClipboardList, FolderArchive, Shield, ShieldAlert, Users, Coins } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { authService } from '../services/authService';
@@ -14,6 +14,7 @@ import AdminFoldersPanel from '../components/admin/panels/AdminFoldersPanel';
 import AdminUsersPanel from '../components/admin/panels/AdminUsersPanel';
 import AdminYearEndPanel from '../components/admin/panels/AdminYearEndPanel';
 import AdminPointsPanel from '../components/admin/panels/AdminPointsPanel';
+import ModerationLogsPanel from '../components/admin/ModerationLogsPanel';
 import type { AdminSection, AdminUser, SidebarItem, UserRoleFilter, StudentPointsStatus, PointsOverview, PointTransaction } from '../components/admin/types';
 import { VISIBLE_SUBJECTS } from '../platform';
 
@@ -623,6 +624,7 @@ const AdminDashboard: React.FC = () => {
     { key: 'assignments', label: '作業管理', icon: <ClipboardList className="w-5 h-5" /> },
     { key: 'folders', label: '班級資料夾', icon: <FolderArchive className="w-5 h-5" /> },
     { key: 'points', label: '點數管理', icon: <Coins className="w-5 h-5" /> },
+    { key: 'moderation', label: '內容審核', icon: <Shield className="w-5 h-5" /> },
     { key: 'yearEnd', label: '年度操作', icon: <ShieldAlert className="w-5 h-5" /> }
   ]), []);
 
@@ -632,6 +634,7 @@ const AdminDashboard: React.FC = () => {
       case 'assignments': return '作業管理';
       case 'folders': return '班級資料夾（封存）';
       case 'points': return '點數管理';
+      case 'moderation': return '內容審核';
       case 'yearEnd': return '年度操作';
       default: return '管理後台';
     }
@@ -643,6 +646,7 @@ const AdminDashboard: React.FC = () => {
       case 'assignments': return '以檔案總管方式查看作業；管理員可查看、刪除及封存';
       case 'folders': return '查看封存資料夾、詳細內容及復原';
       case 'points': return '管理學生點數，分配點數給個別學生或批次分配';
+      case 'moderation': return '監控 AI 圖片生成內容安全，查看審核記錄和統計';
       case 'yearEnd': return '升班（封存本年度所有學生內容）';
       default: return undefined;
     }
@@ -716,6 +720,8 @@ const AdminDashboard: React.FC = () => {
             />
           </div>
         )}
+
+        {activeSection === 'moderation' && <ModerationLogsPanel />}
 
         {activeSection === 'yearEnd' && (
           <AdminYearEndPanel yearEndLoading={yearEndLoading} yearEndResult={yearEndResult} onRun={() => void runYearEndArchive()} />
