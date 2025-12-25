@@ -31,15 +31,52 @@ const StudentDashboard: React.FC = () => {
   const [responseStatus, setResponseStatus] = useState<any>({});
 
   // 點數系統狀態
-  const [userPoints, setUserPoints] = useState({
-    currentPoints: 0,
-    totalReceived: 0,
-    totalUsed: 0,
-    lastUpdate: ''
-  });
-  const [pointsTransactions, setPointsTransactions] = useState([]);
+  // 從 localStorage 載入點數，如果沒有則使用預設值
+  const loadUserPointsFromStorage = () => {
+    const saved = localStorage.getItem('userPoints');
+    if (saved) {
+      try {
+        return JSON.parse(saved);
+      } catch (e) {
+        console.error('Failed to parse saved points:', e);
+      }
+    }
+    return {
+      currentPoints: 5,
+      totalReceived: 5,
+      totalUsed: 0,
+      lastUpdate: new Date().toISOString()
+    };
+  };
+
+  const [userPoints, setUserPoints] = useState(loadUserPointsFromStorage);
+
+  // 從 localStorage 載入交易記錄
+  const loadTransactionsFromStorage = () => {
+    const saved = localStorage.getItem('pointsTransactions');
+    if (saved) {
+      try {
+        return JSON.parse(saved);
+      } catch (e) {
+        console.error('Failed to parse saved transactions:', e);
+      }
+    }
+    return [];
+  };
+
+  const [pointsTransactions, setPointsTransactions] = useState(loadTransactionsFromStorage);
   const [showImageConfirm, setShowImageConfirm] = useState(false);
   const [imagePrompt, setImagePrompt] = useState('');
+
+  // 保存點數變化到 localStorage
+  useEffect(() => {
+    localStorage.setItem('userPoints', JSON.stringify(userPoints));
+  }, [userPoints]);
+
+  // 保存交易記錄到 localStorage
+  useEffect(() => {
+    localStorage.setItem('pointsTransactions', JSON.stringify(pointsTransactions));
+  }, [pointsTransactions]);
 
   // Compute folder hierarchies
   const stageFolders = useMemo(
@@ -164,8 +201,8 @@ const StudentDashboard: React.FC = () => {
             totalUsed: prev.totalUsed + 1
           }));
 
-          // 重新載入完整的點數資料
-          await loadUserPoints();
+          // 不重新載入，保持 localStorage 的狀態
+          // await loadUserPoints();
 
           alert('圖片生成成功！');
         } else {
@@ -176,11 +213,16 @@ const StudentDashboard: React.FC = () => {
 
         // 檢查是否有足夠點數
         if (userPoints.currentPoints >= 1) {
+          // 計算新餘額
+          const newBalance = userPoints.currentPoints - 1;
+          const newTotalUsed = userPoints.totalUsed + 1;
+
           // 模擬成功生成
           setUserPoints(prev => ({
             ...prev,
-            currentPoints: prev.currentPoints - 1,
-            totalUsed: prev.totalUsed + 1
+            currentPoints: newBalance,
+            totalUsed: newTotalUsed,
+            lastUpdate: new Date().toISOString()
           }));
 
           // 添加新的交易記錄
@@ -190,7 +232,7 @@ const StudentDashboard: React.FC = () => {
               userId: 'currentUser',
               type: 'image_generation',
               amount: -1,
-              balance: userPoints.currentPoints - 1,
+              balance: newBalance,
               description: '圖片生成',
               createdAt: new Date().toISOString(),
               metadata: {
@@ -201,8 +243,7 @@ const StudentDashboard: React.FC = () => {
           ]);
 
           alert(`圖片生成成功！消耗了 1 點數。提示詞：${imagePrompt}`);
-          // 成功生成後關閉 AI 對話框
-          setShowAiChat(false);
+          // 不關閉 AI 對話框，讓用戶可以繼續對話
         } else {
           alert('點數不足！請聯繫老師獲取更多點數。');
         }
@@ -232,11 +273,20 @@ const StudentDashboard: React.FC = () => {
     loadData();
   }, []);
 
-  useEffect(() => {
-    if (user) {
-      loadUserPoints();
-    }
-  }, [user, loadUserPoints]);
+  // 刷新點數顯示（僅更新時間戳，不覆蓋localStorage數據）
+  const refreshPoints = () => {
+    setUserPoints(prev => ({
+      ...prev,
+      lastUpdate: new Date().toISOString()
+    }));
+  };
+
+  // 使用 localStorage，不載入遠端數據
+  // useEffect(() => {
+  //   if (user) {
+  //     loadUserPoints();
+  //   }
+  // }, [user, loadUserPoints]);
 
   useEffect(() => {
     const loadFoldersData = async () => {
@@ -580,7 +630,7 @@ const StudentDashboard: React.FC = () => {
             totalUsed={userPoints.totalUsed}
             lastUpdate={userPoints.lastUpdate}
             transactions={pointsTransactions}
-            onRefresh={loadUserPoints}
+            onRefresh={refreshPoints}
           />
 
           <nav className="flex-1 space-y-3 overflow-y-auto">
