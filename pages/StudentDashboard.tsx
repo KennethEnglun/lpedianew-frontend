@@ -148,7 +148,7 @@ const StudentDashboard: React.FC = () => {
 
     .science-icon {
       position: absolute;
-      opacity: 0.08;
+      opacity: 0.2;
       animation: float 6s ease-in-out infinite;
     }
 
@@ -189,8 +189,8 @@ const StudentDashboard: React.FC = () => {
     }
 
     @keyframes pulse {
-      0%, 100% { opacity: 0.08; }
-      50% { opacity: 0.2; }
+      0%, 100% { opacity: 0.2; }
+      50% { opacity: 0.4; }
     }
   `;
 
@@ -387,15 +387,9 @@ const StudentDashboard: React.FC = () => {
           <button
             onClick={() => setShowUiSettings(true)}
             className="bg-[#FFF9F0] p-3 rounded-full border-3 border-[#E6D2B5] text-[#DCC098] hover:text-[#F4A261] hover:-translate-y-1 transition-all shadow-md"
-            title="音效設定"
+            title="設定"
           >
-            <Volume2 className="h-6 w-6" />
-          </button>
-          <button
-            className="bg-[#FFF9F0] p-3 rounded-full border-3 border-[#E6D2B5] text-[#DCC098] hover:text-[#F4A261] hover:-translate-y-1 transition-all shadow-md"
-            title="訊息"
-          >
-            <MessageSquare className="h-6 w-6" />
+            <Settings className="h-6 w-6" />
           </button>
           {/* Logout Button */}
           <button
@@ -429,7 +423,7 @@ const StudentDashboard: React.FC = () => {
             <button
               type="button"
               onClick={() => setShowAiChat(true)}
-              className="w-[calc(100%-10px)] flex items-center gap-3 px-4 py-2 rounded-2xl border-4 transition-all duration-150 border-[#5E4C40] bg-[#D2EFFF] hover:bg-white shadow-sm"
+              className="w-[calc(100%-10px)] flex items-center gap-3 px-4 py-2 rounded-2xl border-4 transition-all duration-150 border-[#E6D2B5] bg-[#D2EFFF] hover:bg-white hover:-translate-y-1 shadow-sm"
               title="AI對話"
             >
               <Bot className="w-6 h-6 text-[#5E4C40]" />
@@ -649,35 +643,6 @@ const StudentDashboard: React.FC = () => {
                   </div>
                 </div>
 
-                {/* Course Progress */}
-                <div className="space-y-3">
-                  {VISIBLE_SUBJECTS.slice(0, 3).map((subject) => {
-                    const config = SUBJECT_CONFIG[subject];
-                    const stats = subjectProgress.get(subject) ?? { total: 3, completed: 2 };
-                    const percentage = stats.total > 0 ? (stats.completed / stats.total) * 100 : 0;
-
-                    return (
-                      <div key={subject} className="flex items-center gap-3">
-                        <span className="text-lg">{config.icon}</span>
-                        <div className="flex-1">
-                          <div className="flex justify-between items-center mb-1">
-                            <span className="text-sm font-bold text-[#5D4037]">{subject}</span>
-                            <span className="text-xs font-bold text-gray-600">{stats.completed}/{stats.total}</span>
-                          </div>
-                          <div className="h-2 bg-gray-200 rounded-full border border-[#E6D2B5]">
-                            <div
-                              className="h-full rounded-full transition-all"
-                              style={{
-                                width: `${percentage}%`,
-                                backgroundColor: config.color
-                              }}
-                            />
-                          </div>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
               </div>
             </div>
 
