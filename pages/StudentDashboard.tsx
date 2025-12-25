@@ -113,6 +113,25 @@ const StudentDashboard: React.FC = () => {
       flex-direction: column;
     }
 
+    .banner-bg {
+      background: linear-gradient(135deg,
+        #f8d7da 0%,
+        #f5c2c7 25%,
+        #f1aeb5 50%,
+        #ec9ca4 75%,
+        #e8899b 100%);
+    }
+
+    .banner-text {
+      text-shadow:
+        3px 3px 0 #8B4B7A,
+        -1px -1px 0 #8B4B7A,
+        1px -1px 0 #8B4B7A,
+        -1px 1px 0 #8B4B7A,
+        1px 1px 0 #8B4B7A;
+      filter: drop-shadow(2px 2px 4px rgba(0,0,0,0.3));
+    }
+
 
     .science-background {
       position: fixed;
@@ -548,12 +567,12 @@ const StudentDashboard: React.FC = () => {
             /* Original Dashboard Content */
             <>
               {/* Top Banner */}
-              <div className="cartoon-card relative h-64 md:h-72 w-full group overflow-hidden">
-                <img
-                  src="/banner.png"
-                  alt="歡迎回到科學之旅!"
-                  className="w-full h-full object-cover"
-                />
+              <div className="cartoon-card relative h-64 md:h-72 w-full group overflow-hidden banner-bg">
+                <div className="absolute inset-0 flex flex-col justify-center items-center z-20">
+                  <h1 className="text-4xl md:text-6xl font-extrabold text-white text-center tracking-wider banner-text">
+                    歡迎回到科學之旅!
+                  </h1>
+                </div>
               </div>
 
               {/* Bottom Grid (Challenges & Rewards) */}
