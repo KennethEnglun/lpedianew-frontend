@@ -32,7 +32,7 @@ export default function StudyPracticeModal({ open, onClose, initialScope }: Stud
   // 主要狀態管理
   const [currentStep, setCurrentStep] = useState<StudyStep>('setup');
   const [scope, setScope] = useState<Partial<StudyScope>>(initialScope || {
-    subject: '數學', // 預設科目
+    subject: '科學', // 預設科目（固定）
     chapters: [],
     topics: [],
     difficulty: '小三',
@@ -67,7 +67,7 @@ export default function StudyPracticeModal({ open, onClose, initialScope }: Stud
     setActiveCardId(null);
     // 重置 scope 為預設值
     setScope({
-      subject: '數學',
+      subject: '科學',
       chapters: [],
       topics: [],
       difficulty: '小三',
@@ -94,7 +94,7 @@ export default function StudyPracticeModal({ open, onClose, initialScope }: Stud
   // 當modal開啟且有initialScope時，更新scope
   useEffect(() => {
     if (open && initialScope) {
-      setScope(initialScope);
+      setScope({ ...initialScope, subject: '科學' });
     }
   }, [open, initialScope]);
 
@@ -244,7 +244,7 @@ export default function StudyPracticeModal({ open, onClose, initialScope }: Stud
             </div>
             <div>
               <div className="text-xl font-black text-brand-brown">
-                {currentStep === 'setup' && '學習練習設置'}
+                {currentStep === 'setup' && '自學設置'}
                 {currentStep === 'generating' && 'AI 題目生成中'}
                 {currentStep === 'quiz' && '答題練習'}
                 {currentStep === 'answer-review' && '答案檢視'}
@@ -305,14 +305,10 @@ export default function StudyPracticeModal({ open, onClose, initialScope }: Stud
               <div>
                 <label className="block text-sm font-bold text-gray-700 mb-2">學習科目</label>
                 <select
-                  value={scope.subject || '數學'}
-                  onChange={(e) => setScope(prev => ({ ...prev, subject: e.target.value }))}
+                  value="科學"
+                  disabled
                   className="w-full px-3 py-2 border-2 border-gray-300 rounded-xl focus:outline-none focus:border-brand-brown"
                 >
-                  <option value="數學">數學</option>
-                  <option value="中文">中文</option>
-                  <option value="英文">英文</option>
-                  <option value="常識">常識</option>
                   <option value="科學">科學</option>
                 </select>
               </div>

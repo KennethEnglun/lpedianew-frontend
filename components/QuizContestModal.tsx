@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { X, Trophy } from 'lucide-react';
+import { X, Trophy, BarChart3 } from 'lucide-react';
 import { authService } from '../services/authService';
+import { AiReportModal } from './AiReportModal';
 
 type ContestSummary = {
   id: string;
@@ -41,6 +42,10 @@ export function QuizContestModal(props: {
   const [leaderboards, setLeaderboards] = useState<any | null>(null);
   const [leaderboardTab, setLeaderboardTab] = useState<'best' | 'total' | 'avg'>('best');
   const [leaderboardLoading, setLeaderboardLoading] = useState(false);
+  const [showAiReport, setShowAiReport] = useState(false);
+  const [aiReportLoading, setAiReportLoading] = useState(false);
+  const [aiReportError, setAiReportError] = useState('');
+  const [aiReport, setAiReport] = useState<any | null>(null);
 
   useEffect(() => {
     if (!open) return;
@@ -58,6 +63,10 @@ export function QuizContestModal(props: {
     setLeaderboards(null);
     setLeaderboardTab('best');
     setLeaderboardLoading(false);
+    setShowAiReport(false);
+    setAiReportLoading(false);
+    setAiReportError('');
+    setAiReport(null);
   }, [open, contest?.id]);
 
   const timeLeft = useMemo(() => {
@@ -136,6 +145,22 @@ export function QuizContestModal(props: {
     }
   };
 
+  const loadAiReport = async (refresh?: boolean) => {
+    if (!contest) return;
+    setAiReportLoading(true);
+    setAiReportError('');
+    try {
+      const data = await authService.getContestAiReport(contest.id, { refresh: !!refresh });
+      setAiReport(data?.report || null);
+      setShowAiReport(true);
+    } catch (e: any) {
+      setAiReportError(e?.message || '載入 AI 報告失敗');
+      setShowAiReport(true);
+    } finally {
+      setAiReportLoading(false);
+    }
+  };
+
   useEffect(() => {
     if (phase !== 'leaderboard') return;
     if (leaderboards) return;
@@ -198,16 +223,28 @@ export function QuizContestModal(props: {
                     </div>
                   )}
                 </div>
-                <button
-                  type="button"
-                  onClick={() => setPhase('leaderboard')}
-                  className="px-4 py-2 rounded-2xl bg-[#FDEEAD] border-4 border-brand-brown text-brand-brown font-black hover:bg-[#FCE690] shadow-comic active:translate-y-1 active:shadow-none"
-                >
-                  <span className="inline-flex items-center gap-2">
-                    <Trophy className="w-5 h-5" />
-                    排行榜
-                  </span>
-                </button>
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => loadAiReport(false)}
+                    className="px-4 py-2 rounded-2xl bg-[#D2EFFF] border-4 border-brand-brown text-brand-brown font-black hover:bg-white shadow-comic active:translate-y-1 active:shadow-none"
+                  >
+                    <span className="inline-flex items-center gap-2">
+                      <BarChart3 className="w-5 h-5" />
+                      AI 報告
+                    </span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setPhase('leaderboard')}
+                    className="px-4 py-2 rounded-2xl bg-[#FDEEAD] border-4 border-brand-brown text-brand-brown font-black hover:bg-[#FCE690] shadow-comic active:translate-y-1 active:shadow-none"
+                  >
+                    <span className="inline-flex items-center gap-2">
+                      <Trophy className="w-5 h-5" />
+                      排行榜
+                    </span>
+                  </button>
+                </div>
               </div>
 
               <div className="mt-6 flex gap-4">
@@ -451,6 +488,16 @@ export function QuizContestModal(props: {
           )}
         </div>
       </div>
+
+      <AiReportModal
+        open={showAiReport}
+        title="問答比賽 AI 報告"
+        loading={aiReportLoading}
+        error={aiReportError}
+        report={aiReport}
+        onClose={() => setShowAiReport(false)}
+        onRegenerate={() => loadAiReport(true)}
+      />
     </div>
   );
 }

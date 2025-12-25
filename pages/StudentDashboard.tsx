@@ -13,6 +13,10 @@ import ImageGenerationConfirmModal from '../components/student/ImageGenerationCo
 import StudyPracticeModal from '../components/student/StudyPracticeModal';
 import { StudyHistoryPanel } from '../components/student/StudyHistoryPanel';
 import { StudyAnalyticsModal } from '../components/student/StudyAnalyticsModal';
+import { QuizContestModal } from '../components/QuizContestModal';
+import { StudentQuizModal } from '../components/student/StudentQuizModal';
+import { StudentDiscussionModal } from '../components/student/StudentDiscussionModal';
+import NoteEditorModal from '../components/NoteEditorModal';
 import { aiAnalyticsService } from '../services/aiAnalyticsService';
 import type { StudyAnalytics, StudyScope } from '../types/study';
 
@@ -24,7 +28,7 @@ const StudentDashboard: React.FC = () => {
   const [showBotTaskChat, setShowBotTaskChat] = useState(false);
   const [showAppStudio, setShowAppStudio] = useState(false);
   const [showStudyPractice, setShowStudyPractice] = useState(false);
-  const [showStudyHistory, setShowStudyHistory] = useState(false);
+  const [showSelfStudyHub, setShowSelfStudyHub] = useState(false);
   const [showAnalyticsModal, setShowAnalyticsModal] = useState(false);
   const [analyticsData, setAnalyticsData] = useState<StudyAnalytics | null>(null);
   const [analyticsLoading, setAnalyticsLoading] = useState(false);
@@ -39,7 +43,17 @@ const StudentDashboard: React.FC = () => {
   const [classFolders, setClassFolders] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [tasks, setTasks] = useState<Task[]>([]);
+  const [tasksLoading, setTasksLoading] = useState(false);
   const [responseStatus, setResponseStatus] = useState<any>({});
+
+  const [showQuizModal, setShowQuizModal] = useState(false);
+  const [selectedQuizId, setSelectedQuizId] = useState<string | null>(null);
+  const [showDiscussionModal, setShowDiscussionModal] = useState(false);
+  const [selectedDiscussionId, setSelectedDiscussionId] = useState<string | null>(null);
+  const [showContestModal, setShowContestModal] = useState(false);
+  const [selectedContest, setSelectedContest] = useState<any | null>(null);
+  const [showNoteModal, setShowNoteModal] = useState(false);
+  const [selectedNoteId, setSelectedNoteId] = useState<string | null>(null);
 
   // 點數系統狀態
   // 從 localStorage 載入點數，如果沒有則使用預設值
@@ -132,6 +146,20 @@ const StudentDashboard: React.FC = () => {
     () => classFolders.filter((f) => f && f.level === 3 && !f.archivedAt && String(f.parentId || '') === String(selectedTopicId || '')),
     [classFolders, selectedTopicId]
   );
+
+  const tasksInTopic = useMemo(() => {
+    if (!selectedTopicId) return [];
+    return tasks.filter((t: any) => {
+      const snap = t?.folderSnapshot;
+      const path = Array.isArray(snap?.path) ? snap.path : [];
+      return path.some((p: any) => String(p?.id) === String(selectedTopicId));
+    });
+  }, [tasks, selectedTopicId]);
+
+  const tasksInSubfolder = useMemo(() => {
+    if (!selectedSubfolderId) return [];
+    return tasks.filter((t: any) => String(t?.folderId || '') === String(selectedSubfolderId));
+  }, [tasks, selectedSubfolderId]);
 
   // Calculate task completion status
   const isTaskCompleted = (task: Task) => {
@@ -234,8 +262,8 @@ const StudentDashboard: React.FC = () => {
   const handleRetryScope = useCallback((scope: Partial<StudyScope>) => {
     // 設置重新練習的學習範圍
     setRetrySessionScope(scope);
-    // 關閉歷史面板
-    setShowStudyHistory(false);
+    // 關閉自學天地
+    setShowSelfStudyHub(false);
     // 開啟練習模態框
     setShowStudyPractice(true);
   }, []);
@@ -342,22 +370,155 @@ const StudentDashboard: React.FC = () => {
     }
   };
 
-  // Fetch all data
-  useEffect(() => {
-    const loadData = async () => {
-      try {
-        // Load discussion status for progress calculation
-        // const statusResponse = await authService.getDiscussionResponseStatus().catch(() => ({}));
-        // setResponseStatus(statusResponse);
-        setResponseStatus({}); // Temporary: empty object until method is implemented
-        // TODO: Fix getStudentTasks method in authService
-        setTasks([]); // Temporary: set empty array until method is fixed
-      } catch (error) {
-        console.error('Failed to load data:', error);
-      }
-    };
-    loadData();
+  const coerceSubject = useCallback((value: any): Subject => {
+    const s = String(value ?? '').trim();
+    const allowed = new Set(Object.values(Subject));
+    return (allowed.has(s as Subject) ? (s as Subject) : Subject.SCIENCE);
   }, []);
+
+  const loadStudentTasks = useCallback(async () => {
+    setTasksLoading(true);
+    try {
+      const [
+        discussionResponse,
+        quizResponse,
+        gameResponse,
+        botTaskResponse,
+        contestResponse,
+        noteResponse
+      ] = await Promise.all([
+        authService.getStudentDiscussions().catch(() => ({ discussions: [] })),
+        authService.getStudentQuizzes().catch(() => ({ quizzes: [], total: 0 })),
+        authService.getStudentGames().catch(() => ({ games: [] })),
+        authService.getStudentBotTasks().catch(() => ({ tasks: [], total: 0 })),
+        authService.getStudentContests().catch(() => ({ contests: [], total: 0 })),
+        authService.getStudentNotes().catch(() => ({ notes: [], total: 0 }))
+      ]);
+
+      const discussionTasks: Task[] = (discussionResponse.discussions || []).map((d: any) => ({
+        id: String(d.id),
+        title: String(d.title || ''),
+        type: 'discussion',
+        subject: coerceSubject(d.subject),
+        teacherName: d.teacherName || '教師',
+        teacherAvatar: '/teacher_login.png',
+        createdAt: d.createdAt || d.updatedAt,
+        folderId: d.classFolderId || d.folderSnapshot?.folderId || null,
+        folderSnapshot: d.folderSnapshot || null,
+        completed: false
+      }));
+
+      const quizTasks: Task[] = (quizResponse.quizzes || []).map((q: any) => ({
+        id: String(q.id),
+        title: String(q.title || ''),
+        type: 'quiz',
+        subject: coerceSubject(q.subject),
+        teacherName: q.teacherName || '系統',
+        teacherAvatar: '/teacher_login.png',
+        createdAt: q.createdAt || q.updatedAt || q.assignedAt,
+        folderId: q.classFolderId || q.folderSnapshot?.folderId || null,
+        folderSnapshot: q.folderSnapshot || null,
+        completed: !!q.completed,
+        score: q.score ?? null
+      }));
+
+      const gameTasks: Task[] = (gameResponse.games || []).map((g: any) => ({
+        id: String(g.id),
+        title: String(g.title || ''),
+        type: 'game',
+        subject: coerceSubject(g.subject),
+        teacherName: g.teacherName || '系統',
+        teacherAvatar: '/teacher_login.png',
+        createdAt: g.createdAt || g.updatedAt || g.assignedAt,
+        folderId: g.classFolderId || g.folderSnapshot?.folderId || null,
+        folderSnapshot: g.folderSnapshot || null,
+        completed: !!g.completed,
+        score: g.bestScore ?? null
+      }));
+
+      const botTasks: Task[] = (botTaskResponse.tasks || []).map((t: any) => ({
+        id: String(t.id),
+        title: String(t.botName || t.title || 'Pedia 任務'),
+        type: 'ai-bot',
+        subject: coerceSubject(t.subject),
+        teacherName: t.teacherName || '教師',
+        teacherAvatar: '/teacher_login.png',
+        createdAt: t.createdAt || t.updatedAt || t.assignedAt,
+        folderId: t.classFolderId || t.folderSnapshot?.folderId || null,
+        folderSnapshot: t.folderSnapshot || null,
+        completed: !!t.completed
+      }));
+
+      const contestTasks: Task[] = (contestResponse.contests || []).map((c: any) => ({
+        id: String(c.id),
+        title: String(c.title || ''),
+        type: 'contest',
+        subject: coerceSubject(c.subject),
+        teacherName: c.teacherName || '系統',
+        teacherAvatar: '/teacher_login.png',
+        createdAt: c.createdAt || c.updatedAt || c.assignedAt,
+        folderId: c.classFolderId || c.folderSnapshot?.folderId || null,
+        folderSnapshot: c.folderSnapshot || null,
+        completed: false,
+        score: c.bestScore ?? null,
+        ...(c.topic ? { topic: c.topic } : {}),
+        ...(c.grade ? { grade: c.grade } : {}),
+        ...(c.questionCount ? { questionCount: c.questionCount } : {}),
+        ...(c.timeLimitSeconds !== undefined ? { timeLimitSeconds: c.timeLimitSeconds } : {}),
+        ...(c.attempts !== undefined ? { attempts: c.attempts } : {}),
+        ...(c.bestScore !== undefined ? { bestScore: c.bestScore } : {})
+      } as any));
+
+      const noteTasks: Task[] = (noteResponse.notes || []).map((n: any) => ({
+        id: String(n.id),
+        title: String(n.title || '筆記'),
+        type: 'note',
+        subject: coerceSubject(n.subject),
+        teacherName: n.teacherName || '教師',
+        teacherAvatar: '/teacher_login.png',
+        createdAt: n.createdAt || n.updatedAt || n.assignedAt,
+        folderId: n.classFolderId || n.folderSnapshot?.folderId || null,
+        folderSnapshot: n.folderSnapshot || null,
+        completed: !!n.completed
+      }));
+
+      const allTasks: Task[] = [...discussionTasks, ...quizTasks, ...gameTasks, ...botTasks, ...contestTasks, ...noteTasks];
+      allTasks.sort((a, b) => new Date(String(b.createdAt || 0)).getTime() - new Date(String(a.createdAt || 0)).getTime());
+      setTasks(allTasks);
+
+      // 背景載入：討論串回應狀態（用於顯示完成）
+      const statusPairs = await Promise.all(
+        discussionTasks.map(async (t) => {
+          try {
+            const status = await authService.checkStudentResponse(t.id);
+            return [t.id, status] as const;
+          } catch {
+            return [t.id, { hasResponded: false }] as const;
+          }
+        })
+      );
+      const nextStatus: any = {};
+      for (const [id, st] of statusPairs) nextStatus[id] = st;
+      setResponseStatus(nextStatus);
+    } catch (error) {
+      console.error('Failed to load tasks:', error);
+      setTasks([]);
+      setResponseStatus({});
+    } finally {
+      setTasksLoading(false);
+    }
+  }, [coerceSubject]);
+
+  useEffect(() => {
+    if (!user?.id) return;
+    void loadStudentTasks();
+  }, [user?.id, loadStudentTasks]);
+
+  useEffect(() => {
+    if (!showTaskView) return;
+    if (tasks.length > 0) return;
+    void loadStudentTasks();
+  }, [showTaskView, tasks.length, loadStudentTasks]);
 
   // 刷新點數顯示（僅更新時間戳，不覆蓋localStorage數據）
   const refreshPoints = () => {
@@ -732,32 +893,15 @@ const StudentDashboard: React.FC = () => {
                 e.preventDefault();
                 e.stopPropagation();
                 setActiveTab('practice');
-                setShowStudyPractice(true);
+                setShowSelfStudyHub(true);
               }}
               className={`w-[calc(100%-10px)] flex items-center gap-3 px-4 py-2 rounded-2xl border-4 transition-all duration-150 border-[#E6D2B5] hover:bg-white hover:-translate-y-1 shadow-sm ${
                 activeTab === 'practice' ? 'bg-white ring-2 ring-blue-300' : 'bg-[#FFF3E0]'
               }`}
-              title="學習練習"
+              title="自學天地"
             >
               <Brain className="w-6 h-6 text-[#5E4C40]" />
-              <span className="text-lg font-bold text-[#5E4C40] flex-1 text-left">學習練習</span>
-            </button>
-
-            <button
-              type="button"
-              onClick={(e) => {
-                e.preventDefault();
-                e.stopPropagation();
-                setActiveTab('history');
-                setShowStudyHistory(true);
-              }}
-              className={`w-[calc(100%-10px)] flex items-center gap-3 px-4 py-2 rounded-2xl border-4 transition-all duration-150 border-[#E6D2B5] hover:bg-white hover:-translate-y-1 shadow-sm ${
-                activeTab === 'history' ? 'bg-white ring-2 ring-blue-300' : 'bg-[#E3F2FD]'
-              }`}
-              title="學習記錄"
-            >
-              <ClipboardList className="w-6 h-6 text-[#5E4C40]" />
-              <span className="text-lg font-bold text-[#5E4C40] flex-1 text-left">學習記錄</span>
+              <span className="text-lg font-bold text-[#5E4C40] flex-1 text-left">自學天地</span>
             </button>
 
             <button
@@ -880,20 +1024,25 @@ const StudentDashboard: React.FC = () => {
                   <div>
                     <div className="flex items-center gap-3 mb-4">
                       <button
-                        onClick={() => setSelectedTopicId('')}
+                        onClick={() => {
+                          if (selectedSubfolderId) setSelectedSubfolderId('');
+                          else setSelectedTopicId('');
+                        }}
                         className="text-[#5D4037] hover:text-blue-600 text-sm font-bold"
                       >
-                        ← 返回課題選擇
+                        {selectedSubfolderId ? '← 返回子資料夾' : '← 返回課題選擇'}
                       </button>
                     </div>
                     <div className="text-lg font-bold text-[#5D4037] mb-4">
-                      {topicFolders.find(f => f.id === selectedTopicId)?.name}
+                      {selectedSubfolderId
+                        ? `${topicFolders.find(f => f.id === selectedTopicId)?.name || ''} / ${subFolders.find((f: any) => String(f.id) === String(selectedSubfolderId))?.name || ''}`
+                        : (topicFolders.find(f => f.id === selectedTopicId)?.name || '')}
                     </div>
-                    {subFolders.length > 0 ? (
-                      /* Sub Folders */
-                      <div>
+
+                    {!selectedSubfolderId && subFolders.length > 0 && (
+                      <div className="mb-6">
                         <div className="text-md font-bold text-[#5D4037] mb-3">子資料夾</div>
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                           {subFolders.map((folder: any) => (
                             <div
                               key={folder.id}
@@ -906,11 +1055,111 @@ const StudentDashboard: React.FC = () => {
                           ))}
                         </div>
                       </div>
-                    ) : (
-                      <div className="text-center py-12 text-gray-500">
-                        此課題暫無子資料夾或任務
-                      </div>
                     )}
+
+                    <div className="mt-2">
+                      <div className="flex items-center justify-between mb-3">
+                        <div className="text-md font-bold text-[#5D4037]">任務</div>
+                        <button
+                          type="button"
+                          onClick={() => loadStudentTasks()}
+                          className="text-sm font-bold text-[#5D4037] hover:text-blue-600"
+                        >
+                          重新整理
+                        </button>
+                      </div>
+
+                      {tasksLoading ? (
+                        <div className="flex items-center justify-center py-10">
+                          <RefreshCw className="w-6 h-6 animate-spin text-[#5D4037]" />
+                          <span className="ml-2 text-[#5D4037] font-bold">載入任務中...</span>
+                        </div>
+                      ) : (
+                        (() => {
+                          const list = selectedSubfolderId ? tasksInSubfolder : tasksInTopic;
+                          if (list.length === 0) {
+                            return (
+                              <div className="text-center py-10 text-gray-500 border-4 border-dashed border-gray-300 rounded-3xl">
+                                此處暫無任務
+                              </div>
+                            );
+                          }
+                          return (
+                            <div className="space-y-4">
+                              {list.map((task: any) => {
+                                const done = isTaskCompleted(task);
+                                const typeLabel =
+                                  task.type === 'quiz' ? '小測驗'
+                                    : task.type === 'contest' ? '問答比賽'
+                                      : task.type === 'ai-bot' ? 'Pedia任務'
+                                        : task.type === 'discussion' ? '討論串'
+                                          : task.type === 'note' ? '筆記'
+                                            : task.type === 'game' ? '遊戲'
+                                              : task.type;
+
+                                const pathNames = Array.isArray(task.folderSnapshot?.path)
+                                  ? task.folderSnapshot.path.map((p: any) => String(p?.name || '')).filter(Boolean).join(' / ')
+                                  : '';
+
+                                return (
+                                  <div
+                                    key={`${task.type}-${task.id}`}
+                                    className="bg-white border-4 border-[#5D4037] rounded-2xl p-4 shadow-sm"
+                                  >
+                                    <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
+                                      <div className="min-w-0">
+                                        <div className="text-lg font-bold text-[#5D4037] truncate">
+                                          {task.title}
+                                        </div>
+                                        <div className="mt-1 text-sm text-gray-700 font-bold">
+                                          {typeLabel} • {task.subject}{pathNames ? ` • ${pathNames}` : ''}{task.createdAt ? ` • ${new Date(task.createdAt).toLocaleString()}` : ''}
+                                        </div>
+                                        <div className="mt-2 text-xs font-bold">
+                                          <span className={`px-2 py-1 rounded-lg border-2 ${done ? 'bg-green-50 border-green-300 text-green-800' : 'bg-yellow-50 border-yellow-300 text-yellow-800'}`}>
+                                            {done ? '已完成' : '未完成'}
+                                          </span>
+                                          {typeof task.score === 'number' && (
+                                            <span className="ml-2 text-gray-700">分數：{Math.round(task.score)}%</span>
+                                          )}
+                                        </div>
+                                      </div>
+                                      <div className="flex gap-2 flex-shrink-0">
+                                        <button
+                                          type="button"
+                                          onClick={() => {
+                                            if (task.type === 'ai-bot') {
+                                              setSelectedBotTaskId(String(task.id));
+                                              setShowBotTaskChat(true);
+                                            } else if (task.type === 'contest') {
+                                              setSelectedContest(task);
+                                              setShowContestModal(true);
+                                            } else if (task.type === 'quiz') {
+                                              setSelectedQuizId(String(task.id));
+                                              setShowQuizModal(true);
+                                            } else if (task.type === 'discussion') {
+                                              setSelectedDiscussionId(String(task.id));
+                                              setShowDiscussionModal(true);
+                                            } else if (task.type === 'note') {
+                                              setSelectedNoteId(String(task.id));
+                                              setShowNoteModal(true);
+                                            } else {
+                                              window.alert('此任務類型暫未支援於學生端開啟');
+                                            }
+                                          }}
+                                          className="px-4 py-2 rounded-2xl bg-[#FDEEAD] border-4 border-[#5D4037] text-[#5D4037] font-black hover:bg-[#FCE690] shadow-comic active:translate-y-1 active:shadow-none"
+                                        >
+                                          開啟
+                                        </button>
+                                      </div>
+                                    </div>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          );
+                        })()
+                      )}
+                    </div>
                   </div>
                 )}
               </div>
@@ -1060,29 +1309,76 @@ const StudentDashboard: React.FC = () => {
         initialScope={retrySessionScope}
       />
 
-      {/* 學習歷史面板模態框 */}
-      {showStudyHistory && user && (
+      {/* 自學天地（練習 / 記錄 分頁） */}
+      {showSelfStudyHub && user && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-3xl max-w-6xl w-full max-h-[90vh] overflow-hidden shadow-lg">
+          <div className="bg-white rounded-3xl max-w-6xl w-full max-h-[90vh] overflow-hidden shadow-lg border-4 border-brand-brown">
             <div className="bg-brand-brown text-white p-6 flex items-center justify-between">
               <div className="flex items-center gap-3">
-                <ClipboardList className="w-8 h-8" />
-                <h2 className="text-2xl font-bold">學習記錄</h2>
+                <Brain className="w-8 h-8" />
+                <h2 className="text-2xl font-bold">自學天地</h2>
               </div>
               <button
-                onClick={() => setShowStudyHistory(false)}
+                onClick={() => setShowSelfStudyHub(false)}
                 className="bg-white/20 hover:bg-white/30 p-2 rounded-xl transition-all"
               >
                 <X className="w-6 h-6" />
               </button>
             </div>
-            <div className="p-6 overflow-y-auto max-h-[70vh]">
-              <StudyHistoryPanel
-                studentId={user.id.toString()}
-                studentName={user.username || user.profile?.name || '學生'}
-                onViewAnalytics={handleViewAnalytics}
-                onRetryScope={handleRetryScope}
-              />
+
+            <div className="px-6 pt-4 bg-white">
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => setActiveTab('practice')}
+                  className={`px-4 py-2 rounded-xl font-bold border-2 transition-all ${
+                    activeTab === 'practice'
+                      ? 'bg-brand-brown text-white border-brand-brown'
+                      : 'bg-white text-brand-brown border-brand-brown/40 hover:bg-brand-cream'
+                  }`}
+                >
+                  練習
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setActiveTab('history')}
+                  className={`px-4 py-2 rounded-xl font-bold border-2 transition-all ${
+                    activeTab === 'history'
+                      ? 'bg-brand-brown text-white border-brand-brown'
+                      : 'bg-white text-brand-brown border-brand-brown/40 hover:bg-brand-cream'
+                  }`}
+                >
+                  學習記錄
+                </button>
+              </div>
+            </div>
+
+            <div className="p-6 overflow-y-auto max-h-[70vh] bg-brand-cream">
+              {activeTab === 'practice' ? (
+                <div className="bg-white rounded-2xl p-6 shadow-comic border-2 border-brand-brown/10">
+                  <div className="text-xl font-black text-brand-brown mb-2">科學自學練習</div>
+                  <div className="text-sm text-gray-700 font-bold mb-5">
+                    本系統學生自學科目固定為「科學」。
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowSelfStudyHub(false);
+                      setShowStudyPractice(true);
+                    }}
+                    className="px-6 py-3 rounded-2xl bg-[#93C47D] border-4 border-brand-brown text-brand-brown font-black text-lg shadow-comic active:translate-y-1 active:shadow-none hover:bg-[#86b572]"
+                  >
+                    開始練習
+                  </button>
+                </div>
+              ) : (
+                <StudyHistoryPanel
+                  studentId={user.id.toString()}
+                  studentName={user.username || user.profile?.name || '學生'}
+                  onViewAnalytics={handleViewAnalytics}
+                  onRetryScope={handleRetryScope}
+                />
+              )}
             </div>
           </div>
         </div>
@@ -1095,6 +1391,39 @@ const StudentDashboard: React.FC = () => {
         analytics={analyticsData}
         onRegenerateAnalytics={handleRegenerateAnalytics}
       />
+
+      <StudentQuizModal
+        open={showQuizModal}
+        quizId={selectedQuizId}
+        onClose={() => { setShowQuizModal(false); setSelectedQuizId(null); }}
+        onFinished={() => loadStudentTasks()}
+      />
+
+      <StudentDiscussionModal
+        open={showDiscussionModal}
+        discussionId={selectedDiscussionId}
+        onClose={() => { setShowDiscussionModal(false); setSelectedDiscussionId(null); }}
+        onSubmitted={() => loadStudentTasks()}
+      />
+
+      <QuizContestModal
+        open={showContestModal}
+        contest={selectedContest}
+        onClose={() => { setShowContestModal(false); setSelectedContest(null); }}
+        onFinished={() => loadStudentTasks()}
+      />
+
+      {showNoteModal && user && (
+        <NoteEditorModal
+          open={showNoteModal}
+          onClose={() => { setShowNoteModal(false); setSelectedNoteId(null); }}
+          authService={authService}
+          mode="student"
+          noteId={selectedNoteId || undefined}
+          viewerId={String(user.id)}
+          viewerRole="student"
+        />
+      )}
     </div>
   );
 };

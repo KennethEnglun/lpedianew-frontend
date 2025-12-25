@@ -241,7 +241,7 @@ ${accuracyData}
     const { totalSessions, overallAccuracy, averageScore, strengths, weaknesses } = analytics;
 
     if (totalSessions === 0) {
-      return '開始第一次學習練習，建立學習基礎！';
+      return '開始第一次自學練習，建立學習基礎！';
     }
 
     let summary = `完成了 ${totalSessions} 次練習，`;

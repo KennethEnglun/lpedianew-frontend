@@ -15,6 +15,7 @@ import DraftSavePublishWizardModal from '../components/DraftSavePublishWizardMod
 import ClassFolderSelectInline from '../components/ClassFolderSelectInline';
 import AssignmentExplorerModal from '../components/AssignmentExplorerModal';
 import NoteEditorModal, { NoteEditorHandle } from '../components/NoteEditorModal';
+import { AiReportModal } from '../components/AiReportModal';
 import { MathExpressionBuilder, finalizeMathQuestions } from '../components/MathExpressionBuilder';
 import { MathEquationBuilder, finalizeMathEquationQuestions } from '../components/MathEquationBuilder';
 import { MathExpressionView, FractionView } from '../components/MathExpressionView';
@@ -189,6 +190,12 @@ const TeacherDashboard: React.FC = () => {
   const [isEditingContent, setIsEditingContent] = useState(false);
   const [editedContent, setEditedContent] = useState('');
   const [viewingResultDetails, setViewingResultDetails] = useState<any>(null); // State for viewing specific student result details
+  const [aiReportModalOpen, setAiReportModalOpen] = useState(false);
+  const [aiReportLoading, setAiReportLoading] = useState(false);
+  const [aiReportError, setAiReportError] = useState('');
+  const [aiReportData, setAiReportData] = useState<any | null>(null);
+  const [aiReportTitle, setAiReportTitle] = useState('');
+  const [aiReportRequest, setAiReportRequest] = useState<null | { toolType: 'quiz' | 'contest'; toolId: string; scope: 'overall' | 'student'; studentId?: string }>(null);
   const [showGamePreviewModal, setShowGamePreviewModal] = useState(false);
   const [previewGame, setPreviewGame] = useState<any>(null);
   const [previewResult, setPreviewResult] = useState<any>(null);
@@ -907,6 +914,41 @@ const TeacherDashboard: React.FC = () => {
       alert('載入詳情失敗：' + (error instanceof Error ? error.message : '未知錯誤'));
     } finally {
       setLoading(false);
+    }
+  };
+
+  const openAiReport = async (payload: { toolType: 'quiz' | 'contest'; toolId: string; scope: 'overall' | 'student'; studentId?: string; titleSuffix?: string }) => {
+    setAiReportModalOpen(true);
+    setAiReportLoading(true);
+    setAiReportError('');
+    setAiReportData(null);
+    setAiReportRequest({ toolType: payload.toolType, toolId: payload.toolId, scope: payload.scope, studentId: payload.studentId });
+    setAiReportTitle(`${payload.toolType === 'quiz' ? '小測驗' : '問答比賽'} AI 報告${payload.titleSuffix ? ` - ${payload.titleSuffix}` : ''}`);
+    try {
+      const data = payload.toolType === 'quiz'
+        ? await authService.getQuizAiReport(payload.toolId, { scope: payload.scope, studentId: payload.studentId })
+        : await authService.getContestAiReport(payload.toolId, { scope: payload.scope, studentId: payload.studentId });
+      setAiReportData(data?.report || null);
+    } catch (e: any) {
+      setAiReportError(e?.message || '載入 AI 報告失敗');
+    } finally {
+      setAiReportLoading(false);
+    }
+  };
+
+  const regenerateAiReport = async () => {
+    if (!aiReportRequest) return;
+    setAiReportLoading(true);
+    setAiReportError('');
+    try {
+      const data = aiReportRequest.toolType === 'quiz'
+        ? await authService.regenerateQuizAiReport(aiReportRequest.toolId, { scope: aiReportRequest.scope, studentId: aiReportRequest.studentId })
+        : await authService.regenerateContestAiReport(aiReportRequest.toolId, { scope: aiReportRequest.scope, studentId: aiReportRequest.studentId });
+      setAiReportData(data?.report || null);
+    } catch (e: any) {
+      setAiReportError(e?.message || '重新生成 AI 報告失敗');
+    } finally {
+      setAiReportLoading(false);
     }
   };
 
@@ -2664,6 +2706,16 @@ const TeacherDashboard: React.FC = () => {
       <AppStudioModal
         open={showAppStudio}
         onClose={() => setShowAppStudio(false)}
+      />
+
+      <AiReportModal
+        open={aiReportModalOpen}
+        title={aiReportTitle || 'AI 報告'}
+        loading={aiReportLoading}
+        error={aiReportError}
+        report={aiReportData}
+        onClose={() => setAiReportModalOpen(false)}
+        onRegenerate={aiReportRequest ? regenerateAiReport : undefined}
       />
 
       {/* Student Progress Modal */}
@@ -6046,9 +6098,19 @@ const TeacherDashboard: React.FC = () => {
 	                        </>
 	                      ) : (
 	                        <>
-	                          <h4 className="text-xl font-bold text-brand-brown">
-	                            {selectedAssignment?.type === 'quiz' ? '測驗結果' : '學生回應'} ({assignmentResponses.length})
-	                          </h4>
+	                          <div className="flex items-center justify-between gap-3">
+	                            <h4 className="text-xl font-bold text-brand-brown">
+	                              {selectedAssignment?.type === 'quiz' ? '測驗結果' : '學生回應'} ({assignmentResponses.length})
+	                            </h4>
+	                            {(selectedAssignment?.type === 'quiz' || selectedAssignment?.type === 'contest') && (
+	                              <button
+	                                onClick={() => openAiReport({ toolType: selectedAssignment.type, toolId: String(selectedAssignment.id), scope: 'overall', titleSuffix: selectedAssignment.title })}
+	                                className="px-4 py-2 rounded-xl font-bold border-2 bg-green-100 text-green-800 hover:bg-green-200 border-green-200"
+	                              >
+	                                AI報告（全體）
+	                              </button>
+	                            )}
+	                          </div>
 	                          {loading ? (
 	                            <div className="text-center py-8">
 	                              <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-brand-brown mx-auto mb-2"></div>
@@ -6126,6 +6188,20 @@ const TeacherDashboard: React.FC = () => {
 	                                          </div>
 	                                        </div>
 	                                        <div className="mt-3 flex justify-end">
+	                                          {(selectedAssignment?.type === 'quiz' || selectedAssignment?.type === 'contest') && (
+	                                            <button
+	                                              onClick={() => openAiReport({
+	                                                toolType: selectedAssignment.type,
+	                                                toolId: String(selectedAssignment.id),
+	                                                scope: 'student',
+	                                                studentId: String(response.studentId),
+	                                                titleSuffix: `${selectedAssignment.title} - ${response.studentName}`
+	                                              })}
+	                                              className="mr-2 px-4 py-2 bg-green-100 text-green-800 rounded-lg hover:bg-green-200 text-sm font-bold"
+	                                            >
+	                                              AI報告
+	                                            </button>
+	                                          )}
 	                                          <button
 	                                            onClick={() => setViewingResultDetails(response)}
 	                                            className="px-4 py-2 bg-yellow-100 text-yellow-800 rounded-lg hover:bg-yellow-200 text-sm font-bold flex items-center gap-2"

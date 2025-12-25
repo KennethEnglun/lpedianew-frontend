@@ -617,6 +617,14 @@ class AuthService {
     return this.handleResponse(response);
   }
 
+  // 獲取討論串詳情（學生/教師）
+  async getDiscussionDetails(discussionId: string): Promise<{ discussion: any }> {
+    const response = await fetch(`${this.API_BASE}/discussions/${encodeURIComponent(discussionId)}`, {
+      headers: this.getAuthHeaders()
+    });
+    return this.handleResponse(response);
+  }
+
   // 獲取教師的討論串
   async getTeacherDiscussions(): Promise<{ discussions: any[] }> {
     const response = await fetch(`${this.API_BASE}/discussions/teacher`, {
@@ -1352,6 +1360,31 @@ class AuthService {
     return this.handleResponse(response);
   }
 
+  // AI 報告（小測驗）
+  async getQuizAiReport(quizId: string, params?: { scope?: 'overall' | 'student'; studentId?: string; refresh?: boolean }): Promise<{ report: any; cached: boolean }> {
+    const searchParams = new URLSearchParams();
+    if (params?.scope) searchParams.append('scope', params.scope);
+    if (params?.studentId) searchParams.append('studentId', params.studentId);
+    if (params?.refresh) searchParams.append('refresh', '1');
+    const query = searchParams.toString() ? `?${searchParams.toString()}` : '';
+    const response = await fetch(`${this.API_BASE}/quizzes/${quizId}/ai-report${query}`, {
+      headers: this.getAuthHeaders()
+    });
+    return this.handleResponse(response);
+  }
+
+  async regenerateQuizAiReport(quizId: string, params?: { scope?: 'overall' | 'student'; studentId?: string }): Promise<{ report: any; cached: boolean }> {
+    const searchParams = new URLSearchParams();
+    if (params?.scope) searchParams.append('scope', params.scope);
+    if (params?.studentId) searchParams.append('studentId', params.studentId);
+    const query = searchParams.toString() ? `?${searchParams.toString()}` : '';
+    const response = await fetch(`${this.API_BASE}/quizzes/${quizId}/ai-report/regenerate${query}`, {
+      method: 'POST',
+      headers: this.getAuthHeaders()
+    });
+    return this.handleResponse(response);
+  }
+
   // 獲取小測驗結果（教師查看）
   async getQuizResults(quizId: string): Promise<{ quiz: any, results: any[], total: number, statistics: any }> {
     const response = await fetch(`${this.API_BASE}/quizzes/${quizId}/results`, {
@@ -1599,6 +1632,31 @@ class AuthService {
       method: 'POST',
       headers: this.getAuthHeaders(),
       body: JSON.stringify(payload)
+    });
+    return this.handleResponse(response);
+  }
+
+  // AI 報告（問答比賽）
+  async getContestAiReport(contestId: string, params?: { scope?: 'overall' | 'student'; studentId?: string; refresh?: boolean }): Promise<{ report: any; cached: boolean }> {
+    const searchParams = new URLSearchParams();
+    if (params?.scope) searchParams.append('scope', params.scope);
+    if (params?.studentId) searchParams.append('studentId', params.studentId);
+    if (params?.refresh) searchParams.append('refresh', '1');
+    const query = searchParams.toString() ? `?${searchParams.toString()}` : '';
+    const response = await fetch(`${this.API_BASE}/contests/${contestId}/ai-report${query}`, {
+      headers: this.getAuthHeaders()
+    });
+    return this.handleResponse(response);
+  }
+
+  async regenerateContestAiReport(contestId: string, params?: { scope?: 'overall' | 'student'; studentId?: string }): Promise<{ report: any; cached: boolean }> {
+    const searchParams = new URLSearchParams();
+    if (params?.scope) searchParams.append('scope', params.scope);
+    if (params?.studentId) searchParams.append('studentId', params.studentId);
+    const query = searchParams.toString() ? `?${searchParams.toString()}` : '';
+    const response = await fetch(`${this.API_BASE}/contests/${contestId}/ai-report/regenerate${query}`, {
+      method: 'POST',
+      headers: this.getAuthHeaders()
     });
     return this.handleResponse(response);
   }
