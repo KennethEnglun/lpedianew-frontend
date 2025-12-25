@@ -62,6 +62,16 @@ export default function StudyPracticeModal({ open, onClose }: StudyPracticeModal
     setError('');
     setStartTime('');
     setQuestionStartTime(0);
+    // 重置 scope 為預設值
+    setScope({
+      subject: '數學',
+      chapters: [],
+      topics: [],
+      difficulty: 'medium',
+      questionCount: 10,
+      contentSource: 'chapters',
+      customContent: ''
+    });
   };
 
   // 模态框打开时重置状态
@@ -227,20 +237,20 @@ export default function StudyPracticeModal({ open, onClose }: StudyPracticeModal
           <button
             onClick={handleClose}
             className="w-10 h-10 rounded-full bg-white border-2 border-brand-brown hover:bg-gray-100 flex items-center justify-center"
-            aria-label="关闭"
+            aria-label="關閉"
           >
             <X className="w-5 h-5 text-brand-brown" />
           </button>
         </div>
 
-        {/* 主要内容区域 */}
+        {/* 主要內容區域 */}
         <div className="p-6 overflow-y-auto max-h-[calc(90vh-120px)]">
-          {/* 设置步骤 */}
+          {/* 設置步驟 */}
           {currentStep === 'setup' && (
             <div className="space-y-6">
-              {/* 内容来源选择 */}
+              {/* 內容來源選擇 */}
               <div>
-                <label className="block text-sm font-bold text-gray-700 mb-3">学习内容来源</label>
+                <label className="block text-sm font-bold text-gray-700 mb-3">學習內容來源</label>
                 <div className="flex gap-4">
                   <label className="flex items-center gap-2 cursor-pointer">
                     <input
@@ -251,7 +261,7 @@ export default function StudyPracticeModal({ open, onClose }: StudyPracticeModal
                       onChange={(e) => setScope(prev => ({ ...prev, contentSource: e.target.value as 'chapters' }))}
                       className="w-4 h-4"
                     />
-                    <span>按章节选择</span>
+                    <span>按章節選擇</span>
                   </label>
                   <label className="flex items-center gap-2 cursor-pointer">
                     <input
@@ -283,7 +293,7 @@ export default function StudyPracticeModal({ open, onClose }: StudyPracticeModal
                 </select>
               </div>
 
-              {/* 章节选择（按章节模式） */}
+              {/* 章節選擇（按章節模式） */}
               {scope.contentSource === 'chapters' && (
                 <div>
                   <label className="block text-sm font-bold text-gray-700 mb-2">學習章節</label>
@@ -299,7 +309,7 @@ export default function StudyPracticeModal({ open, onClose }: StudyPracticeModal
                 </div>
               )}
 
-              {/* 自定義內容（自定义模式） */}
+              {/* 自定義內容（自定義模式） */}
               {scope.contentSource === 'custom' && (
                 <div>
                   <label className="block text-sm font-bold text-gray-700 mb-2">
@@ -323,7 +333,7 @@ export default function StudyPracticeModal({ open, onClose }: StudyPracticeModal
                 </div>
               )}
 
-              {/* 知识点提示 */}
+              {/* 知識點提示 */}
               <div>
                 <label className="block text-sm font-bold text-gray-700 mb-2">重點知識點 (可選)</label>
                 <input
@@ -370,14 +380,14 @@ export default function StudyPracticeModal({ open, onClose }: StudyPracticeModal
                 </div>
               </div>
 
-              {/* 错误提示 */}
+              {/* 錯誤提示 */}
               {error && (
                 <div className="bg-red-50 border-2 border-red-200 rounded-xl p-3">
                   <div className="text-red-700 font-bold text-sm">{error}</div>
                 </div>
               )}
 
-              {/* 开始按钮 */}
+              {/* 開始按鈕 */}
               <div className="flex justify-end">
                 <Button
                   className="bg-[#A1D9AE] hover:bg-[#8BC7A1] text-brand-brown flex items-center gap-2"
@@ -391,7 +401,7 @@ export default function StudyPracticeModal({ open, onClose }: StudyPracticeModal
             </div>
           )}
 
-          {/* 生成中步骤 */}
+          {/* 生成中步驟 */}
           {currentStep === 'generating' && (
             <div className="flex flex-col items-center justify-center py-12 space-y-6">
               <div className="w-16 h-16 border-4 border-brand-brown border-t-transparent rounded-full animate-spin"></div>
@@ -404,10 +414,10 @@ export default function StudyPracticeModal({ open, onClose }: StudyPracticeModal
             </div>
           )}
 
-          {/* 答題步骤 */}
+          {/* 答題步驟 */}
           {currentStep === 'quiz' && currentQuestion && (
             <div className="space-y-6">
-              {/* 进度条 */}
+              {/* 進度條 */}
               <div className="w-full bg-gray-200 rounded-full h-2">
                 <div
                   className="bg-[#A1D9AE] h-2 rounded-full transition-all duration-300"
@@ -506,19 +516,19 @@ export default function StudyPracticeModal({ open, onClose }: StudyPracticeModal
                 </div>
               </div>
 
-              {/* 操作按钮 */}
+              {/* 操作按鈕 */}
               <div className="flex gap-3 justify-center">
                 <Button
                   className="bg-[#A1D9AE] hover:bg-[#8BC7A1] text-brand-brown"
                   onClick={() => setCurrentStep('setup')}
                 >
-                  再次练习
+                  再次練習
                 </Button>
                 <Button
                   className="bg-gray-200 hover:bg-gray-300 text-gray-700"
                   onClick={handleClose}
                 >
-                  查看详细分析
+                  查看詳細分析
                 </Button>
               </div>
             </div>

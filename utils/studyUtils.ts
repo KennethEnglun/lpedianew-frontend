@@ -57,17 +57,17 @@ export const validateStudyContent = {
   },
 
   /**
-   * 验证学习范围配置
+   * 驗證學習範圍配置
    */
   studyScope: (scope: Partial<StudyScope>): { isValid: boolean; errors: string[] } => {
     const errors: string[] = [];
 
     if (!scope.subject?.trim()) {
-      errors.push('请选择学习科目');
+      errors.push('請選擇學習科目');
     }
 
     if (!scope.difficulty) {
-      errors.push('请选择难度级别');
+      errors.push('請選擇難度級別');
     }
 
     if (scope.questionCount !== undefined) {
@@ -83,14 +83,14 @@ export const validateStudyContent = {
         errors.push(contentValidation.error!);
       }
     } else if (scope.contentSource === 'chapters' && (!scope.chapters || scope.chapters.length === 0)) {
-      errors.push('请至少选择一个学习章节');
+      errors.push('請至少選擇一個學習章節');
     }
 
     return { isValid: errors.length === 0, errors };
   }
 };
 
-// 学习数据存储管理
+// 學習數據存儲管理
 export const studyStorage = {
   /**
    * 保存学习会话
