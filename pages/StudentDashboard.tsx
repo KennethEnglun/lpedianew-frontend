@@ -393,6 +393,21 @@ const StudentDashboard: React.FC = () => {
             />
           </div>
 
+          {/* Student Info Section */}
+          <div className="text-center mb-6 bg-white/60 rounded-xl p-4 border-2 border-[#E6D2B5]">
+            <div className="space-y-1">
+              <div className="text-lg font-bold text-[#5E4C40]">
+                {user?.realName || user?.username || '學生姓名'}
+              </div>
+              <div className="text-sm font-medium text-[#8D6E63]">
+                {user?.className || '班級：未設定'}
+              </div>
+              <div className="text-xs text-[#A0806B] font-mono">
+                帳號：{user?.username || '未登入'}
+              </div>
+            </div>
+          </div>
+
           <div className="text-center mb-4 border-b-4 border-[#E6D2B5] pb-2">
             <h3 className="text-xl font-bold text-[#5E4C40]">我的學科</h3>
           </div>
