@@ -711,8 +711,9 @@ const AiChatModal: React.FC<{
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-[80] bg-black/50 flex items-center justify-center p-4">
-      <div className="bg-white w-full max-w-6xl max-h-[90vh] overflow-hidden rounded-3xl border-4 border-brand-brown shadow-comic-xl flex flex-col">
+    <>
+      <div className="fixed inset-0 z-[80] bg-black/50 flex items-center justify-center p-4">
+        <div className="bg-white w-full max-w-6xl max-h-[90vh] overflow-hidden rounded-3xl border-4 border-brand-brown shadow-comic-xl flex flex-col">
         <div className="p-5 border-b-4 border-brand-brown bg-[#D2EFFF] flex items-center justify-between gap-4">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-full bg-white border-2 border-brand-brown flex items-center justify-center">
@@ -1412,14 +1413,17 @@ const AiChatModal: React.FC<{
 		    </div>
 
       {/* 內容審核對話框 */}
-      <ContentModerationModal
-        open={showModerationModal}
-        moderationResult={currentModerationResult!}
-        originalPrompt={pendingPrompt}
-        onCancel={handleModerationCancel}
-        onProceed={currentModerationResult?.riskLevel === RiskLevel.WARNING ? handleModerationProceed : undefined}
-        onUseSuggestion={handleUseSuggestion}
-      />
+      {showModerationModal && currentModerationResult && (
+        <ContentModerationModal
+          open={showModerationModal}
+          moderationResult={currentModerationResult}
+          originalPrompt={pendingPrompt}
+          onCancel={handleModerationCancel}
+          onProceed={currentModerationResult.riskLevel === RiskLevel.WARNING ? handleModerationProceed : undefined}
+          onUseSuggestion={handleUseSuggestion}
+        />
+      )}
+    </>
 	  );
 };
 
