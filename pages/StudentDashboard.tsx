@@ -9,7 +9,6 @@ import UiSettingsModal from '../components/UiSettingsModal';
 import AiChatModal from '../components/AiChatModal';
 import BotTaskChatModal from '../components/BotTaskChatModal';
 import AppStudioModal from '../components/AppStudioModal';
-import PointsBalance from '../components/student/PointsBalance';
 import ImageGenerationConfirmModal from '../components/student/ImageGenerationConfirmModal';
 
 const StudentDashboard: React.FC = () => {
@@ -662,15 +661,6 @@ const StudentDashboard: React.FC = () => {
             </div>
           </div>
 
-          {/* Points Balance Section */}
-          <PointsBalance
-            currentPoints={userPoints.currentPoints}
-            totalReceived={userPoints.totalReceived}
-            totalUsed={userPoints.totalUsed}
-            lastUpdate={userPoints.lastUpdate}
-            transactions={pointsTransactions}
-            onRefresh={refreshPoints}
-          />
 
           <nav className="flex-1 space-y-3 overflow-y-auto">
             <button
@@ -954,6 +944,9 @@ const StudentDashboard: React.FC = () => {
         onClose={() => setShowAiChat(false)}
         onImageGeneration={handleImageGeneration}
         userPoints={userPoints.currentPoints}
+        userPointsInfo={userPoints}
+        pointsTransactions={pointsTransactions}
+        onRefreshPoints={refreshPoints}
         executeImageGeneration={executeImagePrompt}
       />
       <AppStudioModal

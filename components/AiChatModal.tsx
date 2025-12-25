@@ -138,13 +138,23 @@ const markdownToSafeHtml = (markdown: string) => {
   return joined.replace(/@@CODEBLOCK_(\d+)@@/g, (_m, n) => codeBlocks[Number(n)] || '');
 };
 
+interface UserPointsInfo {
+  currentPoints: number;
+  totalReceived: number;
+  totalUsed: number;
+  lastUpdate?: string;
+}
+
 const AiChatModal: React.FC<{
   open: boolean;
   onClose: () => void;
   onImageGeneration?: (prompt: string) => void;
   userPoints?: number;
+  userPointsInfo?: UserPointsInfo;
+  pointsTransactions?: any[];
+  onRefreshPoints?: () => void;
   executeImageGeneration?: string; // 如果有提示詞，直接執行生成
-}> = ({ open, onClose, onImageGeneration, userPoints = 0, executeImageGeneration }) => {
+}> = ({ open, onClose, onImageGeneration, userPoints = 0, userPointsInfo, pointsTransactions = [], onRefreshPoints, executeImageGeneration }) => {
   const { user } = useAuth();
   const isTeacher = user?.role === 'teacher' || user?.role === 'admin';
 
@@ -191,6 +201,9 @@ const AiChatModal: React.FC<{
   const [showModerationModal, setShowModerationModal] = useState(false);
   const [currentModerationResult, setCurrentModerationResult] = useState<ModerationResult | null>(null);
   const [pendingPrompt, setPendingPrompt] = useState('');
+
+  // Points history modal
+  const [showPointsHistory, setShowPointsHistory] = useState(false);
 
   // Teacher view
   const [studentSearch, setStudentSearch] = useState('');
@@ -518,6 +531,44 @@ const AiChatModal: React.FC<{
     setShowModerationModal(false);
     setCurrentModerationResult(null);
     setPendingPrompt('');
+  };
+
+  // 點數相關工具函數
+  const formatDate = (dateString?: string) => {
+    if (!dateString) return '';
+    return new Date(dateString).toLocaleDateString('zh-TW', {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
+    });
+  };
+
+  const getTransactionIcon = (type: string) => {
+    switch (type) {
+      case 'admin_grant':
+        return '⬆️';
+      case 'image_generation':
+        return '🎨';
+      case 'admin_adjust':
+        return '⚙️';
+      default:
+        return '📝';
+    }
+  };
+
+  const getTransactionDescription = (transaction: any) => {
+    switch (transaction.type) {
+      case 'admin_grant':
+        return transaction.description || '管理員分配點數';
+      case 'image_generation':
+        return `圖片生成: ${transaction.metadata?.imagePrompt?.substring(0, 30) || ''}...`;
+      case 'admin_adjust':
+        return transaction.description || '管理員調整點數';
+      default:
+        return transaction.description || '未知操作';
+    }
   };
 
   const renameThread = async (threadId: string, title: string) => {
@@ -1221,20 +1272,72 @@ const AiChatModal: React.FC<{
 	            <div className="flex-1 min-h-0 flex flex-col">
 	              {mySidebarView === 'image' ? (
 	                <div className="flex-1 min-h-0 overflow-y-auto p-6 space-y-4">
-	                  <div className="flex items-center justify-between">
-	                    <div className="flex items-center gap-2">
-	                      <ImageIcon className="w-5 h-5 text-brand-brown" />
-	                      <div className="text-xl font-black text-brand-brown">圖片生成</div>
-	                    </div>
-	                    {!isTeacher && (
-	                      <div className="flex items-center gap-1 text-sm">
-	                        <span className="text-gray-600">可用點數:</span>
-	                        <span className={`font-bold ${userPoints > 0 ? 'text-green-600' : 'text-red-500'}`}>
-	                          {userPoints}
-	                        </span>
-	                      </div>
-	                    )}
+	                  <div className="flex items-center gap-2 mb-4">
+	                    <ImageIcon className="w-5 h-5 text-brand-brown" />
+	                    <div className="text-xl font-black text-brand-brown">圖片生成</div>
 	                  </div>
+
+	                  {/* 學生點數信息卡片 */}
+	                  {!isTeacher && userPointsInfo && (
+	                    <div className="bg-white/80 rounded-xl p-4 border-2 border-[#E6D2B5] mb-4">
+	                      <div className="flex items-center justify-between mb-3">
+	                        <div className="flex items-center gap-2">
+	                          <div className="w-8 h-8 rounded-full bg-yellow-100 flex items-center justify-center">
+	                            🪙
+	                          </div>
+	                          <span className="font-bold text-[#5D4037]">圖片生成點數</span>
+	                        </div>
+	                        {onRefreshPoints && (
+	                          <button
+	                            onClick={onRefreshPoints}
+	                            className="bg-blue-100 hover:bg-blue-200 text-blue-800 text-xs px-3 py-1 rounded-lg font-bold transition-colors"
+	                          >
+	                            刷新
+	                          </button>
+	                        )}
+	                      </div>
+
+	                      <div className="grid grid-cols-3 gap-3 text-center mb-3">
+	                        <div>
+	                          <div className={`text-2xl font-bold ${userPointsInfo.currentPoints > 0 ? 'text-green-600' : 'text-red-500'}`}>
+	                            {userPointsInfo.currentPoints}
+	                          </div>
+	                          <div className="text-xs text-gray-600">可用點數</div>
+	                        </div>
+	                        <div>
+	                          <div className="text-2xl font-bold text-blue-600">{userPointsInfo.totalReceived}</div>
+	                          <div className="text-xs text-gray-600">總獲得</div>
+	                        </div>
+	                        <div>
+	                          <div className="text-2xl font-bold text-gray-600">{userPointsInfo.totalUsed}</div>
+	                          <div className="text-xs text-gray-600">已使用</div>
+	                        </div>
+	                      </div>
+
+	                      {userPointsInfo.currentPoints === 0 && (
+	                        <div className="mb-3 p-3 bg-yellow-50 border border-yellow-200 rounded-lg flex items-center gap-2">
+	                          <div className="w-5 h-5 text-yellow-600">⚠️</div>
+	                          <span className="text-sm text-yellow-700">
+	                            點數不足，請聯繫老師獲取更多點數
+	                          </span>
+	                        </div>
+	                      )}
+
+	                      <button
+	                        onClick={() => setShowPointsHistory(true)}
+	                        className="w-full bg-gray-100 hover:bg-gray-200 text-gray-700 flex items-center justify-center gap-2 text-sm py-2 rounded-lg font-bold transition-colors"
+	                      >
+	                        <div className="w-4 h-4">📋</div>
+	                        查看使用記錄
+	                      </button>
+
+	                      {userPointsInfo.lastUpdate && (
+	                        <div className="text-xs text-gray-500 mt-2 text-center">
+	                          最後更新：{formatDate(userPointsInfo.lastUpdate)}
+	                        </div>
+	                      )}
+	                    </div>
+	                  )}
 
 	                  <div>
 	                    <label className="block text-xs font-black text-gray-600 mb-1">描述</label>
@@ -1422,6 +1525,60 @@ const AiChatModal: React.FC<{
           onProceed={currentModerationResult.riskLevel === RiskLevel.WARNING ? handleModerationProceed : undefined}
           onUseSuggestion={handleUseSuggestion}
         />
+      )}
+
+      {/* 點數使用記錄模態框 */}
+      {showPointsHistory && (
+        <div className="fixed inset-0 bg-black/40 z-[9999] flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl w-full max-w-2xl max-h-[80vh] overflow-hidden">
+            <div className="bg-[#A1D9AE] border-b border-gray-200 px-5 py-4 flex items-center justify-between">
+              <div className="text-xl font-black text-brand-brown">點數使用記錄</div>
+              <button
+                onClick={() => setShowPointsHistory(false)}
+                className="w-8 h-8 rounded-full bg-white hover:bg-gray-100 flex items-center justify-center"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="p-5 overflow-y-auto max-h-[60vh]">
+              {pointsTransactions.length === 0 ? (
+                <div className="text-center py-8 text-gray-500">
+                  暫無使用記錄
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {pointsTransactions.map((transaction) => (
+                    <div
+                      key={transaction.id}
+                      className="bg-gray-50 rounded-xl p-4 flex items-start justify-between"
+                    >
+                      <div className="flex items-start gap-3">
+                        <div className="text-xl">{getTransactionIcon(transaction.type)}</div>
+                        <div className="flex-1">
+                          <div className="font-medium text-[#5D4037]">
+                            {getTransactionDescription(transaction)}
+                          </div>
+                          <div className="text-sm text-gray-600 mt-1">
+                            {formatDate(transaction.createdAt)}
+                          </div>
+                        </div>
+                      </div>
+                      <div className="text-right">
+                        <div className={`font-bold ${transaction.amount > 0 ? 'text-green-600' : 'text-red-500'}`}>
+                          {transaction.amount > 0 ? '+' : ''}{transaction.amount}
+                        </div>
+                        <div className="text-xs text-gray-500">
+                          餘額: {transaction.balance}
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
       )}
     </>
 	  );
