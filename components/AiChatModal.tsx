@@ -686,6 +686,7 @@ const AiChatModal: React.FC<{
       const streamResp = await authService.sendChatMessageStream(
         {
           threadId: myThreadId,
+          subject: user?.profile?.class || '一般', // 添加科目參數
           ...(isTeacher && effectiveTeacherBotId !== 'global' ? { botId: effectiveTeacherBotId } : null),
           message: text
         },
@@ -694,6 +695,7 @@ const AiChatModal: React.FC<{
       if (!streamResp.ok || !streamResp.body) {
         const fallback = await authService.sendChatMessage({
           threadId: myThreadId,
+          subject: user?.profile?.class || '一般', // 添加科目參數
           ...(isTeacher && effectiveTeacherBotId !== 'global' ? { botId: effectiveTeacherBotId } : null),
           message: text
         });

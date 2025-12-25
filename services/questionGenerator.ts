@@ -24,6 +24,7 @@ export class QuestionGeneratorService {
       // 调用现有的聊天服务生成题目
       const response = await authService.sendChatMessage({
         message: prompt,
+        subject: scope.subject, // 添加科目参数
         // 可以创建一个专门的机器人来生成题目，或使用全局聊天
         botId: undefined // 使用全局聊天
       });
