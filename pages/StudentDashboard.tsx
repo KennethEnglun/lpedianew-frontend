@@ -141,14 +141,14 @@ const StudentDashboard: React.FC = () => {
       left: 0;
       width: 100%;
       height: 100%;
-      z-index: 1;
+      z-index: -10;
       overflow: hidden;
       pointer-events: none;
     }
 
     .science-icon {
       position: absolute;
-      opacity: 0.15;
+      opacity: 0.08;
       animation: float 6s ease-in-out infinite;
     }
 
@@ -189,102 +189,184 @@ const StudentDashboard: React.FC = () => {
     }
 
     @keyframes pulse {
-      0%, 100% { opacity: 0.15; }
-      50% { opacity: 0.4; }
+      0%, 100% { opacity: 0.08; }
+      50% { opacity: 0.2; }
     }
   `;
 
-  // Science Background Component
+  // Science Background Component with 4x elements
   const ScienceBackground = () => {
-    const scienceElements = [
-      // Molecule (DNA)
-      <svg key="dna-1" className="science-icon rotate" style={{ top: '10%', left: '15%', width: '60px', height: '60px' }} viewBox="0 0 100 100" fill="#B5F8CE">
-        <path d="M20 20 Q50 10 80 20 Q50 30 20 40 Q50 50 80 60 Q50 70 20 80" stroke="#4CAF50" strokeWidth="3" fill="none"/>
-        <circle cx="20" cy="20" r="4" fill="#4CAF50"/>
-        <circle cx="80" cy="20" r="4" fill="#4CAF50"/>
-        <circle cx="20" cy="40" r="4" fill="#4CAF50"/>
-        <circle cx="80" cy="40" r="4" fill="#4CAF50"/>
-        <circle cx="20" cy="60" r="4" fill="#4CAF50"/>
-        <circle cx="80" cy="60" r="4" fill="#4CAF50"/>
-        <circle cx="20" cy="80" r="4" fill="#4CAF50"/>
-        <circle cx="80" cy="80" r="4" fill="#4CAF50"/>
-      </svg>,
+    const generateRandomPosition = () => ({
+      top: Math.random() * 90 + '%',
+      left: Math.random() * 90 + '%'
+    });
 
-      // Atom
-      <svg key="atom-1" className="science-icon pulse" style={{ top: '25%', right: '20%', width: '50px', height: '50px' }} viewBox="0 0 100 100" fill="#FFB74D">
-        <circle cx="50" cy="50" r="8" fill="#FF9800"/>
-        <ellipse cx="50" cy="50" rx="35" ry="15" fill="none" stroke="#FF9800" strokeWidth="2"/>
-        <ellipse cx="50" cy="50" rx="15" ry="35" fill="none" stroke="#FF9800" strokeWidth="2"/>
-        <ellipse cx="50" cy="50" rx="25" ry="25" fill="none" stroke="#FF9800" strokeWidth="2" transform="rotate(45 50 50)"/>
-        <circle cx="85" cy="50" r="3" fill="#FF5722"/>
-        <circle cx="15" cy="50" r="3" fill="#FF5722"/>
-        <circle cx="50" cy="15" r="3" fill="#FF5722"/>
-        <circle cx="50" cy="85" r="3" fill="#FF5722"/>
-      </svg>,
+    const scienceElements = [];
 
-      // Test Tube
-      <svg key="testtube-1" className="science-icon" style={{ top: '60%', left: '25%', width: '40px', height: '40px' }} viewBox="0 0 100 100" fill="#E1BEE7">
-        <rect x="40" y="10" width="20" height="60" rx="10" ry="10" fill="none" stroke="#9C27B0" strokeWidth="3"/>
-        <rect x="40" y="45" width="20" height="25" fill="#9C27B0" opacity="0.3"/>
-        <circle cx="50" cy="15" r="8" fill="none" stroke="#9C27B0" strokeWidth="2"/>
-      </svg>,
+    // Create 32 elements (4x the original 8)
+    for (let i = 0; i < 32; i++) {
+      const pos = generateRandomPosition();
+      const size = Math.random() * 30 + 25; // 25-55px
+      const animationDelay = Math.random() * 6; // 0-6s delay
 
-      // Microscope
-      <svg key="microscope-1" className="science-icon rotate" style={{ top: '35%', left: '70%', width: '55px', height: '55px' }} viewBox="0 0 100 100" fill="#81C784">
-        <rect x="20" y="80" width="60" height="8" rx="4" fill="#4CAF50"/>
-        <rect x="45" y="30" width="8" height="50" fill="#4CAF50"/>
-        <circle cx="49" cy="25" r="15" fill="none" stroke="#4CAF50" strokeWidth="3"/>
-        <circle cx="49" cy="25" r="8" fill="#4CAF50"/>
-        <rect x="25" y="20" width="15" height="4" fill="#4CAF50"/>
-        <rect x="60" y="35" width="15" height="4" fill="#4CAF50"/>
-      </svg>,
+      const elementType = i % 8; // Cycle through 8 different types
 
-      // Chemical Formula (H2O)
-      <svg key="formula-1" className="science-icon pulse" style={{ top: '15%', left: '45%', width: '70px', height: '30px' }} viewBox="0 0 140 60" fill="#42A5F5">
-        <text x="10" y="35" fontSize="24" fontWeight="bold" fill="#2196F3">H</text>
-        <text x="35" y="45" fontSize="16" fill="#2196F3">2</text>
-        <text x="50" y="35" fontSize="24" fontWeight="bold" fill="#2196F3">O</text>
-      </svg>,
-
-      // Beaker
-      <svg key="beaker-1" className="science-icon" style={{ top: '70%', right: '15%', width: '45px', height: '45px' }} viewBox="0 0 100 100" fill="#FFC107">
-        <path d="M30 20 L30 40 L15 80 L85 80 L70 40 L70 20 Z" fill="none" stroke="#FF9800" strokeWidth="3"/>
-        <rect x="25" y="15" width="50" height="8" fill="#FF9800"/>
-        <path d="M30 45 L70 45 L65 65 L35 65 Z" fill="#FF9800" opacity="0.3"/>
-        <circle cx="45" cy="55" r="2" fill="#FF9800"/>
-        <circle cx="55" cy="52" r="1.5" fill="#FF9800"/>
-      </svg>,
-
-      // Gear (representing mechanics/physics)
-      <svg key="gear-1" className="science-icon rotate" style={{ top: '50%', left: '5%', width: '35px', height: '35px' }} viewBox="0 0 100 100" fill="#90A4AE">
-        <path d="M50,10 L60,20 L70,15 L75,25 L85,30 L80,40 L90,50 L80,60 L85,70 L75,75 L70,85 L60,80 L50,90 L40,80 L30,85 L25,75 L15,70 L20,60 L10,50 L20,40 L15,30 L25,25 L30,15 L40,20 Z" fill="#607D8B"/>
-        <circle cx="50" cy="50" r="15" fill="none" stroke="#455A64" strokeWidth="3"/>
-      </svg>,
-
-      // Additional DNA
-      <svg key="dna-2" className="science-icon pulse" style={{ top: '80%', left: '50%', width: '50px', height: '50px' }} viewBox="0 0 100 100" fill="#B5F8CE">
-        <path d="M25 15 Q50 5 75 15 Q50 25 25 35 Q50 45 75 55 Q50 65 25 75" stroke="#4CAF50" strokeWidth="2" fill="none"/>
-        <circle cx="25" cy="15" r="3" fill="#4CAF50"/>
-        <circle cx="75" cy="15" r="3" fill="#4CAF50"/>
-        <circle cx="25" cy="35" r="3" fill="#4CAF50"/>
-        <circle cx="75" cy="35" r="3" fill="#4CAF50"/>
-        <circle cx="25" cy="55" r="3" fill="#4CAF50"/>
-        <circle cx="75" cy="55" r="3" fill="#4CAF50"/>
-        <circle cx="25" cy="75" r="3" fill="#4CAF50"/>
-        <circle cx="75" cy="75" r="3" fill="#4CAF50"/>
-      </svg>,
-
-      // Small Atom
-      <svg key="atom-2" className="science-icon rotate" style={{ top: '5%', left: '80%', width: '35px', height: '35px' }} viewBox="0 0 100 100" fill="#FFB74D">
-        <circle cx="50" cy="50" r="6" fill="#FF9800"/>
-        <ellipse cx="50" cy="50" rx="30" ry="12" fill="none" stroke="#FF9800" strokeWidth="2"/>
-        <ellipse cx="50" cy="50" rx="12" ry="30" fill="none" stroke="#FF9800" strokeWidth="2"/>
-        <circle cx="80" cy="50" r="2" fill="#FF5722"/>
-        <circle cx="20" cy="50" r="2" fill="#FF5722"/>
-        <circle cx="50" cy="20" r="2" fill="#FF5722"/>
-        <circle cx="50" cy="80" r="2" fill="#FF5722"/>
-      </svg>
-    ];
+      switch (elementType) {
+        case 0: // DNA
+          scienceElements.push(
+            <svg key={`dna-${i}`} className="science-icon rotate"
+              style={{
+                top: pos.top,
+                left: pos.left,
+                width: `${size}px`,
+                height: `${size}px`,
+                animationDelay: `${animationDelay}s`
+              }}
+              viewBox="0 0 100 100" fill="#B5F8CE">
+              <path d="M20 20 Q50 10 80 20 Q50 30 20 40 Q50 50 80 60 Q50 70 20 80" stroke="#4CAF50" strokeWidth="3" fill="none"/>
+              <circle cx="20" cy="20" r="4" fill="#4CAF50"/>
+              <circle cx="80" cy="20" r="4" fill="#4CAF50"/>
+              <circle cx="20" cy="40" r="4" fill="#4CAF50"/>
+              <circle cx="80" cy="40" r="4" fill="#4CAF50"/>
+              <circle cx="20" cy="60" r="4" fill="#4CAF50"/>
+              <circle cx="80" cy="60" r="4" fill="#4CAF50"/>
+              <circle cx="20" cy="80" r="4" fill="#4CAF50"/>
+              <circle cx="80" cy="80" r="4" fill="#4CAF50"/>
+            </svg>
+          );
+          break;
+        case 1: // Atom
+          scienceElements.push(
+            <svg key={`atom-${i}`} className="science-icon pulse"
+              style={{
+                top: pos.top,
+                right: pos.left,
+                width: `${size}px`,
+                height: `${size}px`,
+                animationDelay: `${animationDelay}s`
+              }}
+              viewBox="0 0 100 100" fill="#FFB74D">
+              <circle cx="50" cy="50" r="8" fill="#FF9800"/>
+              <ellipse cx="50" cy="50" rx="35" ry="15" fill="none" stroke="#FF9800" strokeWidth="2"/>
+              <ellipse cx="50" cy="50" rx="15" ry="35" fill="none" stroke="#FF9800" strokeWidth="2"/>
+              <ellipse cx="50" cy="50" rx="25" ry="25" fill="none" stroke="#FF9800" strokeWidth="2" transform="rotate(45 50 50)"/>
+              <circle cx="85" cy="50" r="3" fill="#FF5722"/>
+              <circle cx="15" cy="50" r="3" fill="#FF5722"/>
+              <circle cx="50" cy="15" r="3" fill="#FF5722"/>
+              <circle cx="50" cy="85" r="3" fill="#FF5722"/>
+            </svg>
+          );
+          break;
+        case 2: // Test Tube
+          scienceElements.push(
+            <svg key={`testtube-${i}`} className="science-icon"
+              style={{
+                top: pos.top,
+                left: pos.left,
+                width: `${size * 0.8}px`,
+                height: `${size * 0.8}px`,
+                animationDelay: `${animationDelay}s`
+              }}
+              viewBox="0 0 100 100" fill="#E1BEE7">
+              <rect x="40" y="10" width="20" height="60" rx="10" ry="10" fill="none" stroke="#9C27B0" strokeWidth="3"/>
+              <rect x="40" y="45" width="20" height="25" fill="#9C27B0" opacity="0.3"/>
+              <circle cx="50" cy="15" r="8" fill="none" stroke="#9C27B0" strokeWidth="2"/>
+            </svg>
+          );
+          break;
+        case 3: // Microscope
+          scienceElements.push(
+            <svg key={`microscope-${i}`} className="science-icon rotate"
+              style={{
+                top: pos.top,
+                left: pos.left,
+                width: `${size * 1.1}px`,
+                height: `${size * 1.1}px`,
+                animationDelay: `${animationDelay}s`
+              }}
+              viewBox="0 0 100 100" fill="#81C784">
+              <rect x="20" y="80" width="60" height="8" rx="4" fill="#4CAF50"/>
+              <rect x="45" y="30" width="8" height="50" fill="#4CAF50"/>
+              <circle cx="49" cy="25" r="15" fill="none" stroke="#4CAF50" strokeWidth="3"/>
+              <circle cx="49" cy="25" r="8" fill="#4CAF50"/>
+              <rect x="25" y="20" width="15" height="4" fill="#4CAF50"/>
+              <rect x="60" y="35" width="15" height="4" fill="#4CAF50"/>
+            </svg>
+          );
+          break;
+        case 4: // Chemical Formula
+          scienceElements.push(
+            <svg key={`formula-${i}`} className="science-icon pulse"
+              style={{
+                top: pos.top,
+                left: pos.left,
+                width: `${size * 1.4}px`,
+                height: `${size * 0.6}px`,
+                animationDelay: `${animationDelay}s`
+              }}
+              viewBox="0 0 140 60" fill="#42A5F5">
+              <text x="10" y="35" fontSize="24" fontWeight="bold" fill="#2196F3">H</text>
+              <text x="35" y="45" fontSize="16" fill="#2196F3">2</text>
+              <text x="50" y="35" fontSize="24" fontWeight="bold" fill="#2196F3">O</text>
+            </svg>
+          );
+          break;
+        case 5: // Beaker
+          scienceElements.push(
+            <svg key={`beaker-${i}`} className="science-icon"
+              style={{
+                top: pos.top,
+                right: pos.left,
+                width: `${size * 0.9}px`,
+                height: `${size * 0.9}px`,
+                animationDelay: `${animationDelay}s`
+              }}
+              viewBox="0 0 100 100" fill="#FFC107">
+              <path d="M30 20 L30 40 L15 80 L85 80 L70 40 L70 20 Z" fill="none" stroke="#FF9800" strokeWidth="3"/>
+              <rect x="25" y="15" width="50" height="8" fill="#FF9800"/>
+              <path d="M30 45 L70 45 L65 65 L35 65 Z" fill="#FF9800" opacity="0.3"/>
+              <circle cx="45" cy="55" r="2" fill="#FF9800"/>
+              <circle cx="55" cy="52" r="1.5" fill="#FF9800"/>
+            </svg>
+          );
+          break;
+        case 6: // Gear
+          scienceElements.push(
+            <svg key={`gear-${i}`} className="science-icon rotate"
+              style={{
+                top: pos.top,
+                left: pos.left,
+                width: `${size * 0.7}px`,
+                height: `${size * 0.7}px`,
+                animationDelay: `${animationDelay}s`
+              }}
+              viewBox="0 0 100 100" fill="#90A4AE">
+              <path d="M50,10 L60,20 L70,15 L75,25 L85,30 L80,40 L90,50 L80,60 L85,70 L75,75 L70,85 L60,80 L50,90 L40,80 L30,85 L25,75 L15,70 L20,60 L10,50 L20,40 L15,30 L25,25 L30,15 L40,20 Z" fill="#607D8B"/>
+              <circle cx="50" cy="50" r="15" fill="none" stroke="#455A64" strokeWidth="3"/>
+            </svg>
+          );
+          break;
+        case 7: // Flask
+          scienceElements.push(
+            <svg key={`flask-${i}`} className="science-icon pulse"
+              style={{
+                top: pos.top,
+                left: pos.left,
+                width: `${size}px`,
+                height: `${size}px`,
+                animationDelay: `${animationDelay}s`
+              }}
+              viewBox="0 0 100 100" fill="#E1BEE7">
+              <path d="M35 10 L35 35 L20 70 L80 70 L65 35 L65 10 Z" fill="none" stroke="#9C27B0" strokeWidth="3"/>
+              <rect x="30" y="5" width="40" height="8" fill="#9C27B0"/>
+              <path d="M35 40 L65 40 L60 60 L40 60 Z" fill="#9C27B0" opacity="0.3"/>
+              <circle cx="45" cy="50" r="2" fill="#9C27B0"/>
+              <circle cx="55" cy="47" r="1.5" fill="#9C27B0"/>
+            </svg>
+          );
+          break;
+      }
+    }
 
     return (
       <div className="science-background">
@@ -329,7 +411,7 @@ const StudentDashboard: React.FC = () => {
       {/* Main Container */}
       <main className="max-w-[1200px] mx-auto grid grid-cols-1 lg:grid-cols-12 gap-8 pb-10">
         {/* Left Sidebar */}
-        <aside className="lg:col-span-4 bg-[#FEF7EC] border-4 border-[#E6D2B5] rounded-3xl p-6 shadow-lg flex-shrink-0 flex flex-col min-h-fit">
+        <aside className="lg:col-span-4 cartoon-card p-6 flex-shrink-0 flex flex-col min-h-fit">
           {/* Logo Section */}
           <div className="text-center mb-6">
             <img
