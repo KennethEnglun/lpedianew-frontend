@@ -560,7 +560,7 @@ const StudentDashboard: React.FC = () => {
               {/* Top Banner */}
               <div className="cartoon-card relative h-64 md:h-72 w-full group overflow-hidden">
                 <img
-                  src="/banner.png"
+                  src="/banner2.png"
                   alt="歡迎回到科學之旅!"
                   className="w-full h-full object-cover"
                 />
