@@ -3123,14 +3123,22 @@ const TeacherDashboard: React.FC = () => {
           <Button
             fullWidth
             className="bg-[#D2EFFF] hover:bg-[#BCE0FF] text-lg"
-            onClick={() => setShowAiChat(true)}
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              setShowAiChat(true);
+            }}
           >
             AI對話
           </Button>
           <Button
             fullWidth
             className="bg-[#E8F5E9] hover:bg-[#C8E6C9] text-lg flex items-center justify-center gap-2"
-            onClick={() => setShowAppStudio(true)}
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              setShowAppStudio(true);
+            }}
           >
             <Code className="w-5 h-5" />
             小程式工作坊

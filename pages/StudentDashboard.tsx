@@ -415,7 +415,11 @@ const StudentDashboard: React.FC = () => {
           <nav className="flex-1 space-y-3 overflow-y-auto">
             <button
               type="button"
-              onClick={() => setShowAiChat(true)}
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                setShowAiChat(true);
+              }}
               className="w-[calc(100%-10px)] flex items-center gap-3 px-4 py-2 rounded-2xl border-4 transition-all duration-150 border-[#E6D2B5] bg-[#D2EFFF] hover:bg-white hover:-translate-y-1 shadow-sm"
               title="AI對話"
             >
@@ -425,7 +429,11 @@ const StudentDashboard: React.FC = () => {
 
             <button
               type="button"
-              onClick={() => setShowAppStudio(true)}
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                setShowAppStudio(true);
+              }}
               className="w-[calc(100%-10px)] flex items-center gap-3 px-4 py-2 rounded-2xl border-4 transition-all duration-150 border-[#E6D2B5] bg-[#E8F5E9] hover:bg-white hover:-translate-y-1 shadow-sm"
               title="小程式工作坊"
             >
@@ -434,7 +442,12 @@ const StudentDashboard: React.FC = () => {
             </button>
 
             <button
-              onClick={() => setShowTaskView(true)}
+              type="button"
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                setShowTaskView(true);
+              }}
               className="w-[calc(100%-10px)] flex items-center gap-3 px-4 py-2 rounded-2xl border-4 transition-all duration-150 border-[#E6D2B5] bg-[#B5F8CE] hover:bg-white hover:-translate-y-1 shadow-sm"
             >
               <ClipboardList className="w-6 h-6 text-[#5E4C40]" />
