@@ -61,15 +61,13 @@ const StudentDashboard: React.FC = () => {
   useEffect(() => {
     const loadData = async () => {
       try {
-        // Always load tasks for progress calculation
-        const [tasksResponse, statusResponse] = await Promise.all([
-          authService.getStudentTasks().catch(() => ({ tasks: [] })),
-          authService.getDiscussionResponseStatus().catch(() => ({}))
-        ]);
-        setTasks(tasksResponse.tasks || []);
+        // Load discussion status for progress calculation
+        const statusResponse = await authService.getDiscussionResponseStatus().catch(() => ({}));
         setResponseStatus(statusResponse);
+        // TODO: Fix getStudentTasks method in authService
+        setTasks([]); // Temporary: set empty array until method is fixed
       } catch (error) {
-        console.error('Failed to load tasks:', error);
+        console.error('Failed to load data:', error);
       }
     };
     loadData();
@@ -143,7 +141,7 @@ const StudentDashboard: React.FC = () => {
       left: 0;
       width: 100%;
       height: 100%;
-      z-index: -1;
+      z-index: 1;
       overflow: hidden;
       pointer-events: none;
     }
@@ -331,17 +329,17 @@ const StudentDashboard: React.FC = () => {
       {/* Main Container */}
       <main className="max-w-[1200px] mx-auto grid grid-cols-1 lg:grid-cols-12 gap-8 pb-10">
         {/* Left Sidebar */}
-        <aside className="lg:col-span-4 bg-[#FEF7EC] border-4 border-[#5E4C40] rounded-3xl p-6 shadow-lg flex-shrink-0 flex flex-col min-h-fit">
+        <aside className="lg:col-span-4 bg-[#FEF7EC] border-4 border-[#E6D2B5] rounded-3xl p-6 shadow-lg flex-shrink-0 flex flex-col min-h-fit">
           {/* Logo Section */}
           <div className="text-center mb-6">
             <img
               src="/lpsparklogo.png"
               alt="LP科樂園 Logo"
-              className="h-16 mx-auto object-contain drop-shadow-sm hover:scale-105 transition-transform duration-300"
+              className="h-32 mx-auto object-contain drop-shadow-sm hover:scale-105 transition-transform duration-300"
             />
           </div>
 
-          <div className="text-center mb-4 border-b-4 border-[#5E4C40] pb-2">
+          <div className="text-center mb-4 border-b-4 border-[#E6D2B5] pb-2">
             <h3 className="text-xl font-bold text-[#5E4C40]">我的學科</h3>
           </div>
 
@@ -359,7 +357,7 @@ const StudentDashboard: React.FC = () => {
             <button
               type="button"
               onClick={() => setShowAppStudio(true)}
-              className="w-[calc(100%-10px)] flex items-center gap-3 px-4 py-2 rounded-2xl border-4 transition-all duration-150 border-[#5E4C40] bg-[#E8F5E9] hover:bg-white shadow-sm"
+              className="w-[calc(100%-10px)] flex items-center gap-3 px-4 py-2 rounded-2xl border-4 transition-all duration-150 border-[#E6D2B5] bg-[#E8F5E9] hover:bg-white hover:-translate-y-1 shadow-sm"
               title="小程式工作坊"
             >
               <Code2 className="w-6 h-6 text-[#5E4C40]" />
@@ -368,16 +366,13 @@ const StudentDashboard: React.FC = () => {
 
             <button
               onClick={() => setShowTaskView(true)}
-              className="w-[calc(100%-10px)] flex items-center gap-3 px-4 py-2 rounded-2xl border-4 transition-all duration-150 border-[#5E4C40] bg-[#B5F8CE] hover:bg-white shadow-sm"
+              className="w-[calc(100%-10px)] flex items-center gap-3 px-4 py-2 rounded-2xl border-4 transition-all duration-150 border-[#E6D2B5] bg-[#B5F8CE] hover:bg-white hover:-translate-y-1 shadow-sm"
             >
               <ClipboardList className="w-6 h-6 text-[#5E4C40]" />
               <span className="text-lg font-bold text-[#5E4C40] flex-1 text-left">我的任務</span>
             </button>
           </nav>
 
-          <div className="mt-4 pt-4 border-t-4 border-[#5E4C40]">
-            <button onClick={() => navigate('/')} className="text-sm text-[#5E4C40] font-bold hover:underline">← 返回登入</button>
-          </div>
         </aside>
 
         {/* Right Content */}
