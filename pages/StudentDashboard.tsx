@@ -1,5 +1,5 @@
 import React, { useMemo, useState, useEffect, useRef, useCallback } from 'react';
-import { Settings, LogOut, MessageSquare, HelpCircle, Bot, RefreshCw, X, Eye, EyeOff, Code2, Volume2, CheckCircle2, Star, Award, ClipboardList } from 'lucide-react';
+import { Settings, LogOut, MessageSquare, HelpCircle, Bot, RefreshCw, X, Eye, EyeOff, Code2, Volume2, CheckCircle2, Star, Award, ClipboardList, BookOpen, Brain } from 'lucide-react';
 import { Subject, SUBJECT_CONFIG, Task } from '../types';
 import { DEFAULT_SUBJECT, SINGLE_SUBJECT_MODE, VISIBLE_SUBJECTS } from '../platform';
 import { useNavigate } from 'react-router-dom';
@@ -10,6 +10,7 @@ import AiChatModal from '../components/AiChatModal';
 import BotTaskChatModal from '../components/BotTaskChatModal';
 import AppStudioModal from '../components/AppStudioModal';
 import ImageGenerationConfirmModal from '../components/student/ImageGenerationConfirmModal';
+import StudyPracticeModal from '../components/student/StudyPracticeModal';
 
 const StudentDashboard: React.FC = () => {
   const navigate = useNavigate();
@@ -18,6 +19,7 @@ const StudentDashboard: React.FC = () => {
   const [showAiChat, setShowAiChat] = useState(false);
   const [showBotTaskChat, setShowBotTaskChat] = useState(false);
   const [showAppStudio, setShowAppStudio] = useState(false);
+  const [showStudyPractice, setShowStudyPractice] = useState(false);
   const [selectedBotTaskId, setSelectedBotTaskId] = useState<string | null>(null);
   const [selectedSubject, setSelectedSubject] = useState<Subject>(DEFAULT_SUBJECT);
   const [showTaskView, setShowTaskView] = useState(false);
@@ -682,6 +684,20 @@ const StudentDashboard: React.FC = () => {
               onClick={(e) => {
                 e.preventDefault();
                 e.stopPropagation();
+                setShowStudyPractice(true);
+              }}
+              className="w-[calc(100%-10px)] flex items-center gap-3 px-4 py-2 rounded-2xl border-4 transition-all duration-150 border-[#E6D2B5] bg-[#FFF3E0] hover:bg-white hover:-translate-y-1 shadow-sm"
+              title="學習練習"
+            >
+              <Brain className="w-6 h-6 text-[#5E4C40]" />
+              <span className="text-lg font-bold text-[#5E4C40] flex-1 text-left">學習練習</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
                 setShowAppStudio(true);
               }}
               className="w-[calc(100%-10px)] flex items-center gap-3 px-4 py-2 rounded-2xl border-4 transition-all duration-150 border-[#E6D2B5] bg-[#E8F5E9] hover:bg-white hover:-translate-y-1 shadow-sm"
@@ -966,6 +982,11 @@ const StudentDashboard: React.FC = () => {
         onConfirm={handleConfirmImageGeneration}
         onCancel={() => setShowImageConfirm(false)}
         isGenerating={false}
+      />
+
+      <StudyPracticeModal
+        open={showStudyPractice}
+        onClose={() => setShowStudyPractice(false)}
       />
     </div>
   );
