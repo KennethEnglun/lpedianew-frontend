@@ -1899,6 +1899,131 @@ class AuthService {
     });
     return this.handleResponse(response);
   }
+
+  // === 點數系統相關API ===
+
+  // Student端點數方法
+  async getUserPoints(): Promise<{
+    currentPoints: number;
+    totalReceived: number;
+    totalUsed: number;
+    lastUpdate: string;
+  }> {
+    const response = await fetch(`${this.API_BASE}/student/points/balance`, {
+      headers: this.getAuthHeaders()
+    });
+    return this.handleResponse(response);
+  }
+
+  async getPointsHistory(limit: number = 50): Promise<any[]> {
+    const response = await fetch(`${this.API_BASE}/student/points/history?limit=${limit}`, {
+      headers: this.getAuthHeaders()
+    });
+    const result = await this.handleResponse<{ transactions: any[] }>(response);
+    return result.transactions || [];
+  }
+
+  async generateImageWithPoints(prompt: string): Promise<{
+    success: boolean;
+    imageUrl?: string;
+    remainingPoints?: number;
+    error?: string;
+  }> {
+    const response = await fetch(`${this.API_BASE}/student/image-generation/create`, {
+      method: 'POST',
+      headers: this.getAuthHeaders(),
+      body: JSON.stringify({ prompt })
+    });
+    return this.handleResponse(response);
+  }
+
+  // Admin端點數管理方法
+  async getStudentsPoints(): Promise<{
+    students: Array<{
+      userId: string;
+      username: string;
+      name: string;
+      class?: string;
+      currentPoints: number;
+      totalReceived: number;
+      totalUsed: number;
+      lastUpdate?: string;
+    }>;
+    overview: {
+      totalStudents: number;
+      totalPointsDistributed: number;
+      totalPointsUsed: number;
+      averagePointsPerStudent: number;
+      studentsWithPoints: number;
+      studentsWithoutPoints: number;
+    };
+  }> {
+    const response = await fetch(`${this.API_BASE}/admin/students/points`, {
+      headers: this.getAuthHeaders()
+    });
+    return this.handleResponse(response);
+  }
+
+  async grantPointsToStudent(userId: string, amount: number, description?: string): Promise<{
+    transaction: any;
+    newBalance: number;
+  }> {
+    const response = await fetch(`${this.API_BASE}/admin/students/${userId}/points/grant`, {
+      method: 'POST',
+      headers: this.getAuthHeaders(),
+      body: JSON.stringify({ amount, description })
+    });
+    return this.handleResponse(response);
+  }
+
+  async batchGrantPoints(studentIds: string[], amount: number, description?: string): Promise<{
+    transactions: any[];
+    affectedStudents: number;
+  }> {
+    const response = await fetch(`${this.API_BASE}/admin/students/points/batch-grant`, {
+      method: 'POST',
+      headers: this.getAuthHeaders(),
+      body: JSON.stringify({ studentIds, amount, description })
+    });
+    return this.handleResponse(response);
+  }
+
+  async adjustStudentPoints(userId: string, newAmount: number, description?: string): Promise<{
+    transaction: any;
+    newBalance: number;
+  }> {
+    const response = await fetch(`${this.API_BASE}/admin/students/${userId}/points/adjust`, {
+      method: 'POST',
+      headers: this.getAuthHeaders(),
+      body: JSON.stringify({ newAmount, description })
+    });
+    return this.handleResponse(response);
+  }
+
+  async getPointsTransactions(filters?: {
+    userId?: string;
+    type?: string;
+    limit?: number;
+    offset?: number;
+  }): Promise<{
+    transactions: any[];
+    total: number;
+  }> {
+    const searchParams = new URLSearchParams();
+    if (filters) {
+      Object.entries(filters).forEach(([key, value]) => {
+        if (value !== undefined) {
+          searchParams.append(key, value.toString());
+        }
+      });
+    }
+
+    const query = searchParams.toString() ? `?${searchParams.toString()}` : '';
+    const response = await fetch(`${this.API_BASE}/admin/points/transactions${query}`, {
+      headers: this.getAuthHeaders()
+    });
+    return this.handleResponse(response);
+  }
 }
 
 export const authService = new AuthService();
