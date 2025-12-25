@@ -16,6 +16,19 @@ export interface StudyScope {
   createdAt: string;
 }
 
+// 學習卡（溫習卡）：用來把相同範圍的多次練習記錄在一起，並可重用
+export interface StudyCard {
+  id: string;
+  studentId: string;
+  name: string; // 顯示名稱（可後續改名）
+  scope: StudyScope;
+  scopeFingerprint: string; // 用於辨識「相同範圍」
+  createdAt: string;
+  updatedAt: string;
+  lastStudiedAt: string | null;
+  archivedAt?: string | null;
+}
+
 // 题目数据结构
 export interface StudyQuestion {
   id: string;
@@ -43,6 +56,7 @@ export interface StudySession {
   id: string;
   studentId: string;
   studentName: string;
+  cardId?: string;           // 對應學習卡；舊資料可能沒有
   scope: StudyScope;
   questions: StudyQuestion[];
   answers: StudentAnswer[];

@@ -26,7 +26,7 @@ export class AIAnalyticsService {
       const basicAnalytics = studyAnalytics.generateStudyAnalytics(
         studentId,
         studentName,
-        subject
+        subject ? { subject } : undefined
       );
 
       if (basicAnalytics.totalSessions === 0) {
@@ -53,7 +53,7 @@ export class AIAnalyticsService {
       const fallbackAnalytics = studyAnalytics.generateStudyAnalytics(
         studentId,
         studentName,
-        subject
+        subject ? { subject } : undefined
       );
 
       return {

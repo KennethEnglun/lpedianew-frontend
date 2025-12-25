@@ -15,7 +15,7 @@ import type {
 } from '../../types/study';
 import { useAuth } from '../../contexts/AuthContext';
 import { questionGenerator } from '../../services/questionGenerator';
-import { validateStudyContent, studyStorage, generateId } from '../../utils/studyUtils';
+import { validateStudyContent, studyCardStorage, studyStorage, generateId } from '../../utils/studyUtils';
 
 // 模态框步骤状态
 type StudyStep = 'setup' | 'generating' | 'quiz' | 'answer-review' | 'results';
@@ -48,6 +48,7 @@ export default function StudyPracticeModal({ open, onClose, initialScope }: Stud
   const [selectedOption, setSelectedOption] = useState<number | null>(null);
   const [startTime, setStartTime] = useState<string>('');
   const [questionStartTime, setQuestionStartTime] = useState<number>(0);
+  const [activeCardId, setActiveCardId] = useState<string | null>(null);
 
   // UI狀態
   const [loading, setLoading] = useState(false);
@@ -63,6 +64,7 @@ export default function StudyPracticeModal({ open, onClose, initialScope }: Stud
     setError('');
     setStartTime('');
     setQuestionStartTime(0);
+    setActiveCardId(null);
     // 重置 scope 為預設值
     setScope({
       subject: '數學',
@@ -110,22 +112,24 @@ export default function StudyPracticeModal({ open, onClose, initialScope }: Stud
       setError(validation.errors.join('；'));
       return;
     }
+    if (!user?.id) {
+      setError('登入狀態失效，請重新登入後再試');
+      return;
+    }
 
     setLoading(true);
     setError('');
     setCurrentStep('generating');
 
     try {
+      // 先建立/取得學習卡（溫習卡），讓同範圍的多次練習記錄在一起
+      const card = studyCardStorage.ensureCardForScope(user.id, scope);
+      setActiveCardId(card.id);
       const fullScope: StudyScope = {
-        id: generateId.scope(),
-        subject: scope.subject!,
-        chapters: scope.chapters || [],
-        topics: scope.topics || [],
-        difficulty: scope.difficulty!,
-        questionCount: scope.questionCount!,
-        customContent: scope.customContent,
-        contentSource: scope.contentSource!,
-        createdAt: new Date().toISOString()
+        ...card.scope,
+        // 允許本次練習沿用目前 UI 設定（例如題數）
+        questionCount: scope.questionCount ?? card.scope.questionCount,
+        createdAt: card.scope.createdAt
       };
 
       const response = await questionGenerator.generateQuestions(fullScope);
@@ -197,6 +201,7 @@ export default function StudyPracticeModal({ open, onClose, initialScope }: Stud
       id: generateId.session(),
       studentId: user.id,
       studentName: user.profile?.name || user.username || '學生',
+      cardId: activeCardId || scope.id,
       scope: scope as StudyScope,
       questions,
       answers: finalAnswers,
@@ -211,6 +216,9 @@ export default function StudyPracticeModal({ open, onClose, initialScope }: Stud
 
     // 保存学习记录
     studyStorage.saveSession(session);
+    if (session.cardId) {
+      studyCardStorage.touchCardStudiedAt(user.id, session.cardId, endTime);
+    }
 
     setCurrentStep('results');
   };

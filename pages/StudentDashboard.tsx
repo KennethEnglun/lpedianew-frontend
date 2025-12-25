@@ -14,7 +14,7 @@ import StudyPracticeModal from '../components/student/StudyPracticeModal';
 import { StudyHistoryPanel } from '../components/student/StudyHistoryPanel';
 import { StudyAnalyticsModal } from '../components/student/StudyAnalyticsModal';
 import { aiAnalyticsService } from '../services/aiAnalyticsService';
-import type { StudyAnalytics, StudySession, StudyScope } from '../types/study';
+import type { StudyAnalytics, StudyScope } from '../types/study';
 
 const StudentDashboard: React.FC = () => {
   const navigate = useNavigate();
@@ -231,9 +231,9 @@ const StudentDashboard: React.FC = () => {
   }, []);
 
   // 處理重新練習
-  const handleRetrySession = useCallback((session: StudySession) => {
+  const handleRetryScope = useCallback((scope: Partial<StudyScope>) => {
     // 設置重新練習的學習範圍
-    setRetrySessionScope(session.scope);
+    setRetrySessionScope(scope);
     // 關閉歷史面板
     setShowStudyHistory(false);
     // 開啟練習模態框
@@ -1081,7 +1081,7 @@ const StudentDashboard: React.FC = () => {
                 studentId={user.id.toString()}
                 studentName={user.username || user.profile?.name || '學生'}
                 onViewAnalytics={handleViewAnalytics}
-                onRetrySession={handleRetrySession}
+                onRetryScope={handleRetryScope}
               />
             </div>
           </div>

@@ -5,31 +5,35 @@
 
 import React, { useState, useEffect } from 'react';
 import { Calendar, BookOpen, TrendingUp, Clock, Target, BarChart3 } from 'lucide-react';
-import type { StudySession, StudyAnalytics, StudyScope } from '../../types/study';
-import { studyStorage, studyAnalytics, formatUtils } from '../../utils/studyUtils';
+import type { StudySession, StudyAnalytics, StudyScope, StudyCard } from '../../types/study';
+import { studyCardStorage, studyStorage, studyAnalytics, formatUtils } from '../../utils/studyUtils';
 
 interface StudyHistoryPanelProps {
   studentId: string;
   studentName: string;
   onViewAnalytics: (analytics: StudyAnalytics) => void;
-  onRetrySession: (session: StudySession) => void;
+  onRetryScope: (scope: Partial<StudyScope>) => void;
 }
 
 export const StudyHistoryPanel: React.FC<StudyHistoryPanelProps> = ({
   studentId,
   studentName,
   onViewAnalytics,
-  onRetrySession
+  onRetryScope
 }) => {
   const [sessions, setSessions] = useState<StudySession[]>([]);
+  const [cards, setCards] = useState<StudyCard[]>([]);
   const [selectedSubject, setSelectedSubject] = useState<string>('all');
   const [loading, setLoading] = useState(true);
+  const [expandedCardIds, setExpandedCardIds] = useState<Set<string>>(() => new Set());
 
   // 載入學習記錄
   useEffect(() => {
     const loadSessions = () => {
+      studyCardStorage.ensureCardsForExistingSessions(studentId);
       const allSessions = studyStorage.getAllSessions(studentId);
       setSessions(allSessions);
+      setCards(studyCardStorage.getAllCards(studentId).filter((c) => !c.archivedAt));
       setLoading(false);
     };
 
@@ -67,9 +71,32 @@ export const StudyHistoryPanel: React.FC<StudyHistoryPanelProps> = ({
   };
 
   // 重新練習
-  const handleRetrySession = (session: StudySession) => {
-    // 調用父組件的重新練習回調
-    onRetrySession(session);
+  const handleRetryScope = (scope: Partial<StudyScope>) => {
+    onRetryScope(scope);
+  };
+
+  const filteredCards = selectedSubject === 'all'
+    ? cards
+    : cards.filter(card => card.scope.subject === selectedSubject);
+
+  const completedSessionsByCardId = (() => {
+    const map = new Map<string, StudySession[]>();
+    for (const s of completedSessions) {
+      const key = s.cardId || s.scope?.id || 'unknown';
+      const list = map.get(key) || [];
+      list.push(s);
+      map.set(key, list);
+    }
+    return map;
+  })();
+
+  const toggleCardExpanded = (cardId: string) => {
+    setExpandedCardIds(prev => {
+      const next = new Set(prev);
+      if (next.has(cardId)) next.delete(cardId);
+      else next.add(cardId);
+      return next;
+    });
   };
 
   if (loading) {
@@ -165,95 +192,137 @@ export const StudyHistoryPanel: React.FC<StudyHistoryPanelProps> = ({
             <p className="text-sm">開始第一次練習吧！</p>
           </div>
         ) : (
-          filteredSessions.map(session => (
-            <div
-              key={session.id}
-              className="bg-white rounded-2xl p-6 shadow-comic border-2 border-brand-brown/10"
-            >
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                <div className="flex-1">
-                  <div className="flex items-center gap-2 mb-2">
-                    <BookOpen className="w-5 h-5 text-brand-brown" />
-                    <span className="font-bold text-brand-brown text-lg">
-                      {session.scope.subject}
-                    </span>
-                    {!session.completed && (
-                      <span className="bg-yellow-100 text-yellow-800 px-2 py-1 rounded-lg text-xs font-medium">
-                        進行中
+          filteredCards.map(card => {
+            const cardSessions = completedSessionsByCardId.get(card.id) || [];
+            const sessionCount = cardSessions.length;
+            const avgScore = sessionCount > 0 ? cardSessions.reduce((sum, s) => sum + s.score, 0) / sessionCount : 0;
+            const avgAccuracy = sessionCount > 0 ? cardSessions.reduce((sum, s) => sum + s.accuracy, 0) / sessionCount : 0;
+            const lastAt = cardSessions.length > 0
+              ? cardSessions.map(s => s.createdAt).sort().slice(-1)[0]
+              : (card.lastStudiedAt || card.createdAt);
+
+            const expanded = expandedCardIds.has(card.id);
+
+            return (
+              <div
+                key={card.id}
+                className="bg-white rounded-2xl p-6 shadow-comic border-2 border-brand-brown/10"
+              >
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                  <div className="flex-1">
+                    <div className="flex items-center gap-2 mb-2">
+                      <BookOpen className="w-5 h-5 text-brand-brown" />
+                      <span className="font-bold text-brand-brown text-lg">
+                        {card.name}
                       </span>
-                    )}
-                  </div>
-
-                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 text-sm text-gray-600">
-                    <div className="flex items-center gap-2">
-                      <Calendar className="w-4 h-4" />
-                      {formatUtils.formatDate(session.createdAt)}
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <Target className="w-4 h-4" />
-                      {session.questions.length} 題
-                    </div>
-                    {session.completed && (
-                      <>
-                        <div className="flex items-center gap-2">
-                          <TrendingUp className="w-4 h-4" />
-                          {formatUtils.formatAccuracy(session.accuracy)}
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <BarChart3 className="w-4 h-4" />
-                          {formatUtils.formatScore(session.score)}
-                        </div>
-                      </>
-                    )}
-                  </div>
-
-                  {/* 學習範圍詳情 */}
-                  <div className="mt-3 text-sm">
-                    {session.scope.contentSource === 'custom' ? (
-                      <div className="bg-brand-cream rounded-lg p-3">
-                        <div className="font-medium text-brand-brown mb-1">自定義內容:</div>
-                        <div className="text-gray-700 line-clamp-2">
-                          {formatUtils.truncateText(session.scope.customContent || '', 100)}
-                        </div>
-                      </div>
-                    ) : (
-                      <div className="bg-brand-cream rounded-lg p-3">
-                        <div className="font-medium text-brand-brown mb-1">學習範圍:</div>
-                        <div className="text-gray-700">
-                          章節: {session.scope.chapters?.join('、') || '無'}
-                        </div>
-                        <div className="text-gray-700">
-                          知識點: {session.scope.topics?.join('、') || '無'}
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                </div>
-
-                {/* 操作按鈕 */}
-                <div className="flex flex-col sm:flex-row gap-2">
-                  {session.completed && (
-                    <>
                       <button
-                        onClick={() => handleRetrySession(session)}
-                        className="bg-brand-blue hover:bg-blue-600 text-white px-4 py-2 rounded-xl font-medium transition-all transform hover:scale-105 inline-flex items-center gap-2"
+                        onClick={() => toggleCardExpanded(card.id)}
+                        className="ml-2 text-xs font-bold px-3 py-1 rounded-lg border-2 border-brand-brown text-brand-brown hover:bg-brand-cream transition-all"
                       >
-                        <Clock className="w-4 h-4" />
-                        重新練習
+                        {expanded ? '收起場次' : '查看場次'}
                       </button>
-                      <button
-                        onClick={() => handleGenerateAnalytics(session.scope)}
-                        className="bg-brand-green hover:bg-brand-green-dark text-white px-4 py-2 rounded-xl font-medium transition-all transform hover:scale-105 inline-flex items-center gap-2"
-                      >
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 text-sm text-gray-600">
+                      <div className="flex items-center gap-2">
+                        <Calendar className="w-4 h-4" />
+                        {formatUtils.formatDate(lastAt)}
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Target className="w-4 h-4" />
+                        {sessionCount} 次練習
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <TrendingUp className="w-4 h-4" />
+                        {formatUtils.formatAccuracy(avgAccuracy)}
+                      </div>
+                      <div className="flex items-center gap-2">
                         <BarChart3 className="w-4 h-4" />
-                        分析此範圍
-                      </button>
-                    </>
-                  )}
+                        {formatUtils.formatScore(avgScore)}
+                      </div>
+                    </div>
+
+                    {/* 學習範圍詳情 */}
+                    <div className="mt-3 text-sm">
+                      {card.scope.contentSource === 'custom' ? (
+                        <div className="bg-brand-cream rounded-lg p-3">
+                          <div className="font-medium text-brand-brown mb-1">自定義內容:</div>
+                          <div className="text-gray-700 line-clamp-2">
+                            {formatUtils.truncateText(card.scope.customContent || '', 100)}
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="bg-brand-cream rounded-lg p-3">
+                          <div className="font-medium text-brand-brown mb-1">學習範圍:</div>
+                          <div className="text-gray-700">
+                            章節: {card.scope.chapters?.join('、') || '無'}
+                          </div>
+                          <div className="text-gray-700">
+                            知識點: {card.scope.topics?.join('、') || '無'}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+
+                    {expanded && (
+                      <div className="mt-4 space-y-3">
+                        {cardSessions.length === 0 ? (
+                          <div className="text-sm text-gray-500">此學習卡尚未有完成的練習記錄</div>
+                        ) : (
+                          cardSessions.map((session) => (
+                            <div
+                              key={session.id}
+                              className="bg-brand-cream rounded-xl p-4 border-2 border-brand-brown/10"
+                            >
+                              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                                <div className="text-sm text-gray-700 font-bold">
+                                  {formatUtils.formatDate(session.createdAt)} • {session.questions.length} 題 • {formatUtils.formatAccuracy(session.accuracy)} • {formatUtils.formatScore(session.score)}
+                                </div>
+                                <div className="flex gap-2">
+                                  <button
+                                    onClick={() => handleRetryScope(session.scope)}
+                                    className="bg-brand-blue hover:bg-blue-600 text-white px-3 py-2 rounded-xl font-medium transition-all transform hover:scale-105 inline-flex items-center gap-2"
+                                  >
+                                    <Clock className="w-4 h-4" />
+                                    重新練習
+                                  </button>
+                                  <button
+                                    onClick={() => handleGenerateAnalytics(session.scope)}
+                                    className="bg-brand-green hover:bg-brand-green-dark text-white px-3 py-2 rounded-xl font-medium transition-all transform hover:scale-105 inline-flex items-center gap-2"
+                                  >
+                                    <BarChart3 className="w-4 h-4" />
+                                    分析
+                                  </button>
+                                </div>
+                              </div>
+                            </div>
+                          ))
+                        )}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* 操作按鈕 */}
+                  <div className="flex flex-col sm:flex-row gap-2">
+                    <button
+                      onClick={() => handleRetryScope(card.scope)}
+                      className="bg-brand-blue hover:bg-blue-600 text-white px-4 py-2 rounded-xl font-medium transition-all transform hover:scale-105 inline-flex items-center gap-2"
+                    >
+                      <Clock className="w-4 h-4" />
+                      重新練習此卡
+                    </button>
+                    <button
+                      onClick={() => handleGenerateAnalytics(card.scope)}
+                      className="bg-brand-green hover:bg-brand-green-dark text-white px-4 py-2 rounded-xl font-medium transition-all transform hover:scale-105 inline-flex items-center gap-2"
+                    >
+                      <BarChart3 className="w-4 h-4" />
+                      分析此範圍
+                    </button>
+                  </div>
                 </div>
               </div>
-            </div>
-          ))
+            );
+          })
         )}
       </div>
     </div>

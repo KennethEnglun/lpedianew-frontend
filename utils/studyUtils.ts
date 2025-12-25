@@ -8,11 +8,28 @@ import type {
   StudyQuestion,
   StudySession,
   StudentAnswer,
+  StudyCard,
   StudyAnalytics,
   TopicMastery,
   StudyOverview,
   STUDY_CONTENT_LIMITS
 } from '../types/study';
+
+const normalizeString = (value: unknown) => String(value ?? '').trim();
+const normalizeStringList = (value: unknown) => {
+  if (!Array.isArray(value)) return [];
+  return value.map(v => normalizeString(v)).filter(Boolean);
+};
+
+const computeScopeFingerprint = (scope: Partial<StudyScope>): string => {
+  const subject = normalizeString(scope.subject);
+  const contentSource = scope.contentSource === 'custom' ? 'custom' : 'chapters';
+  const difficulty = scope.difficulty ? String(scope.difficulty) : '';
+  const chapters = contentSource === 'chapters' ? normalizeStringList(scope.chapters).sort() : [];
+  const topics = contentSource === 'chapters' ? normalizeStringList(scope.topics).sort() : [];
+  const customContent = contentSource === 'custom' ? normalizeString(scope.customContent) : '';
+  return JSON.stringify({ subject, contentSource, difficulty, chapters, topics, customContent });
+};
 
 // 内容验证函数
 export const validateStudyContent = {
@@ -96,6 +113,11 @@ export const studyStorage = {
    * 保存学习会话
    */
   saveSession: (session: StudySession): void => {
+    // 對舊資料相容：確保每次練習都歸屬到一張「學習卡」
+    if (!session.cardId) {
+      const card = studyCardStorage.ensureCardForScope(session.studentId, session.scope);
+      session.cardId = card.id;
+    }
     const sessions = studyStorage.getAllSessions(session.studentId);
     const existingIndex = sessions.findIndex(s => s.id === session.id);
 
@@ -145,6 +167,130 @@ export const studyStorage = {
    */
   clearAllSessions: (studentId: string): void => {
     localStorage.removeItem(`studySessions_${studentId}`);
+  }
+};
+
+// 學習卡存儲：把相同範圍的練習「聚合」到同一張卡
+export const studyCardStorage = {
+  getAllCards: (studentId: string): StudyCard[] => {
+    try {
+      const stored = localStorage.getItem(`studyCards_${studentId}`);
+      const cards = stored ? JSON.parse(stored) : [];
+      return Array.isArray(cards) ? cards : [];
+    } catch (e) {
+      console.error('Failed to load study cards:', e);
+      return [];
+    }
+  },
+
+  saveAllCards: (studentId: string, cards: StudyCard[]): void => {
+    localStorage.setItem(`studyCards_${studentId}`, JSON.stringify(cards));
+  },
+
+  upsertCard: (studentId: string, card: StudyCard): StudyCard => {
+    const cards = studyCardStorage.getAllCards(studentId);
+    const idx = cards.findIndex(c => c.id === card.id);
+    if (idx >= 0) cards[idx] = card;
+    else cards.unshift(card);
+    studyCardStorage.saveAllCards(studentId, cards);
+    return card;
+  },
+
+  ensureCardForScope: (studentId: string, scope: Partial<StudyScope>): StudyCard => {
+    const now = new Date().toISOString();
+    const subject = normalizeString(scope.subject);
+    const contentSource = scope.contentSource === 'custom' ? 'custom' : 'chapters';
+    const difficulty = (scope.difficulty as StudyScope['difficulty']) || '小三';
+    const questionCount = Number(scope.questionCount) || 10;
+    const chapters = contentSource === 'chapters' ? normalizeStringList(scope.chapters) : [];
+    const topics = contentSource === 'chapters' ? normalizeStringList(scope.topics) : [];
+    const customContent = contentSource === 'custom' ? normalizeString(scope.customContent) : '';
+
+    const scopeFingerprint = computeScopeFingerprint({
+      subject,
+      contentSource,
+      difficulty,
+      chapters,
+      topics,
+      customContent
+    });
+
+    const cards = studyCardStorage.getAllCards(studentId);
+    const existing = cards.find(c => c && c.scopeFingerprint === scopeFingerprint && !c.archivedAt);
+    if (existing) {
+      const next: StudyCard = {
+        ...existing,
+        updatedAt: now,
+        scope: {
+          ...existing.scope,
+          subject,
+          contentSource,
+          difficulty,
+          chapters,
+          topics,
+          customContent: contentSource === 'custom' ? customContent : undefined,
+          questionCount
+        }
+      };
+      return studyCardStorage.upsertCard(studentId, next);
+    }
+
+    const cardId = generateId.card();
+    const fullScope: StudyScope = {
+      id: cardId,
+      subject,
+      chapters,
+      topics,
+      difficulty,
+      questionCount,
+      ...(contentSource === 'custom' ? { customContent } : {}),
+      contentSource,
+      createdAt: now
+    };
+
+    const card: StudyCard = {
+      id: cardId,
+      studentId,
+      name: studyAnalytics.getScopeDescription(fullScope),
+      scope: fullScope,
+      scopeFingerprint,
+      createdAt: now,
+      updatedAt: now,
+      lastStudiedAt: null,
+      archivedAt: null
+    };
+
+    return studyCardStorage.upsertCard(studentId, card);
+  },
+
+  touchCardStudiedAt: (studentId: string, cardId: string, studiedAt: string): void => {
+    const cards = studyCardStorage.getAllCards(studentId);
+    const idx = cards.findIndex(c => c.id === cardId);
+    if (idx === -1) return;
+    cards[idx] = {
+      ...cards[idx],
+      updatedAt: new Date().toISOString(),
+      lastStudiedAt: studiedAt
+    };
+    studyCardStorage.saveAllCards(studentId, cards);
+  },
+
+  // 將舊的 session（沒有 cardId）補齊，並建立對應學習卡
+  ensureCardsForExistingSessions: (studentId: string): void => {
+    const sessions = studyStorage.getAllSessions(studentId);
+    if (sessions.length === 0) return;
+
+    let changed = false;
+    const next = sessions.map((s) => {
+      if (s?.cardId) return s;
+      const card = studyCardStorage.ensureCardForScope(studentId, s.scope);
+      changed = true;
+      return { ...s, cardId: card.id };
+    });
+
+    if (changed) {
+      localStorage.setItem(`studySessions_${studentId}`, JSON.stringify(next));
+    }
   }
 };
 
@@ -325,17 +471,27 @@ export const studyAnalytics = {
     // 科目必須相同
     if (scope1.subject !== scope2.subject) return false;
 
+    // 若有指定難度，必須相同
+    if (scope2.difficulty && scope1.difficulty !== scope2.difficulty) return false;
+
+    // 允許只用 subject（或 subject+difficulty）來做粗粒度篩選
+    const inferredSource = scope2.contentSource
+      || (scope2.customContent ? 'custom' : ((scope2.chapters && scope2.chapters.length > 0) || (scope2.topics && scope2.topics.length > 0) ? 'chapters' : null));
+    if (!inferredSource) return true;
+
     // 如果是自定義內容，比較內容
-    if (scope2.contentSource === 'custom' && scope1.contentSource === 'custom') {
-      return scope1.customContent === scope2.customContent;
+    if (inferredSource === 'custom') {
+      if (scope1.contentSource !== 'custom') return false;
+      return normalizeString(scope1.customContent) === normalizeString(scope2.customContent);
     }
 
     // 如果是章節內容，比較章節和知識點
-    if (scope2.contentSource === 'chapters' && scope1.contentSource === 'chapters') {
+    if (inferredSource === 'chapters') {
+      if (scope1.contentSource !== 'chapters') return false;
       const chapters1 = scope1.chapters?.sort().join(',') || '';
-      const chapters2 = scope2.chapters?.sort().join(',') || '';
+      const chapters2 = Array.isArray(scope2.chapters) ? [...scope2.chapters].sort().join(',') : '';
       const topics1 = scope1.topics?.sort().join(',') || '';
-      const topics2 = scope2.topics?.sort().join(',') || '';
+      const topics2 = Array.isArray(scope2.topics) ? [...scope2.topics].sort().join(',') : '';
 
       return chapters1 === chapters2 && topics1 === topics2;
     }
@@ -438,5 +594,6 @@ export const generateId = {
   session: () => `session_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
   question: () => `question_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
   answer: () => `answer_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-  scope: () => `scope_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
+  scope: () => `scope_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+  card: () => `card_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
 };
