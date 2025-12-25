@@ -209,10 +209,8 @@ const AiChatModal: React.FC<{
       setImagePrompt(prompt);
       setMySidebarView('image');
       setIsExecutingConfirmedGeneration(true);
-      // 延遲一下確保狀態更新後再執行
-      setTimeout(() => {
-        generateImage();
-      }, 100);
+      // 直接執行生成，繞過點數檢查
+      doImageGeneration(prompt);
     }
   }, [executeImageGeneration]);
 
@@ -422,20 +420,8 @@ const AiChatModal: React.FC<{
     }
   };
 
-  const generateImage = async () => {
-    const prompt = String(imagePrompt || '').trim();
-    if (!prompt) {
-      setImageError('請輸入圖片描述');
-      return;
-    }
-
-    // 學生端需要點數確認（除非正在執行已確認的生成）
-    if (!isTeacher && onImageGeneration && !isExecutingConfirmedGeneration) {
-      onImageGeneration(prompt);
-      return;
-    }
-
-    // 教師/管理員可以直接生成
+  // 內部生成函數，繞過點數檢查
+  const doImageGeneration = async (prompt: string) => {
     try {
       setImageLoading(true);
       setImageError('');
@@ -448,6 +434,23 @@ const AiChatModal: React.FC<{
     } finally {
       setImageLoading(false);
     }
+  };
+
+  const generateImage = async () => {
+    const prompt = String(imagePrompt || '').trim();
+    if (!prompt) {
+      setImageError('請輸入圖片描述');
+      return;
+    }
+
+    // 學生端需要點數確認
+    if (!isTeacher && onImageGeneration) {
+      onImageGeneration(prompt);
+      return;
+    }
+
+    // 教師/管理員可以直接生成
+    await doImageGeneration(prompt);
   };
 
   const renameThread = async (threadId: string, title: string) => {
