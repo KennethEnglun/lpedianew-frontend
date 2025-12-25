@@ -12,12 +12,14 @@ interface StudyHistoryPanelProps {
   studentId: string;
   studentName: string;
   onViewAnalytics: (analytics: StudyAnalytics) => void;
+  onRetrySession: (session: StudySession) => void;
 }
 
 export const StudyHistoryPanel: React.FC<StudyHistoryPanelProps> = ({
   studentId,
   studentName,
-  onViewAnalytics
+  onViewAnalytics,
+  onRetrySession
 }) => {
   const [sessions, setSessions] = useState<StudySession[]>([]);
   const [selectedSubject, setSelectedSubject] = useState<string>('all');
@@ -56,25 +58,8 @@ export const StudyHistoryPanel: React.FC<StudyHistoryPanelProps> = ({
 
   // 重新練習
   const handleRetrySession = (session: StudySession) => {
-    // 創建新的學習會話，使用相同的學習範圍
-    const newSession: StudySession = {
-      id: `retry_${Date.now()}`,
-      studentId: session.studentId,
-      studentName: session.studentName,
-      scope: { ...session.scope },
-      questions: [],
-      answers: [],
-      score: 0,
-      accuracy: 0,
-      totalTimeSpent: 0,
-      startTime: new Date().toISOString(),
-      endTime: null,
-      completed: false,
-      createdAt: new Date().toISOString()
-    };
-
-    // 這裡可以觸發重新開始練習的邏輯
-    console.log('重新練習:', newSession);
+    // 調用父組件的重新練習回調
+    onRetrySession(session);
   };
 
   if (loading) {

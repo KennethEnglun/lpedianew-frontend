@@ -14,7 +14,7 @@ import StudyPracticeModal from '../components/student/StudyPracticeModal';
 import { StudyHistoryPanel } from '../components/student/StudyHistoryPanel';
 import { StudyAnalyticsModal } from '../components/student/StudyAnalyticsModal';
 import { aiAnalyticsService } from '../services/aiAnalyticsService';
-import type { StudyAnalytics } from '../types/study';
+import type { StudyAnalytics, StudySession, StudyScope } from '../types/study';
 
 const StudentDashboard: React.FC = () => {
   const navigate = useNavigate();
@@ -28,6 +28,7 @@ const StudentDashboard: React.FC = () => {
   const [showAnalyticsModal, setShowAnalyticsModal] = useState(false);
   const [analyticsData, setAnalyticsData] = useState<StudyAnalytics | null>(null);
   const [analyticsLoading, setAnalyticsLoading] = useState(false);
+  const [retrySessionScope, setRetrySessionScope] = useState<Partial<StudyScope> | null>(null);
   const [activeTab, setActiveTab] = useState<'practice' | 'history'>('practice');
   const [selectedBotTaskId, setSelectedBotTaskId] = useState<string | null>(null);
   const [selectedSubject, setSelectedSubject] = useState<Subject>(DEFAULT_SUBJECT);
@@ -227,6 +228,16 @@ const StudentDashboard: React.FC = () => {
   const handleViewAnalytics = useCallback(async (analytics: StudyAnalytics) => {
     setAnalyticsData(analytics);
     setShowAnalyticsModal(true);
+  }, []);
+
+  // 處理重新練習
+  const handleRetrySession = useCallback((session: StudySession) => {
+    // 設置重新練習的學習範圍
+    setRetrySessionScope(session.scope);
+    // 關閉歷史面板
+    setShowStudyHistory(false);
+    // 開啟練習模態框
+    setShowStudyPractice(true);
   }, []);
 
   // 重新生成分析報告
@@ -1042,7 +1053,11 @@ const StudentDashboard: React.FC = () => {
 
       <StudyPracticeModal
         open={showStudyPractice}
-        onClose={() => setShowStudyPractice(false)}
+        onClose={() => {
+          setShowStudyPractice(false);
+          setRetrySessionScope(null); // 關閉時清除重新練習的學習範圍
+        }}
+        initialScope={retrySessionScope}
       />
 
       {/* 學習歷史面板模態框 */}
@@ -1066,6 +1081,7 @@ const StudentDashboard: React.FC = () => {
                 studentId={user.id.toString()}
                 studentName={user.username || user.profile?.name || '學生'}
                 onViewAnalytics={handleViewAnalytics}
+                onRetrySession={handleRetrySession}
               />
             </div>
           </div>

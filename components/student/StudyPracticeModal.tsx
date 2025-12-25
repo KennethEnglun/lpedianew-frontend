@@ -5,7 +5,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
-import { X, BookOpen, Settings, Brain, Trophy, Clock, Target } from 'lucide-react';
+import { X, BookOpen, Settings, Brain, Trophy, Clock, Target, CheckCircle, XCircle } from 'lucide-react';
 import Button from '../Button';
 import type {
   StudyScope,
@@ -18,19 +18,20 @@ import { questionGenerator } from '../../services/questionGenerator';
 import { validateStudyContent, studyStorage, generateId } from '../../utils/studyUtils';
 
 // 模态框步骤状态
-type StudyStep = 'setup' | 'generating' | 'quiz' | 'results';
+type StudyStep = 'setup' | 'generating' | 'quiz' | 'answer-review' | 'results';
 
 interface StudyPracticeModalProps {
   open: boolean;
   onClose: () => void;
+  initialScope?: Partial<StudyScope>; // 可選的初始學習範圍
 }
 
-export default function StudyPracticeModal({ open, onClose }: StudyPracticeModalProps) {
+export default function StudyPracticeModal({ open, onClose, initialScope }: StudyPracticeModalProps) {
   const { user } = useAuth();
 
   // 主要狀態管理
   const [currentStep, setCurrentStep] = useState<StudyStep>('setup');
-  const [scope, setScope] = useState<Partial<StudyScope>>({
+  const [scope, setScope] = useState<Partial<StudyScope>>(initialScope || {
     subject: '數學', // 預設科目
     chapters: [],
     topics: [],
@@ -88,6 +89,13 @@ export default function StudyPracticeModal({ open, onClose }: StudyPracticeModal
     }
   }, [currentStep, currentQuestionIndex]);
 
+  // 當modal開啟且有initialScope時，更新scope
+  useEffect(() => {
+    if (open && initialScope) {
+      setScope(initialScope);
+    }
+  }, [open, initialScope]);
+
   // 關閉模態框
   const handleClose = () => {
     resetStates();
@@ -140,7 +148,7 @@ export default function StudyPracticeModal({ open, onClose }: StudyPracticeModal
     }
   };
 
-  // 提交答案并移到下一題
+  // 提交答案并顯示答案結果
   const handleAnswerSubmit = () => {
     if (selectedOption === null) return;
 
@@ -158,14 +166,20 @@ export default function StudyPracticeModal({ open, onClose }: StudyPracticeModal
     const newAnswers = [...answers, answer];
     setAnswers(newAnswers);
 
-    // 移到下一題或结束测验
+    // 進入答案檢視步驟
+    setCurrentStep('answer-review');
+  };
+
+  // 繼續到下一題或結束測驗
+  const handleNextQuestion = () => {
     if (currentQuestionIndex < questions.length - 1) {
       setCurrentQuestionIndex(currentQuestionIndex + 1);
       setSelectedOption(null);
       setQuestionStartTime(Date.now());
+      setCurrentStep('quiz');
     } else {
-      // 测验结束，保存结果
-      finishQuiz(newAnswers);
+      // 測驗結束，保存結果
+      finishQuiz(answers);
     }
   };
 
@@ -217,6 +231,7 @@ export default function StudyPracticeModal({ open, onClose }: StudyPracticeModal
               {currentStep === 'setup' && <Settings className="w-5 h-5 text-brand-brown" />}
               {currentStep === 'generating' && <Brain className="w-5 h-5 text-brand-brown" />}
               {currentStep === 'quiz' && <BookOpen className="w-5 h-5 text-brand-brown" />}
+              {currentStep === 'answer-review' && <CheckCircle className="w-5 h-5 text-brand-brown" />}
               {currentStep === 'results' && <Trophy className="w-5 h-5 text-brand-brown" />}
             </div>
             <div>
@@ -224,9 +239,10 @@ export default function StudyPracticeModal({ open, onClose }: StudyPracticeModal
                 {currentStep === 'setup' && '學習練習設置'}
                 {currentStep === 'generating' && 'AI 題目生成中'}
                 {currentStep === 'quiz' && '答題練習'}
+                {currentStep === 'answer-review' && '答案檢視'}
                 {currentStep === 'results' && '練習結果'}
               </div>
-              {currentStep === 'quiz' && (
+              {(currentStep === 'quiz' || currentStep === 'answer-review') && (
                 <div className="text-sm text-brand-brown/80">
                   第 {currentQuestionIndex + 1} 題 / 共 {questions.length} 題
                 </div>
@@ -482,6 +498,98 @@ export default function StudyPracticeModal({ open, onClose }: StudyPracticeModal
                   className="bg-[#A1D9AE] hover:bg-[#8BC7A1] text-brand-brown px-8"
                   onClick={handleAnswerSubmit}
                   disabled={selectedOption === null}
+                >
+                  {currentQuestionIndex < questions.length - 1 ? '下一題' : '完成測驗'}
+                </Button>
+              </div>
+            </div>
+          )}
+
+          {/* 答案檢視步驟 */}
+          {currentStep === 'answer-review' && currentQuestion && (
+            <div className="space-y-6">
+              {/* 進度條 */}
+              <div className="w-full bg-gray-200 rounded-full h-2">
+                <div
+                  className="bg-[#A1D9AE] h-2 rounded-full transition-all duration-300"
+                  style={{ width: `${((currentQuestionIndex + 1) / questions.length) * 100}%` }}
+                ></div>
+              </div>
+
+              {/* 答案結果 */}
+              <div className="text-center space-y-4">
+                {answers[answers.length - 1]?.isCorrect ? (
+                  <div className="flex flex-col items-center gap-4">
+                    <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center">
+                      <CheckCircle className="w-10 h-10 text-green-500" />
+                    </div>
+                    <div className="text-2xl font-bold text-green-600">正確！</div>
+                  </div>
+                ) : (
+                  <div className="flex flex-col items-center gap-4">
+                    <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center">
+                      <XCircle className="w-10 h-10 text-red-500" />
+                    </div>
+                    <div className="text-2xl font-bold text-red-600">錯誤</div>
+                  </div>
+                )}
+              </div>
+
+              {/* 題目回顧 */}
+              <div className="bg-white border-2 border-gray-200 rounded-xl p-6">
+                <div className="text-lg font-bold text-gray-800 mb-4">
+                  {currentQuestion.content}
+                </div>
+
+                {/* 選項顯示 */}
+                <div className="space-y-3">
+                  {currentQuestion.options.map((option, index) => {
+                    const isSelected = selectedOption === index;
+                    const isCorrect = index === currentQuestion.correctAnswer;
+                    const isWrong = isSelected && !isCorrect;
+
+                    return (
+                      <div
+                        key={index}
+                        className={`p-4 rounded-xl border-2 transition-all ${
+                          isCorrect
+                            ? 'bg-green-50 border-green-500 text-green-800'
+                            : isWrong
+                            ? 'bg-red-50 border-red-500 text-red-800'
+                            : isSelected
+                            ? 'bg-gray-100 border-gray-400'
+                            : 'bg-gray-50 border-gray-200'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between">
+                          <span className="font-medium">
+                            {String.fromCharCode(65 + index)}. {option}
+                          </span>
+                          <div className="flex items-center gap-2">
+                            {isCorrect && <CheckCircle className="w-5 h-5 text-green-500" />}
+                            {isWrong && <XCircle className="w-5 h-5 text-red-500" />}
+                            {isSelected && !isCorrect && !isWrong && (
+                              <div className="w-5 h-5 rounded-full bg-gray-400"></div>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                {/* 解釋 */}
+                <div className="mt-6 p-4 bg-blue-50 border-2 border-blue-200 rounded-xl">
+                  <div className="font-bold text-blue-800 mb-2">解釋：</div>
+                  <div className="text-blue-700">{currentQuestion.explanation}</div>
+                </div>
+              </div>
+
+              {/* 下一題按鈕 */}
+              <div className="flex justify-center">
+                <Button
+                  className="bg-[#A1D9AE] hover:bg-[#8BC7A1] text-brand-brown px-8"
+                  onClick={handleNextQuestion}
                 >
                   {currentQuestionIndex < questions.length - 1 ? '下一題' : '完成測驗'}
                 </Button>
