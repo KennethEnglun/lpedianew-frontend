@@ -201,6 +201,8 @@ const StudentDashboard: React.FC = () => {
           ]);
 
           alert(`圖片生成成功！消耗了 1 點數。提示詞：${imagePrompt}`);
+          // 成功生成後關閉 AI 對話框
+          setShowAiChat(false);
         } else {
           alert('點數不足！請聯繫老師獲取更多點數。');
         }
@@ -861,6 +863,8 @@ const StudentDashboard: React.FC = () => {
       <AiChatModal
         open={showAiChat}
         onClose={() => setShowAiChat(false)}
+        onImageGeneration={handleImageGeneration}
+        userPoints={userPoints.currentPoints}
       />
       <AppStudioModal
         open={showAppStudio}

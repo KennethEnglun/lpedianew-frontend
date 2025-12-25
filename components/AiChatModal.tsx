@@ -139,7 +139,9 @@ const markdownToSafeHtml = (markdown: string) => {
 const AiChatModal: React.FC<{
   open: boolean;
   onClose: () => void;
-}> = ({ open, onClose }) => {
+  onImageGeneration?: (prompt: string) => void;
+  userPoints?: number;
+}> = ({ open, onClose, onImageGeneration, userPoints = 0 }) => {
   const { user } = useAuth();
   const isTeacher = user?.role === 'teacher' || user?.role === 'admin';
 
@@ -401,6 +403,14 @@ const AiChatModal: React.FC<{
       setImageError('請輸入圖片描述');
       return;
     }
+
+    // 學生端需要點數確認
+    if (!isTeacher && onImageGeneration) {
+      onImageGeneration(prompt);
+      return;
+    }
+
+    // 教師/管理員可以直接生成
     try {
       setImageLoading(true);
       setImageError('');
@@ -1115,9 +1125,19 @@ const AiChatModal: React.FC<{
 	            <div className="flex-1 min-h-0 flex flex-col">
 	              {mySidebarView === 'image' ? (
 	                <div className="flex-1 min-h-0 overflow-y-auto p-6 space-y-4">
-	                  <div className="flex items-center gap-2">
-	                    <ImageIcon className="w-5 h-5 text-brand-brown" />
-	                    <div className="text-xl font-black text-brand-brown">圖片生成</div>
+	                  <div className="flex items-center justify-between">
+	                    <div className="flex items-center gap-2">
+	                      <ImageIcon className="w-5 h-5 text-brand-brown" />
+	                      <div className="text-xl font-black text-brand-brown">圖片生成</div>
+	                    </div>
+	                    {!isTeacher && (
+	                      <div className="flex items-center gap-1 text-sm">
+	                        <span className="text-gray-600">可用點數:</span>
+	                        <span className={`font-bold ${userPoints > 0 ? 'text-green-600' : 'text-red-500'}`}>
+	                          {userPoints}
+	                        </span>
+	                      </div>
+	                    )}
 	                  </div>
 
 	                  <div>
@@ -1128,6 +1148,11 @@ const AiChatModal: React.FC<{
 	                      className="w-full min-h-[80px] max-h-56 px-3 py-2 border-2 border-gray-300 rounded-2xl focus:outline-none focus:border-brand-brown"
 	                      placeholder="例如：一隻可愛的貓咪在教室裡寫作業，卡通風格，色彩明亮"
 	                    />
+	                    {!isTeacher && (
+	                      <div className="mt-2 text-xs text-gray-600 bg-blue-50 border border-blue-200 rounded-lg p-2">
+	                        💡 每次圖片生成需要消耗 1 點數
+	                      </div>
+	                    )}
 	                  </div>
 
 	                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
@@ -1158,11 +1183,21 @@ const AiChatModal: React.FC<{
 	                    </div>
 	                    <div className="flex items-end">
 	                      <Button
-	                        className={`w-full border-brand-brown ${imageLoading ? 'bg-gray-300 text-gray-600 cursor-wait' : 'bg-[#FDEEAD] text-brand-brown hover:bg-[#FCE690]'}`}
+	                        className={`w-full border-brand-brown ${
+	                          imageLoading
+	                            ? 'bg-gray-300 text-gray-600 cursor-wait'
+	                            : (!isTeacher && userPoints < 1)
+	                              ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
+	                              : 'bg-[#FDEEAD] text-brand-brown hover:bg-[#FCE690]'
+	                        }`}
 	                        onClick={generateImage}
-	                        disabled={imageLoading}
+	                        disabled={imageLoading || (!isTeacher && userPoints < 1)}
 	                      >
-	                        {imageLoading ? '生成中...' : '生成'}
+	                        {imageLoading
+	                          ? '生成中...'
+	                          : (!isTeacher && userPoints < 1)
+	                            ? '點數不足 (需要 1 點數)'
+	                            : '生成'}
 	                      </Button>
 	                    </div>
 	                  </div>

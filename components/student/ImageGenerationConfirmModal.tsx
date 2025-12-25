@@ -77,6 +77,9 @@ export default function ImageGenerationConfirmModal(props: ImageGenerationConfir
                 您需要 {costPerGeneration} 點數才能生成圖片，目前只有 {currentPoints} 點數。
                 請聯繫老師獲取更多點數。
               </div>
+              <div className="text-xs text-red-500 mt-1">
+                💡 您可以通過完成作業或參加活動獲得更多點數
+              </div>
             </div>
           </div>
         )}
