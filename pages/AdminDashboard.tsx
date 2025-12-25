@@ -143,67 +143,50 @@ const AdminDashboard: React.FC = () => {
         console.log('API not available, using mock data for testing...');
 
         // 模擬學生點數數據
-        const mockStudents: StudentPointsStatus[] = [
-          {
-            userId: 'student1',
-            username: 'alice123',
-            name: '王小明',
-            class: '小三甲',
-            currentPoints: 15,
-            totalReceived: 20,
-            totalUsed: 5,
-            lastUpdate: new Date().toISOString()
-          },
-          {
-            userId: 'student2',
-            username: 'bob456',
-            name: '李小華',
-            class: '小三甲',
-            currentPoints: 8,
-            totalReceived: 15,
-            totalUsed: 7,
-            lastUpdate: new Date().toISOString()
-          },
-          {
-            userId: 'student3',
-            username: 'carol789',
-            name: '陳小美',
-            class: '小三乙',
+        // 使用真實學生數據創建點數狀態
+        const realStudents = users.filter(user => user.role === 'student');
+        const studentsWithPoints: StudentPointsStatus[] = realStudents.map(student => {
+          // 從 localStorage 讀取每個學生的點數數據
+          const userPointsKey = `userPoints_${student.id}`;
+          const savedPoints = localStorage.getItem(userPointsKey);
+
+          let pointsData = {
             currentPoints: 0,
-            totalReceived: 10,
-            totalUsed: 10,
-            lastUpdate: new Date().toISOString()
-          },
-          {
-            userId: 'student4',
-            username: 'david111',
-            name: '張小強',
-            class: '小四甲',
-            currentPoints: 25,
-            totalReceived: 25,
+            totalReceived: 0,
             totalUsed: 0,
             lastUpdate: new Date().toISOString()
-          },
-          {
-            userId: 'student5',
-            username: 'eve222',
-            name: '林小雯',
-            class: '小四甲',
-            currentPoints: 3,
-            totalReceived: 12,
-            totalUsed: 9,
-            lastUpdate: new Date().toISOString()
-          }
-        ];
+          };
 
-        // 模擬總覽數據
-        const mockOverview: PointsOverview = {
-          totalStudents: mockStudents.length,
-          totalPointsDistributed: mockStudents.reduce((sum, s) => sum + s.totalReceived, 0),
-          totalPointsUsed: mockStudents.reduce((sum, s) => sum + s.totalUsed, 0),
-          averagePointsPerStudent: mockStudents.reduce((sum, s) => sum + s.currentPoints, 0) / mockStudents.length,
-          studentsWithPoints: mockStudents.filter(s => s.currentPoints > 0).length,
-          studentsWithoutPoints: mockStudents.filter(s => s.currentPoints === 0).length
+          if (savedPoints) {
+            try {
+              pointsData = JSON.parse(savedPoints);
+            } catch (e) {
+              console.error('Failed to parse points for user', student.id, e);
+            }
+          }
+
+          return {
+            userId: student.id,
+            username: student.username,
+            name: student.name,
+            class: student.class || '',
+            currentPoints: pointsData.currentPoints,
+            totalReceived: pointsData.totalReceived,
+            totalUsed: pointsData.totalUsed,
+            lastUpdate: pointsData.lastUpdate
+          };
+        });
+
+        // 計算基於真實數據的總覽
+        const realOverview: PointsOverview = {
+          totalStudents: studentsWithPoints.length,
+          totalPointsDistributed: studentsWithPoints.reduce((sum, s) => sum + s.totalReceived, 0),
+          totalPointsUsed: studentsWithPoints.reduce((sum, s) => sum + s.totalUsed, 0),
+          averagePointsPerStudent: studentsWithPoints.length > 0
+            ? studentsWithPoints.reduce((sum, s) => sum + s.currentPoints, 0) / studentsWithPoints.length
+            : 0,
+          studentsWithPoints: studentsWithPoints.filter(s => s.currentPoints > 0).length,
+          studentsWithoutPoints: studentsWithPoints.filter(s => s.currentPoints === 0).length
         };
 
         // 模擬交易記錄
@@ -242,8 +225,8 @@ const AdminDashboard: React.FC = () => {
           }
         ];
 
-        setStudentsPointsData(mockStudents);
-        setPointsOverview(mockOverview);
+        setStudentsPointsData(studentsWithPoints);
+        setPointsOverview(realOverview);
         setPointsTransactions(mockTransactions);
       }
     } catch (error) {
@@ -251,7 +234,7 @@ const AdminDashboard: React.FC = () => {
     } finally {
       setPointsLoading(false);
     }
-  }, []);
+  }, [users]);
 
   useEffect(() => {
     void loadUsers();
@@ -519,16 +502,30 @@ const AdminDashboard: React.FC = () => {
         // API 不可用時，模擬成功操作
         console.log('API not available, simulating grant points operation...');
 
-        // 更新本地狀態
-        setStudentsPointsData(prev => prev.map(student =>
-          student.userId === userId
-            ? {
-                ...student,
-                currentPoints: student.currentPoints + amount,
-                totalReceived: student.totalReceived + amount
-              }
-            : student
-        ));
+        // 更新本地狀態和 localStorage
+        setStudentsPointsData(prev => prev.map(student => {
+          if (student.userId === userId) {
+            const updatedStudent = {
+              ...student,
+              currentPoints: student.currentPoints + amount,
+              totalReceived: student.totalReceived + amount,
+              lastUpdate: new Date().toISOString()
+            };
+
+            // 同時更新該學生的 localStorage
+            const userPointsKey = `userPoints_${userId}`;
+            const pointsData = {
+              currentPoints: updatedStudent.currentPoints,
+              totalReceived: updatedStudent.totalReceived,
+              totalUsed: updatedStudent.totalUsed,
+              lastUpdate: updatedStudent.lastUpdate
+            };
+            localStorage.setItem(userPointsKey, JSON.stringify(pointsData));
+
+            return updatedStudent;
+          }
+          return student;
+        }));
 
         alert(`成功分配 ${amount} 點數給學生！`);
       }
@@ -547,16 +544,30 @@ const AdminDashboard: React.FC = () => {
         // API 不可用時，模擬成功操作
         console.log('API not available, simulating batch grant points operation...');
 
-        // 更新本地狀態
-        setStudentsPointsData(prev => prev.map(student =>
-          studentIds.includes(student.userId)
-            ? {
-                ...student,
-                currentPoints: student.currentPoints + amount,
-                totalReceived: student.totalReceived + amount
-              }
-            : student
-        ));
+        // 更新本地狀態和 localStorage
+        setStudentsPointsData(prev => prev.map(student => {
+          if (studentIds.includes(student.userId)) {
+            const updatedStudent = {
+              ...student,
+              currentPoints: student.currentPoints + amount,
+              totalReceived: student.totalReceived + amount,
+              lastUpdate: new Date().toISOString()
+            };
+
+            // 同時更新該學生的 localStorage
+            const userPointsKey = `userPoints_${student.userId}`;
+            const pointsData = {
+              currentPoints: updatedStudent.currentPoints,
+              totalReceived: updatedStudent.totalReceived,
+              totalUsed: updatedStudent.totalUsed,
+              lastUpdate: updatedStudent.lastUpdate
+            };
+            localStorage.setItem(userPointsKey, JSON.stringify(pointsData));
+
+            return updatedStudent;
+          }
+          return student;
+        }));
 
         alert(`成功批次分配 ${amount} 點數給 ${studentIds.length} 位學生！`);
       }

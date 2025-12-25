@@ -33,7 +33,17 @@ const StudentDashboard: React.FC = () => {
   // 點數系統狀態
   // 從 localStorage 載入點數，如果沒有則使用預設值
   const loadUserPointsFromStorage = () => {
-    const saved = localStorage.getItem('userPoints');
+    if (!user?.id) {
+      return {
+        currentPoints: 0,
+        totalReceived: 0,
+        totalUsed: 0,
+        lastUpdate: new Date().toISOString()
+      };
+    }
+
+    const userPointsKey = `userPoints_${user.id}`;
+    const saved = localStorage.getItem(userPointsKey);
     if (saved) {
       try {
         return JSON.parse(saved);
@@ -42,8 +52,8 @@ const StudentDashboard: React.FC = () => {
       }
     }
     return {
-      currentPoints: 5,
-      totalReceived: 5,
+      currentPoints: 0,
+      totalReceived: 0,
       totalUsed: 0,
       lastUpdate: new Date().toISOString()
     };
@@ -53,7 +63,12 @@ const StudentDashboard: React.FC = () => {
 
   // 從 localStorage 載入交易記錄
   const loadTransactionsFromStorage = () => {
-    const saved = localStorage.getItem('pointsTransactions');
+    if (!user?.id) {
+      return [];
+    }
+
+    const userTransactionsKey = `pointsTransactions_${user.id}`;
+    const saved = localStorage.getItem(userTransactionsKey);
     if (saved) {
       try {
         return JSON.parse(saved);
@@ -71,13 +86,27 @@ const StudentDashboard: React.FC = () => {
 
   // 保存點數變化到 localStorage
   useEffect(() => {
-    localStorage.setItem('userPoints', JSON.stringify(userPoints));
-  }, [userPoints]);
+    if (user?.id) {
+      const userPointsKey = `userPoints_${user.id}`;
+      localStorage.setItem(userPointsKey, JSON.stringify(userPoints));
+    }
+  }, [userPoints, user?.id]);
 
   // 保存交易記錄到 localStorage
   useEffect(() => {
-    localStorage.setItem('pointsTransactions', JSON.stringify(pointsTransactions));
-  }, [pointsTransactions]);
+    if (user?.id) {
+      const userTransactionsKey = `pointsTransactions_${user.id}`;
+      localStorage.setItem(userTransactionsKey, JSON.stringify(pointsTransactions));
+    }
+  }, [pointsTransactions, user?.id]);
+
+  // 當用戶變更時重新載入點數數據
+  useEffect(() => {
+    if (user?.id) {
+      setUserPoints(loadUserPointsFromStorage());
+      setPointsTransactions(loadTransactionsFromStorage());
+    }
+  }, [user?.id]);
 
   // Compute folder hierarchies
   const stageFolders = useMemo(
