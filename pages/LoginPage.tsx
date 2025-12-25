@@ -34,8 +34,8 @@ const LoginPage: React.FC = () => {
 
   const setField = (field: 'username' | 'password', value: string) => setForm((prev) => ({ ...prev, [field]: value }));
 
-  const handleLogin = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleLogin = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
     const username = String(form.username || '').trim();
     const password = String(form.password || '').trim();
     if (!username || !password) {
@@ -53,6 +53,11 @@ const LoginPage: React.FC = () => {
     } finally {
       setIsSubmitting(false);
     }
+  };
+
+  const handleButtonClick = async (e: React.MouseEvent) => {
+    e.preventDefault();
+    await handleLogin();
   };
 
   if (isLoading) {
@@ -76,11 +81,15 @@ const LoginPage: React.FC = () => {
           <div className="bg-[#FDE7F4] p-6 sm:p-10 lg:w-1/4 lg:flex-none min-h-0 flex items-center justify-center">
             <div className="w-full max-w-sm max-h-full overflow-y-auto">
               <div className="mb-10 text-center">
-                <h1 className="text-6xl sm:text-7xl font-rounded font-black text-brand-brown leading-none tracking-tight">
-                  LP科樂園
+                <h1 className="text-6xl sm:text-7xl font-rounded font-black leading-none tracking-tight">
+                  <span className="text-blue-600">LP</span>
+                  <span className="text-orange-500">科</span>
+                  <span className="text-blue-600">樂園</span>
                 </h1>
-                <div className="text-lg sm:text-xl font-bold text-brand-brown/90 mb-2">
-                  LP S‧PARK
+                <div className="text-lg sm:text-xl font-bold mb-2">
+                  <span className="text-blue-600">LP</span>
+                  <span className="text-orange-500"> S</span>
+                  <span className="text-blue-600">PARK</span>
                 </div>
                 <div className="text-sm sm:text-base font-bold text-brand-brown/80">
                   李炳科學AI學習平台
@@ -114,6 +123,7 @@ const LoginPage: React.FC = () => {
                   type="submit"
                   className="mt-2"
                   disabled={isSubmitting}
+                  onClick={handleButtonClick}
                 >
                   {isSubmitting ? '登入中...' : '登入'}
                 </Button>
