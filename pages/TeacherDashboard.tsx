@@ -184,6 +184,8 @@ const TeacherDashboard: React.FC = () => {
   const [filterClass, setFilterClass] = useState('');
   const [availableSubjects, setAvailableSubjects] = useState<string[]>([]);
   const [availableClasses, setAvailableClasses] = useState<string[]>([]);
+  const [filterOptionsLoading, setFilterOptionsLoading] = useState(false);
+  const [filterOptionsLoaded, setFilterOptionsLoaded] = useState(false);
   const [availableGroups, setAvailableGroups] = useState<string[]>([]);
   const teacherGradeOptions = useMemo(() => {
     const grades = Array.from(new Set(availableClasses.map((c) => parseGradeFromClassName(c)).filter(Boolean)));
@@ -760,17 +762,31 @@ const TeacherDashboard: React.FC = () => {
 
   // 載入篩選選項
   const loadFilterOptions = async () => {
+    if (filterOptionsLoading) return;
     try {
+      setFilterOptionsLoading(true);
       const [subjectsData, classesData] = await Promise.all([
         authService.getAvailableSubjects(),
         authService.getAvailableClasses()
       ]);
       setAvailableSubjects(subjectsData.subjects || []);
       setAvailableClasses(classesData.classes || []);
+      setFilterOptionsLoaded(true);
     } catch (error) {
       console.error('載入篩選選項失敗:', error);
+    } finally {
+      setFilterOptionsLoading(false);
     }
   };
+
+  // 教師頁首次載入就預取班別/年級資料，避免「開咗作業管理先有分層」的體驗
+  useEffect(() => {
+    if (!user?.id) return;
+    if (user.role !== 'teacher' && user.role !== 'admin') return;
+    if (filterOptionsLoaded || filterOptionsLoading) return;
+    void loadFilterOptions();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.id, user?.role]);
 
   // 圖片壓縮函式
   const compressImage = (file: File): Promise<string> => {
@@ -3137,7 +3153,10 @@ const TeacherDashboard: React.FC = () => {
                 <Button
                   fullWidth
                   className="bg-[#D2EFFF] hover:bg-[#BCE0FF]"
-                  onClick={() => {
+                  onClick={async () => {
+                    if (availableSubjects.length === 0 || availableClasses.length === 0) {
+                      await loadFilterOptions();
+                    }
                     setShowDraftLibraryModal(true);
                     closeSidebar();
                   }}
@@ -3236,7 +3255,12 @@ const TeacherDashboard: React.FC = () => {
           <Button
             fullWidth
             className="bg-[#D2EFFF] hover:bg-[#BCE0FF] text-lg"
-            onClick={() => setShowDraftLibraryModal(true)}
+            onClick={async () => {
+              if (availableSubjects.length === 0 || availableClasses.length === 0) {
+                await loadFilterOptions();
+              }
+              setShowDraftLibraryModal(true);
+            }}
           >
             教師資料夾
           </Button>
