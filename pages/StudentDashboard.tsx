@@ -186,6 +186,49 @@ const StudentDashboard: React.FC = () => {
     return { total, completed, pending: Math.max(0, total - completed) };
   }, [tasks, responseStatus]);
 
+  const pendingCountByFolderId = useMemo(() => {
+    const map = new Map<string, number>();
+    const folderById = new Map(
+      (Array.isArray(classFolders) ? classFolders : [])
+        .filter((f: any) => f && f.id)
+        .map((f: any) => [String(f.id), f] as const)
+    );
+
+    const addAncestors = (folderId: string) => {
+      let cur = String(folderId || '');
+      const visited = new Set<string>();
+      while (cur && !visited.has(cur)) {
+        visited.add(cur);
+        map.set(cur, (map.get(cur) || 0) + 1);
+        const parentId = folderById.get(cur)?.parentId;
+        cur = parentId ? String(parentId) : '';
+      }
+    };
+
+    for (const task of Array.isArray(tasks) ? tasks : []) {
+      if (!task) continue;
+      if (isTaskCompleted(task)) continue;
+
+      const ids = new Set<string>();
+      const path = Array.isArray((task as any)?.folderSnapshot?.path) ? (task as any).folderSnapshot.path : [];
+      for (const p of path) {
+        const id = String(p?.id || '').trim();
+        if (id) ids.add(id);
+      }
+      const folderId = String((task as any)?.folderId || '').trim();
+      if (folderId) ids.add(folderId);
+
+      if (ids.size > 0) {
+        for (const id of ids) {
+          map.set(id, (map.get(id) || 0) + 1);
+        }
+      } else if (folderId) {
+        addAncestors(folderId);
+      }
+    }
+    return map;
+  }, [tasks, responseStatus, classFolders]);
+
   // 添加獲取點數的函數
   const loadUserPoints = useCallback(async () => {
     try {
@@ -940,6 +983,11 @@ const StudentDashboard: React.FC = () => {
             >
               <ClipboardList className="w-6 h-6 text-[#5E4C40]" />
               <span className="text-lg font-bold text-[#5E4C40] flex-1 text-left">我的任務</span>
+              {overallProgress.pending > 0 && (
+                <span className="min-w-7 h-7 px-2 flex items-center justify-center rounded-full bg-red-500 text-white text-sm font-black border-2 border-[#5E4C40]">
+                  {overallProgress.pending}
+                </span>
+              )}
             </button>
           </nav>
 
@@ -987,7 +1035,14 @@ const StudentDashboard: React.FC = () => {
                             onClick={() => setSelectedStageId(folder.id)}
                             className="bg-white border-4 border-[#5D4037] rounded-2xl p-4 shadow-sm cursor-pointer hover:shadow-lg transition-shadow"
                           >
-                            <div className="text-xl font-bold text-[#5D4037]">📁 {folder.name}</div>
+                            <div className="flex items-start justify-between gap-3">
+                              <div className="text-xl font-bold text-[#5D4037]">📁 {folder.name}</div>
+                              {Number(pendingCountByFolderId.get(String(folder.id)) || 0) > 0 && (
+                                <span className="min-w-7 h-7 px-2 flex items-center justify-center rounded-full bg-red-500 text-white text-sm font-black border-2 border-[#5D4037]">
+                                  {pendingCountByFolderId.get(String(folder.id))}
+                                </span>
+                              )}
+                            </div>
                             <div className="mt-2 text-sm text-gray-600">點擊查看課題</div>
                           </div>
                         ))}
@@ -1023,7 +1078,14 @@ const StudentDashboard: React.FC = () => {
                             onClick={() => setSelectedTopicId(folder.id)}
                             className="bg-white border-4 border-[#5D4037] rounded-2xl p-4 shadow-sm cursor-pointer hover:shadow-lg transition-shadow"
                           >
-                            <div className="text-xl font-bold text-[#5D4037]">📂 {folder.name}</div>
+                            <div className="flex items-start justify-between gap-3">
+                              <div className="text-xl font-bold text-[#5D4037]">📂 {folder.name}</div>
+                              {Number(pendingCountByFolderId.get(String(folder.id)) || 0) > 0 && (
+                                <span className="min-w-7 h-7 px-2 flex items-center justify-center rounded-full bg-red-500 text-white text-sm font-black border-2 border-[#5D4037]">
+                                  {pendingCountByFolderId.get(String(folder.id))}
+                                </span>
+                              )}
+                            </div>
                             <div className="mt-2 text-sm text-gray-600">點擊查看內容</div>
                           </div>
                         ))}
@@ -1060,7 +1122,14 @@ const StudentDashboard: React.FC = () => {
                               onClick={() => setSelectedSubfolderId(folder.id)}
                               className="bg-white border-4 border-[#5D4037] rounded-2xl p-4 shadow-sm cursor-pointer hover:shadow-lg transition-shadow"
                             >
-                              <div className="text-lg font-bold text-[#5D4037]">📁 {folder.name}</div>
+                              <div className="flex items-start justify-between gap-3">
+                                <div className="text-lg font-bold text-[#5D4037]">📁 {folder.name}</div>
+                                {Number(pendingCountByFolderId.get(String(folder.id)) || 0) > 0 && (
+                                  <span className="min-w-7 h-7 px-2 flex items-center justify-center rounded-full bg-red-500 text-white text-sm font-black border-2 border-[#5D4037]">
+                                    {pendingCountByFolderId.get(String(folder.id))}
+                                  </span>
+                                )}
+                              </div>
                               <div className="mt-2 text-sm text-gray-600">點擊查看任務</div>
                             </div>
                           ))}
