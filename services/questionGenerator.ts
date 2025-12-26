@@ -12,6 +12,31 @@ import type {
 import { authService } from './authService';
 import { generateId } from '../utils/studyUtils';
 
+const createNonce = () => `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+
+const shuffleInPlace = <T,>(arr: T[]): T[] => {
+  for (let i = arr.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [arr[i], arr[j]] = [arr[j], arr[i]];
+  }
+  return arr;
+};
+
+const shuffleQuestionOptions = (q: StudyQuestion): StudyQuestion => {
+  const options = Array.isArray(q.options) ? q.options.slice() : [];
+  if (options.length !== 4) return q;
+  const correct = Number(q.correctAnswer);
+  if (!Number.isInteger(correct) || correct < 0 || correct > 3) return q;
+  const tagged = options.map((opt, idx) => ({ opt, idx }));
+  shuffleInPlace(tagged);
+  const nextCorrect = tagged.findIndex((t) => t.idx === correct);
+  return {
+    ...q,
+    options: tagged.map((t) => t.opt),
+    correctAnswer: nextCorrect >= 0 ? nextCorrect : 0
+  };
+};
+
 // 题目生成服务类
 export class QuestionGeneratorService {
   /**
@@ -19,7 +44,8 @@ export class QuestionGeneratorService {
    */
   static async generateQuestions(scope: StudyScope): Promise<StudyApiResponse<StudyQuestion[]>> {
     try {
-      const prompt = QuestionGeneratorService.buildGenerationPrompt(scope);
+      const nonce = createNonce();
+      const prompt = QuestionGeneratorService.buildGenerationPrompt(scope, nonce);
 
       // 调用现有的聊天服务生成题目
       const response = await authService.sendChatMessage({
@@ -56,7 +82,7 @@ export class QuestionGeneratorService {
   /**
    * 构建AI生成题目的提示词
    */
-  private static buildGenerationPrompt(scope: StudyScope): string {
+  private static buildGenerationPrompt(scope: StudyScope, nonce: string): string {
     const difficultyText = `${scope.difficulty}程度`;
 
     let contentSection = '';
@@ -84,13 +110,15 @@ ${contentSection}
    - 题目内容（清晰、准确、适合小學生理解）
    - 4个选项（标记为A、B、C、D）
    - 正确答案（明确指出是A、B、C或D）
-   - 详细解释（用小學生能懂的語言說明為什麼這個答案正確）
+   - 详细解释（用小學生能懂的語言說明為什麼這個答案正確；请不要写「答案是A/B/C/D」这类字样，改用“正确选项的内容”来解释，避免选项顺序调整后解释不一致）
 
 2. 题目要求：
    - ${difficultyText}，適合小學生認知水平和語言習慣
    - 覆盖不同知识点，避免重复
    - 题目表述清晰簡單，避免歧义和複雜詞彙
    - 選項長度適中，干擾項合理但不混淆
+   - 选项顺序与正确答案位置要随机分散，避免每题都把正确答案放在同一个位置
+   - 本次出题随机码：${nonce}（请确保与上一次不完全相同）
 
 3. 输出格式（严格按照JSON格式）：
 \`\`\`json
@@ -157,13 +185,17 @@ ${contentSection}
         };
       });
 
+      // 强制随机化：题目顺序 + 选项顺序（修正 correctAnswer）
+      const randomized = questions.map(shuffleQuestionOptions);
+      shuffleInPlace(randomized);
+
       // 验证生成的题目数量
-      if (questions.length === 0) {
+      if (randomized.length === 0) {
         throw new Error('没有生成任何题目');
       }
 
-      console.log(`成功解析 ${questions.length} 道题目`);
-      return questions;
+      console.log(`成功解析 ${randomized.length} 道题目`);
+      return randomized;
 
     } catch (error) {
       console.error('解析AI响应失败:', error);
@@ -182,6 +214,7 @@ ${contentSection}
 
     for (let i = 0; i < questionCount; i++) {
       const topic = scope.topics[i % scope.topics.length] || '基础知识';
+      const correctAnswer = Math.floor(Math.random() * 4);
 
       fallbackQuestions.push({
         id: generateId.question(),
@@ -192,7 +225,7 @@ ${contentSection}
           '选项 C',
           '选项 D'
         ],
-        correctAnswer: 0, // 默认A选项为正确答案
+        correctAnswer,
         explanation: '这是一道示例题目，请重新生成题目。',
         topic: topic,
         difficulty: scope.difficulty,
@@ -201,7 +234,9 @@ ${contentSection}
       });
     }
 
-    return fallbackQuestions;
+    const randomized = fallbackQuestions.map(shuffleQuestionOptions);
+    shuffleInPlace(randomized);
+    return randomized;
   }
 
   /**
