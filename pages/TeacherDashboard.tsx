@@ -3222,6 +3222,14 @@ const TeacherDashboard: React.FC = () => {
           >
             學生進度
           </Button>
+          <Button
+            fullWidth
+            className="bg-[#FFF2D2] hover:bg-[#FFE7B0] text-lg flex items-center justify-center gap-2"
+            onClick={() => setShowScopeCardExplorerModal(true)}
+          >
+            <BarChart3 className="w-5 h-5" />
+            範圍分析
+          </Button>
           <Button fullWidth className="bg-[#C0E2BE] hover:bg-[#A9D8A7] text-lg" onClick={openAssignmentManagement}>
             作業管理
           </Button>
