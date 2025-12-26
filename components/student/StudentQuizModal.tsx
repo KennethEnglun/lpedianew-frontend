@@ -1,7 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { X, CheckCircle2, XCircle, Clock, BarChart3 } from 'lucide-react';
 import { authService } from '../../services/authService';
-import { AiReportModal } from '../AiReportModal';
 import type { StudyAnalytics } from '../../types/study';
 import { StudyAnalyticsModal } from './StudyAnalyticsModal';
 
@@ -30,10 +29,6 @@ export function StudentQuizModal({ open, quizId, onClose, onFinished }: Props) {
   const [answers, setAnswers] = useState<number[]>([]);
   const [startAt, setStartAt] = useState<number | null>(null);
   const [submitResult, setSubmitResult] = useState<any | null>(null);
-  const [showAiReport, setShowAiReport] = useState(false);
-  const [aiReportLoading, setAiReportLoading] = useState(false);
-  const [aiReportError, setAiReportError] = useState('');
-  const [aiReport, setAiReport] = useState<any | null>(null);
   const [showScopeReport, setShowScopeReport] = useState(false);
   const [scopeReport, setScopeReport] = useState<StudyAnalytics | null>(null);
 
@@ -47,10 +42,6 @@ export function StudentQuizModal({ open, quizId, onClose, onFinished }: Props) {
     setSubmitResult(null);
     setAnswers([]);
     setStartAt(Date.now());
-    setShowAiReport(false);
-    setAiReportLoading(false);
-    setAiReportError('');
-    setAiReport(null);
     setShowScopeReport(false);
     setScopeReport(null);
     (async () => {
@@ -99,22 +90,6 @@ export function StudentQuizModal({ open, quizId, onClose, onFinished }: Props) {
       setError(e?.message || '提交失敗');
     } finally {
       setSubmitting(false);
-    }
-  };
-
-  const loadAiReport = async (refresh?: boolean) => {
-    if (!quizId) return;
-    setAiReportLoading(true);
-    setAiReportError('');
-    try {
-      const resp = await authService.getQuizAiReport(quizId, { refresh: !!refresh });
-      setAiReport(resp?.report || null);
-      setShowAiReport(true);
-    } catch (e: any) {
-      setAiReportError(e?.message || '載入 AI 報告失敗');
-      setShowAiReport(true);
-    } finally {
-      setAiReportLoading(false);
     }
   };
 
@@ -249,15 +224,6 @@ export function StudentQuizModal({ open, quizId, onClose, onFinished }: Props) {
               {mode === 'review' && (
                 <button
                   type="button"
-                  onClick={() => loadAiReport(false)}
-                  className="px-4 py-2 rounded-2xl bg-[#D2EFFF] border-4 border-brand-brown text-brand-brown font-black hover:bg-white shadow-comic active:translate-y-1 active:shadow-none"
-                >
-                  AI 報告
-                </button>
-              )}
-              {mode === 'review' && quiz?.scopeCardId && (
-                <button
-                  type="button"
                   onClick={loadScopeReport}
                   className="px-4 py-2 rounded-2xl bg-[#E8F5E9] border-4 border-brand-brown text-brand-brown font-black hover:bg-white shadow-comic active:translate-y-1 active:shadow-none"
                 >
@@ -288,16 +254,6 @@ export function StudentQuizModal({ open, quizId, onClose, onFinished }: Props) {
           </div>
         </div>
       </div>
-
-      <AiReportModal
-        open={showAiReport}
-        title="小測驗 AI 報告"
-        loading={aiReportLoading}
-        error={aiReportError}
-        report={aiReport}
-        onClose={() => setShowAiReport(false)}
-        onRegenerate={mode === 'review' ? () => loadAiReport(true) : undefined}
-      />
 
       <StudyAnalyticsModal
         isOpen={showScopeReport}
