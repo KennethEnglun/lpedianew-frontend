@@ -1,5 +1,5 @@
 import React, { useMemo, useRef, useState, useEffect } from 'react';
-import { Menu, Settings, SlidersHorizontal, User, LogOut, MessageSquare, Plus, X, Image, Link, Code, Bold, Italic, Underline, Type, Palette, Upload, Trash, Filter, Eye, EyeOff, HelpCircle, Clock, Bot } from 'lucide-react';
+import { Menu, Settings, SlidersHorizontal, User, LogOut, MessageSquare, Plus, X, Image, Link, Code, Bold, Italic, Underline, Type, Palette, Upload, Trash, Filter, Eye, EyeOff, HelpCircle, Clock, Bot, BarChart3 } from 'lucide-react';
 import Button from '../components/Button';
 import Select from '../components/Select';
 import Input from '../components/Input';
@@ -16,6 +16,7 @@ import ClassFolderSelectInline from '../components/ClassFolderSelectInline';
 import AssignmentExplorerModal from '../components/AssignmentExplorerModal';
 import NoteEditorModal, { NoteEditorHandle } from '../components/NoteEditorModal';
 import { AiReportModal } from '../components/AiReportModal';
+import { ScopeCardExplorerModal } from '../components/ScopeCardExplorerModal';
 import { MathExpressionBuilder, finalizeMathQuestions } from '../components/MathExpressionBuilder';
 import { MathEquationBuilder, finalizeMathEquationQuestions } from '../components/MathEquationBuilder';
 import { MathExpressionView, FractionView } from '../components/MathExpressionView';
@@ -56,6 +57,7 @@ const TeacherDashboard: React.FC = () => {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [showAiChat, setShowAiChat] = useState(false);
   const [showAppStudio, setShowAppStudio] = useState(false);
+  const [showScopeCardExplorerModal, setShowScopeCardExplorerModal] = useState(false);
 
   const [teacherSettingsDraft, setTeacherSettingsDraft] = useState<{
     homeroomClass: string;
@@ -92,6 +94,7 @@ const TeacherDashboard: React.FC = () => {
   const [quizForm, setQuizForm] = useState({
     title: '',
     description: '',
+    scopeText: '',
     subject: DEFAULT_SUBJECT,
     targetClasses: [] as string[],
     targetGroups: [] as string[],
@@ -2449,6 +2452,7 @@ const TeacherDashboard: React.FC = () => {
       await authService.createQuiz({
         title: quizForm.title,
         description: quizForm.description,
+        scopeText: quizForm.scopeText,
         subject: quizForm.subject,
         targetClasses: quizForm.targetClasses,
         targetGroups: GROUPS_ENABLED ? quizForm.targetGroups : [],
@@ -2462,6 +2466,7 @@ const TeacherDashboard: React.FC = () => {
       setQuizForm({
         title: '',
         description: '',
+        scopeText: '',
         subject: DEFAULT_SUBJECT,
         targetClasses: [],
         targetGroups: [],
@@ -2706,6 +2711,10 @@ const TeacherDashboard: React.FC = () => {
       <AppStudioModal
         open={showAppStudio}
         onClose={() => setShowAppStudio(false)}
+      />
+      <ScopeCardExplorerModal
+        isOpen={showScopeCardExplorerModal}
+        onClose={() => setShowScopeCardExplorerModal(false)}
       />
 
       <AiReportModal
@@ -3103,6 +3112,17 @@ const TeacherDashboard: React.FC = () => {
                   }}
                 >
                   學生進度
+                </Button>
+                <Button
+                  fullWidth
+                  className="bg-[#FFF2D2] hover:bg-[#FFE7B0] flex items-center justify-center gap-2"
+                  onClick={() => {
+                    setShowScopeCardExplorerModal(true);
+                    closeSidebar();
+                  }}
+                >
+                  <BarChart3 className="w-5 h-5" />
+                  範圍分析
                 </Button>
                 <Button
                   fullWidth
@@ -6517,6 +6537,17 @@ const TeacherDashboard: React.FC = () => {
                       disabled={quizDraftReadOnly}
                     />
                   </div>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-bold text-brand-brown mb-2">學習範圍（學習卡用）</label>
+                  <textarea
+                    className="w-full px-4 py-3 border-4 border-brand-brown rounded-2xl bg-white font-bold resize-y min-h-[96px]"
+                    placeholder="輸入此小測驗的學習範圍（會用作學習卡聚合分析）..."
+                    value={quizForm.scopeText}
+                    onChange={(e) => setQuizForm(prev => ({ ...prev, scopeText: e.target.value }))}
+                    disabled={quizDraftReadOnly}
+                  />
                 </div>
 
 	                {/* Questions Section */}

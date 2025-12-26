@@ -2,6 +2,8 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { X, CheckCircle2, XCircle, Clock, BarChart3 } from 'lucide-react';
 import { authService } from '../../services/authService';
 import { AiReportModal } from '../AiReportModal';
+import type { StudyAnalytics } from '../../types/study';
+import { StudyAnalyticsModal } from './StudyAnalyticsModal';
 
 type Props = {
   open: boolean;
@@ -32,6 +34,8 @@ export function StudentQuizModal({ open, quizId, onClose, onFinished }: Props) {
   const [aiReportLoading, setAiReportLoading] = useState(false);
   const [aiReportError, setAiReportError] = useState('');
   const [aiReport, setAiReport] = useState<any | null>(null);
+  const [showScopeReport, setShowScopeReport] = useState(false);
+  const [scopeReport, setScopeReport] = useState<StudyAnalytics | null>(null);
 
   useEffect(() => {
     if (!open || !quizId) return;
@@ -43,6 +47,12 @@ export function StudentQuizModal({ open, quizId, onClose, onFinished }: Props) {
     setSubmitResult(null);
     setAnswers([]);
     setStartAt(Date.now());
+    setShowAiReport(false);
+    setAiReportLoading(false);
+    setAiReportError('');
+    setAiReport(null);
+    setShowScopeReport(false);
+    setScopeReport(null);
     (async () => {
       try {
         const resp = await authService.getQuizForStudent(quizId);
@@ -106,6 +116,26 @@ export function StudentQuizModal({ open, quizId, onClose, onFinished }: Props) {
     } finally {
       setAiReportLoading(false);
     }
+  };
+
+  const loadScopeReport = async () => {
+    const cardId = quiz?.scopeCardId;
+    if (!cardId) return;
+    setError('');
+    try {
+      const resp = await authService.getScopeCardAiReport(String(cardId), { scope: 'student' });
+      setScopeReport(resp?.report as StudyAnalytics);
+      setShowScopeReport(true);
+    } catch (e: any) {
+      setError(e?.message || '載入範圍分析失敗');
+    }
+  };
+
+  const regenerateScopeReport = async () => {
+    const cardId = quiz?.scopeCardId;
+    if (!cardId) return;
+    const resp = await authService.regenerateScopeCardAiReport(String(cardId), { scope: 'student' });
+    setScopeReport(resp?.report as StudyAnalytics);
   };
 
   if (!open || !quizId) return null;
@@ -225,6 +255,15 @@ export function StudentQuizModal({ open, quizId, onClose, onFinished }: Props) {
                   AI 報告
                 </button>
               )}
+              {mode === 'review' && quiz?.scopeCardId && (
+                <button
+                  type="button"
+                  onClick={loadScopeReport}
+                  className="px-4 py-2 rounded-2xl bg-[#E8F5E9] border-4 border-brand-brown text-brand-brown font-black hover:bg-white shadow-comic active:translate-y-1 active:shadow-none"
+                >
+                  範圍分析
+                </button>
+              )}
               <button
                 type="button"
                 onClick={onClose}
@@ -258,6 +297,13 @@ export function StudentQuizModal({ open, quizId, onClose, onFinished }: Props) {
         report={aiReport}
         onClose={() => setShowAiReport(false)}
         onRegenerate={mode === 'review' ? () => loadAiReport(true) : undefined}
+      />
+
+      <StudyAnalyticsModal
+        isOpen={showScopeReport}
+        onClose={() => setShowScopeReport(false)}
+        analytics={scopeReport}
+        onRegenerateAnalytics={scopeReport ? regenerateScopeReport : undefined}
       />
     </>
   );

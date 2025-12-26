@@ -1275,6 +1275,7 @@ class AuthService {
   async createQuiz(quizData: {
     title: string;
     description?: string;
+    scopeText?: string;
     subject: string;
     targetClasses: string[];
     targetGroups?: string[];
@@ -1655,6 +1656,42 @@ class AuthService {
     if (params?.studentId) searchParams.append('studentId', params.studentId);
     const query = searchParams.toString() ? `?${searchParams.toString()}` : '';
     const response = await fetch(`${this.API_BASE}/contests/${contestId}/ai-report/regenerate${query}`, {
+      method: 'POST',
+      headers: this.getAuthHeaders()
+    });
+    return this.handleResponse(response);
+  }
+
+  // 範圍卡（學習卡）分析：按 folderSnapshot + scopeText 聚合
+  async getScopeCards(params?: { subject?: string; className?: string }): Promise<{ scopeCards: any[]; total: number }> {
+    const searchParams = new URLSearchParams();
+    if (params?.subject) searchParams.append('subject', params.subject);
+    if (params?.className) searchParams.append('className', params.className);
+    const query = searchParams.toString() ? `?${searchParams.toString()}` : '';
+    const response = await fetch(`${this.API_BASE}/scope-cards${query}`, {
+      headers: this.getAuthHeaders()
+    });
+    return this.handleResponse(response);
+  }
+
+  async getScopeCardAiReport(cardId: string, params?: { scope?: 'overall' | 'student'; studentId?: string; refresh?: boolean }): Promise<{ report: any; cached: boolean }> {
+    const searchParams = new URLSearchParams();
+    if (params?.scope) searchParams.append('scope', params.scope);
+    if (params?.studentId) searchParams.append('studentId', params.studentId);
+    if (params?.refresh) searchParams.append('refresh', '1');
+    const query = searchParams.toString() ? `?${searchParams.toString()}` : '';
+    const response = await fetch(`${this.API_BASE}/scope-cards/${encodeURIComponent(cardId)}/ai-report${query}`, {
+      headers: this.getAuthHeaders()
+    });
+    return this.handleResponse(response);
+  }
+
+  async regenerateScopeCardAiReport(cardId: string, params?: { scope?: 'overall' | 'student'; studentId?: string }): Promise<{ report: any; cached: boolean }> {
+    const searchParams = new URLSearchParams();
+    if (params?.scope) searchParams.append('scope', params.scope);
+    if (params?.studentId) searchParams.append('studentId', params.studentId);
+    const query = searchParams.toString() ? `?${searchParams.toString()}` : '';
+    const response = await fetch(`${this.API_BASE}/scope-cards/${encodeURIComponent(cardId)}/ai-report/regenerate${query}`, {
       method: 'POST',
       headers: this.getAuthHeaders()
     });

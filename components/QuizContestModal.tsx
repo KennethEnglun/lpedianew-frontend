@@ -2,6 +2,8 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { X, Trophy, BarChart3 } from 'lucide-react';
 import { authService } from '../services/authService';
 import { AiReportModal } from './AiReportModal';
+import type { StudyAnalytics } from '../types/study';
+import { StudyAnalyticsModal } from './student/StudyAnalyticsModal';
 
 type ContestSummary = {
   id: string;
@@ -13,6 +15,7 @@ type ContestSummary = {
   timeLimitSeconds?: number | null;
   attempts?: number;
   bestScore?: number | null;
+  scopeCardId?: string;
 };
 
 type AttemptQuestion = { id: number; question: string; options: string[] };
@@ -46,6 +49,8 @@ export function QuizContestModal(props: {
   const [aiReportLoading, setAiReportLoading] = useState(false);
   const [aiReportError, setAiReportError] = useState('');
   const [aiReport, setAiReport] = useState<any | null>(null);
+  const [showScopeReport, setShowScopeReport] = useState(false);
+  const [scopeReport, setScopeReport] = useState<StudyAnalytics | null>(null);
 
   useEffect(() => {
     if (!open) return;
@@ -67,6 +72,8 @@ export function QuizContestModal(props: {
     setAiReportLoading(false);
     setAiReportError('');
     setAiReport(null);
+    setShowScopeReport(false);
+    setScopeReport(null);
   }, [open, contest?.id]);
 
   const timeLeft = useMemo(() => {
@@ -161,6 +168,24 @@ export function QuizContestModal(props: {
     }
   };
 
+  const loadScopeReport = async () => {
+    if (!contest?.scopeCardId) return;
+    setError('');
+    try {
+      const data = await authService.getScopeCardAiReport(String(contest.scopeCardId), { scope: 'student' });
+      setScopeReport(data?.report as StudyAnalytics);
+      setShowScopeReport(true);
+    } catch (e: any) {
+      setError(e?.message || '載入範圍分析失敗');
+    }
+  };
+
+  const regenerateScopeReport = async () => {
+    if (!contest?.scopeCardId) return;
+    const data = await authService.regenerateScopeCardAiReport(String(contest.scopeCardId), { scope: 'student' });
+    setScopeReport(data?.report as StudyAnalytics);
+  };
+
   useEffect(() => {
     if (phase !== 'leaderboard') return;
     if (leaderboards) return;
@@ -234,6 +259,18 @@ export function QuizContestModal(props: {
                       AI 報告
                     </span>
                   </button>
+                  {contest.scopeCardId && (
+                    <button
+                      type="button"
+                      onClick={loadScopeReport}
+                      className="px-4 py-2 rounded-2xl bg-[#E8F5E9] border-4 border-brand-brown text-brand-brown font-black hover:bg-white shadow-comic active:translate-y-1 active:shadow-none"
+                    >
+                      <span className="inline-flex items-center gap-2">
+                        <BarChart3 className="w-5 h-5" />
+                        範圍分析
+                      </span>
+                    </button>
+                  )}
                   <button
                     type="button"
                     onClick={() => setPhase('leaderboard')}
@@ -497,6 +534,13 @@ export function QuizContestModal(props: {
         report={aiReport}
         onClose={() => setShowAiReport(false)}
         onRegenerate={() => loadAiReport(true)}
+      />
+
+      <StudyAnalyticsModal
+        isOpen={showScopeReport}
+        onClose={() => setShowScopeReport(false)}
+        analytics={scopeReport}
+        onRegenerateAnalytics={scopeReport ? regenerateScopeReport : undefined}
       />
     </div>
   );
