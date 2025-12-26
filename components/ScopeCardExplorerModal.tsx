@@ -68,17 +68,11 @@ export const ScopeCardExplorerModal: React.FC<ScopeCardExplorerModalProps> = ({ 
     onClose();
   };
 
-  const openReport = async (params: { cardId: string; scope: 'overall' | 'student'; studentId?: string }) => {
+  const openReport = (params: { cardId: string; scope: 'overall' | 'student'; studentId?: string }) => {
     setAnalyticsData(null);
-    setAnalyticsOpen(true);
     setActiveFetch(params);
-    try {
-      const res = await authService.getScopeCardAiReport(params.cardId, { scope: params.scope, studentId: params.studentId });
-      setAnalyticsData(res.report as StudyAnalytics);
-    } catch (e) {
-      setAnalyticsData(null);
-      setError(e instanceof Error ? e.message : '載入報告失敗');
-    }
+    setError('');
+    setAnalyticsOpen(true);
   };
 
   const regenerateReport = async () => {

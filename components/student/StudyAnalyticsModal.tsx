@@ -39,12 +39,17 @@ export const StudyAnalyticsModal: React.FC<StudyAnalyticsModalProps> = ({
   const [loading, setLoading] = useState(false);
   const [activeTab, setActiveTab] = useState<'overview' | 'topics' | 'trends' | 'recommendations'>('overview');
   const hasAutoRegeneratedRef = useRef(false);
+  const [autoRegenerateFailed, setAutoRegenerateFailed] = useState(false);
 
   const handleRegenerateAnalytics = async () => {
     if (!onRegenerateAnalytics) return;
     setLoading(true);
+    setAutoRegenerateFailed(false);
     try {
       await onRegenerateAnalytics();
+    } catch {
+      // Avoid unhandled promise rejections; parent components may surface errors separately.
+      setAutoRegenerateFailed(true);
     } finally {
       setLoading(false);
     }
@@ -53,6 +58,7 @@ export const StudyAnalyticsModal: React.FC<StudyAnalyticsModalProps> = ({
   useEffect(() => {
     if (!isOpen) {
       hasAutoRegeneratedRef.current = false;
+      setAutoRegenerateFailed(false);
       return;
     }
     if (!onRegenerateAnalytics) return;
@@ -304,7 +310,7 @@ export const StudyAnalyticsModal: React.FC<StudyAnalyticsModalProps> = ({
           </div>
         </div>
 
-        {loading ? (
+        {loading || (onRegenerateAnalytics && !analytics && !autoRegenerateFailed) ? (
           <div className="flex justify-center items-center py-16">
             <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-brand-brown"></div>
             <span className="ml-4 text-brand-brown">正在生成分析報告...</span>
