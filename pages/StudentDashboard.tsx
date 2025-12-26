@@ -165,8 +165,18 @@ const StudentDashboard: React.FC = () => {
   const isTaskCompleted = (task: Task) => {
     if (task.type === 'discussion') return !!responseStatus[task.id]?.hasResponded;
     if (task.type === 'quiz' || task.type === 'game') return !!task.completed;
-    if (task.type === 'contest') return false;
-    return false;
+    if (task.type === 'contest') {
+      if (task.completed) return true;
+      const attempts = Number((task as any).attempts);
+      if (Number.isFinite(attempts) && attempts > 0) return true;
+      const bestScore = (task as any).bestScore;
+      if (typeof bestScore === 'number') return true;
+      const score = (task as any).score;
+      if (typeof score === 'number') return true;
+      return false;
+    }
+    if (task.type === 'ai-bot' || task.type === 'note') return !!task.completed;
+    return !!task.completed;
   };
 
   // Calculate overall progress
