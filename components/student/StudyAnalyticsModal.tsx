@@ -3,7 +3,7 @@
  * 顯示學生學習分析報告和個性化建議
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import {
   X,
@@ -17,8 +17,7 @@ import {
   BarChart3,
   Lightbulb,
   CheckCircle,
-  AlertCircle,
-  RefreshCw
+  AlertCircle
 } from 'lucide-react';
 import type { StudyAnalytics, TopicMastery } from '../../types/study';
 import { formatUtils } from '../../utils/studyUtils';
@@ -39,22 +38,30 @@ export const StudyAnalyticsModal: React.FC<StudyAnalyticsModalProps> = ({
 }) => {
   const [loading, setLoading] = useState(false);
   const [activeTab, setActiveTab] = useState<'overview' | 'topics' | 'trends' | 'recommendations'>('overview');
-
-  useEffect(() => {
-    if (isOpen && analytics) {
-      setLoading(false);
-    }
-  }, [isOpen, analytics]);
-
-  if (!isOpen) return null;
+  const hasAutoRegeneratedRef = useRef(false);
 
   const handleRegenerateAnalytics = async () => {
-    if (onRegenerateAnalytics) {
-      setLoading(true);
+    if (!onRegenerateAnalytics) return;
+    setLoading(true);
+    try {
       await onRegenerateAnalytics();
+    } finally {
       setLoading(false);
     }
   };
+
+  useEffect(() => {
+    if (!isOpen) {
+      hasAutoRegeneratedRef.current = false;
+      return;
+    }
+    if (!onRegenerateAnalytics) return;
+    if (hasAutoRegeneratedRef.current) return;
+    hasAutoRegeneratedRef.current = true;
+    void handleRegenerateAnalytics();
+  }, [isOpen, onRegenerateAnalytics]);
+
+  if (!isOpen) return null;
 
   const getMasteryLevelText = (level: 'weak' | 'average' | 'strong') => {
     switch (level) {
@@ -288,15 +295,6 @@ export const StudyAnalyticsModal: React.FC<StudyAnalyticsModalProps> = ({
             </div>
           </div>
           <div className="flex items-center gap-2">
-            {onRegenerateAnalytics && (
-              <button
-                onClick={handleRegenerateAnalytics}
-                disabled={loading}
-                className="bg-white/20 hover:bg-white/30 p-2 rounded-xl transition-all"
-              >
-                <RefreshCw className={`w-5 h-5 ${loading ? 'animate-spin' : ''}`} />
-              </button>
-            )}
             <button
               onClick={onClose}
               className="bg-white/20 hover:bg-white/30 p-2 rounded-xl transition-all"
