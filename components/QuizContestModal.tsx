@@ -178,7 +178,7 @@ export function QuizContestModal(props: {
 
   const current = questions[questionIndex];
   const total = questions.length || contest.questionCount || 0;
-  const answeredCount = useMemo(() => answers.filter((a) => a >= 0).length, [answers]);
+  const answeredCount = answers.filter((a) => a >= 0).length;
   const currentFeedback = answerFeedback[questionIndex] || null;
   const currentAnswered = answers[questionIndex] >= 0 && !!currentFeedback;
 
