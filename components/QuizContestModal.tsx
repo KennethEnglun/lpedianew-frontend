@@ -1,7 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { X, Trophy, BarChart3 } from 'lucide-react';
 import { authService } from '../services/authService';
-import { AiReportModal } from './AiReportModal';
 import type { StudyAnalytics } from '../types/study';
 import { StudyAnalyticsModal } from './student/StudyAnalyticsModal';
 
@@ -35,6 +34,8 @@ export function QuizContestModal(props: {
   const [attemptId, setAttemptId] = useState<string | null>(null);
   const [questions, setQuestions] = useState<AttemptQuestion[]>([]);
   const [answers, setAnswers] = useState<number[]>([]);
+  const [answerFeedback, setAnswerFeedback] = useState<Array<{ selected: number; correctIndex: number; isCorrect: boolean } | null>>([]);
+  const [answering, setAnswering] = useState(false);
   const [startAt, setStartAt] = useState<number | null>(null);
   const [nowMs, setNowMs] = useState<number>(() => Date.now());
   const [timeLimitSeconds, setTimeLimitSeconds] = useState<number | null>(null);
@@ -45,10 +46,6 @@ export function QuizContestModal(props: {
   const [leaderboards, setLeaderboards] = useState<any | null>(null);
   const [leaderboardTab, setLeaderboardTab] = useState<'best' | 'total' | 'avg'>('best');
   const [leaderboardLoading, setLeaderboardLoading] = useState(false);
-  const [showAiReport, setShowAiReport] = useState(false);
-  const [aiReportLoading, setAiReportLoading] = useState(false);
-  const [aiReportError, setAiReportError] = useState('');
-  const [aiReport, setAiReport] = useState<any | null>(null);
   const [showScopeReport, setShowScopeReport] = useState(false);
   const [scopeReport, setScopeReport] = useState<StudyAnalytics | null>(null);
 
@@ -61,6 +58,8 @@ export function QuizContestModal(props: {
     setAttemptId(null);
     setQuestions([]);
     setAnswers([]);
+    setAnswerFeedback([]);
+    setAnswering(false);
     setStartAt(null);
     setTimeLimitSeconds(null);
     setQuestionIndex(0);
@@ -68,10 +67,6 @@ export function QuizContestModal(props: {
     setLeaderboards(null);
     setLeaderboardTab('best');
     setLeaderboardLoading(false);
-    setShowAiReport(false);
-    setAiReportLoading(false);
-    setAiReportError('');
-    setAiReport(null);
     setShowScopeReport(false);
     setScopeReport(null);
   }, [open, contest?.id]);
@@ -101,7 +96,9 @@ export function QuizContestModal(props: {
       const data = await authService.startContest(contest.id);
       setAttemptId(data.attempt.id);
       setQuestions(Array.isArray(data.attempt.questions) ? data.attempt.questions : []);
-      setAnswers(new Array((data.attempt.questions || []).length).fill(-1));
+      const totalQ = (data.attempt.questions || []).length;
+      setAnswers(new Array(totalQ).fill(-1));
+      setAnswerFeedback(new Array(totalQ).fill(null));
       setQuestionIndex(0);
       setStartAt(Date.now());
       setNowMs(Date.now());
@@ -152,22 +149,6 @@ export function QuizContestModal(props: {
     }
   };
 
-  const loadAiReport = async (refresh?: boolean) => {
-    if (!contest) return;
-    setAiReportLoading(true);
-    setAiReportError('');
-    try {
-      const data = await authService.getContestAiReport(contest.id, { refresh: !!refresh });
-      setAiReport(data?.report || null);
-      setShowAiReport(true);
-    } catch (e: any) {
-      setAiReportError(e?.message || '載入 AI 報告失敗');
-      setShowAiReport(true);
-    } finally {
-      setAiReportLoading(false);
-    }
-  };
-
   const loadScopeReport = async () => {
     if (!contest?.scopeCardId) return;
     setError('');
@@ -197,6 +178,9 @@ export function QuizContestModal(props: {
 
   const current = questions[questionIndex];
   const total = questions.length || contest.questionCount || 0;
+  const answeredCount = useMemo(() => answers.filter((a) => a >= 0).length, [answers]);
+  const currentFeedback = answerFeedback[questionIndex] || null;
+  const currentAnswered = answers[questionIndex] >= 0 && !!currentFeedback;
 
   const leaderboardRows = (() => {
     const lb = leaderboards || {};
@@ -251,26 +235,14 @@ export function QuizContestModal(props: {
                 <div className="flex gap-2">
                   <button
                     type="button"
-                    onClick={() => loadAiReport(false)}
+                    onClick={loadScopeReport}
                     className="px-4 py-2 rounded-2xl bg-[#D2EFFF] border-4 border-brand-brown text-brand-brown font-black hover:bg-white shadow-comic active:translate-y-1 active:shadow-none"
                   >
                     <span className="inline-flex items-center gap-2">
                       <BarChart3 className="w-5 h-5" />
-                      AI 報告
+                      AI學習分析報告
                     </span>
                   </button>
-                  {contest.scopeCardId && (
-                    <button
-                      type="button"
-                      onClick={loadScopeReport}
-                      className="px-4 py-2 rounded-2xl bg-[#E8F5E9] border-4 border-brand-brown text-brand-brown font-black hover:bg-white shadow-comic active:translate-y-1 active:shadow-none"
-                    >
-                      <span className="inline-flex items-center gap-2">
-                        <BarChart3 className="w-5 h-5" />
-                        範圍分析
-                      </span>
-                    </button>
-                  )}
                   <button
                     type="button"
                     onClick={() => setPhase('leaderboard')}
@@ -398,6 +370,9 @@ export function QuizContestModal(props: {
                 <div className="font-black text-brand-brown">
                   第 {questionIndex + 1} / {total} 題
                 </div>
+                <div className="text-sm font-black text-gray-600">
+                  已作答：{answeredCount}/{total}
+                </div>
                 {timeLimitSeconds ? (
                   <div className={`px-3 py-1 rounded-2xl border-2 font-black ${timeLeft !== null && timeLeft <= 10 ? 'bg-red-50 border-red-200 text-red-700' : 'bg-green-50 border-green-200 text-green-700'}`}>
                     剩餘：{timeLeft ?? 0}s
@@ -414,18 +389,50 @@ export function QuizContestModal(props: {
                 <div className="mt-5 grid grid-cols-1 md:grid-cols-2 gap-3">
                   {(current?.options || []).map((opt, i) => {
                     const selected = answers[questionIndex] === i;
+                    const isCorrect = currentFeedback ? currentFeedback.correctIndex === i : false;
+                    const isWrongSelected = currentFeedback ? selected && !currentFeedback.isCorrect : false;
                     return (
                       <button
                         key={`${questionIndex}-${i}`}
                         type="button"
+                        disabled={!attemptId || answering || currentAnswered}
                         onClick={() => {
-                          setAnswers((prev) => {
-                            const next = [...prev];
-                            next[questionIndex] = i;
-                            return next;
-                          });
+                          if (!attemptId) return;
+                          if (answering) return;
+                          if (currentAnswered) return;
+                          setAnswering(true);
+                          setError('');
+                          authService.answerContestQuestion(attemptId, { questionIndex, answerIndex: i })
+                            .then((resp) => {
+                              setAnswers((prev) => {
+                                const next = [...prev];
+                                next[resp.questionIndex] = resp.answerIndex;
+                                return next;
+                              });
+                              setAnswerFeedback((prev) => {
+                                const next = prev.length > 0 ? [...prev] : new Array(total).fill(null);
+                                next[resp.questionIndex] = { selected: resp.answerIndex, correctIndex: resp.correctIndex, isCorrect: !!resp.isCorrect };
+                                return next;
+                              });
+                            })
+                            .catch((e: any) => {
+                              setError(e?.message || '作答失敗，請稍後再試');
+                            })
+                            .finally(() => setAnswering(false));
                         }}
-                        className={`p-4 rounded-2xl border-4 text-left font-bold shadow-comic active:translate-y-1 active:shadow-none transition-colors ${selected ? 'bg-[#FDEEAD] border-brand-brown text-brand-brown' : 'bg-white border-gray-300 text-gray-700 hover:border-brand-brown hover:bg-yellow-50'}`}
+                        className={[
+                          'p-4 rounded-2xl border-4 text-left font-bold shadow-comic active:translate-y-1 active:shadow-none transition-colors',
+                          currentFeedback
+                            ? isCorrect
+                              ? 'bg-green-100 border-green-600 text-green-900'
+                              : isWrongSelected
+                                ? 'bg-red-100 border-red-600 text-red-900'
+                                : 'bg-white border-gray-300 text-gray-700'
+                            : selected
+                              ? 'bg-[#FDEEAD] border-brand-brown text-brand-brown'
+                              : 'bg-white border-gray-300 text-gray-700 hover:border-brand-brown hover:bg-yellow-50',
+                          (answering || currentAnswered) ? 'cursor-not-allowed opacity-95' : ''
+                        ].filter(Boolean).join(' ')}
                       >
                         <div className="flex items-start gap-3">
                           <div className={`w-7 h-7 rounded-full border-2 flex items-center justify-center flex-shrink-0 font-black ${selected ? 'border-brand-brown bg-brand-brown text-white' : 'border-gray-400 text-gray-600'}`}>
@@ -438,35 +445,24 @@ export function QuizContestModal(props: {
                   })}
                 </div>
 
-                <div className="mt-6 flex items-center justify-between gap-3">
-                  <button
-                    type="button"
-                    onClick={() => setQuestionIndex((v) => Math.max(0, v - 1))}
-                    disabled={questionIndex === 0}
-                    className={`px-5 py-3 rounded-2xl border-4 font-black shadow-comic active:translate-y-1 active:shadow-none ${questionIndex === 0 ? 'bg-gray-200 border-gray-300 text-gray-500 cursor-not-allowed' : 'bg-white border-brand-brown text-brand-brown hover:bg-gray-50'}`}
-                  >
-                    上一題
-                  </button>
-
-                  <div className="flex-1 flex justify-center gap-1 flex-wrap">
-                    {answers.map((a, idx) => (
-                      <button
-                        key={`dot-${idx}`}
-                        type="button"
-                        onClick={() => setQuestionIndex(idx)}
-                        className={`w-7 h-7 rounded-full border-2 font-black text-xs ${idx === questionIndex ? 'bg-brand-brown text-white border-brand-brown' : a >= 0 ? 'bg-[#93C47D] text-brand-brown border-brand-brown' : 'bg-white text-gray-500 border-gray-300'}`}
-                        title={`第 ${idx + 1} 題`}
-                      >
-                        {idx + 1}
-                      </button>
-                    ))}
+                {currentFeedback && (
+                  <div className={`mt-5 rounded-2xl border-2 p-4 font-black ${currentFeedback.isCorrect ? 'bg-green-50 border-green-200 text-green-900' : 'bg-red-50 border-red-200 text-red-900'}`}>
+                    {currentFeedback.isCorrect
+                      ? '答對了！按「下一題」繼續。'
+                      : `答錯了！正確答案是 ${String.fromCharCode(65 + currentFeedback.correctIndex)}。按「下一題」繼續。`}
                   </div>
+                )}
 
+                <div className="mt-6 flex items-center justify-between gap-3">
                   {questionIndex < total - 1 ? (
                     <button
                       type="button"
                       onClick={() => setQuestionIndex((v) => Math.min(total - 1, v + 1))}
-                      className="px-5 py-3 rounded-2xl border-4 border-brand-brown bg-[#D2EFFF] text-brand-brown font-black hover:bg-[#BCE0FF] shadow-comic active:translate-y-1 active:shadow-none"
+                      disabled={!currentFeedback}
+                      className={[
+                        'px-5 py-3 rounded-2xl border-4 font-black shadow-comic active:translate-y-1 active:shadow-none',
+                        currentFeedback ? 'border-brand-brown bg-[#D2EFFF] text-brand-brown hover:bg-[#BCE0FF]' : 'bg-gray-200 border-gray-300 text-gray-500 cursor-not-allowed'
+                      ].join(' ')}
                     >
                       下一題
                     </button>
@@ -499,6 +495,15 @@ export function QuizContestModal(props: {
               </div>
 
               <div className="mt-6 flex flex-col md:flex-row gap-4">
+                {contest.scopeCardId && (
+                  <button
+                    type="button"
+                    onClick={loadScopeReport}
+                    className="flex-1 py-3 rounded-2xl border-4 border-brand-brown bg-[#D2EFFF] text-brand-brown font-black hover:bg-[#BCE0FF] shadow-comic active:translate-y-1 active:shadow-none"
+                  >
+                    AI學習分析報告
+                  </button>
+                )}
                 <button
                   type="button"
                   onClick={() => { setPhase('idle'); setLeaderboards(null); }}
@@ -525,16 +530,6 @@ export function QuizContestModal(props: {
           )}
         </div>
       </div>
-
-      <AiReportModal
-        open={showAiReport}
-        title="問答比賽 AI 報告"
-        loading={aiReportLoading}
-        error={aiReportError}
-        report={aiReport}
-        onClose={() => setShowAiReport(false)}
-        onRegenerate={() => loadAiReport(true)}
-      />
 
       <StudyAnalyticsModal
         isOpen={showScopeReport}

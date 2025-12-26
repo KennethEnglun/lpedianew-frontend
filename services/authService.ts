@@ -1637,6 +1637,22 @@ class AuthService {
     return this.handleResponse(response);
   }
 
+  async answerContestQuestion(attemptId: string, payload: { questionIndex: number; answerIndex: number }): Promise<{
+    questionIndex: number;
+    answerIndex: number;
+    correctIndex: number;
+    isCorrect: boolean;
+    answeredCount: number;
+    totalQuestions: number;
+  }> {
+    const response = await fetch(`${this.API_BASE}/contests/attempts/${attemptId}/answer`, {
+      method: 'POST',
+      headers: this.getAuthHeaders(),
+      body: JSON.stringify(payload)
+    });
+    return this.handleResponse(response);
+  }
+
   // AI 報告（問答比賽）
   async getContestAiReport(contestId: string, params?: { scope?: 'overall' | 'student'; studentId?: string; refresh?: boolean }): Promise<{ report: any; cached: boolean }> {
     const searchParams = new URLSearchParams();
