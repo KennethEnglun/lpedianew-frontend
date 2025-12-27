@@ -904,7 +904,7 @@ const StudentDashboard: React.FC = () => {
           {/* Logo Section */}
           <div className="text-center mb-6">
             <img
-              src="/lpsparklogo.png"
+              src="/lpsparklogo2.png"
               alt="LP科樂園 Logo"
               className="h-32 mx-auto object-contain drop-shadow-sm hover:scale-105 transition-transform duration-300"
             />

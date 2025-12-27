@@ -140,6 +140,7 @@ const LoginPage: React.FC = () => {
               playsInline
               aria-hidden="true"
             >
+              <source src="/loginmov2.mov" type="video/quicktime" />
               <source src="/loginmov.mp4" type="video/mp4" />
             </video>
             <div className="absolute inset-0 bg-gradient-to-br from-white/10 via-transparent to-black/15" aria-hidden="true" />
