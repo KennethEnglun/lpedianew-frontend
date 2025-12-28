@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Copy, FolderInput, Pencil, Trash2, X } from 'lucide-react';
+import { Copy, FolderInput, FolderPlus, Pencil, Trash2, X } from 'lucide-react';
 import TeacherFolderPickerModal from './TeacherFolderPickerModal';
+import StudentFolderManagerPanel from './StudentFolderManagerPanel';
 
 type Props = {
   open: boolean;
@@ -29,7 +30,7 @@ const toolLabel = (toolType: string) => {
 };
 
 const DraftLibraryModal: React.FC<Props> = ({ open, onClose, authService, userId, availableClasses, onOpenDraft }) => {
-  const [space, setSpace] = useState<'my' | 'shared'>('my');
+  const [space, setSpace] = useState<'my' | 'shared' | 'student'>('my');
   const gradeOptions = useMemo(() => {
     const grades = Array.from(new Set(availableClasses.map((c) => parseGradeFromClassName(c)).filter(Boolean)));
     grades.sort((a, b) => Number(a) - Number(b));
@@ -47,6 +48,7 @@ const DraftLibraryModal: React.FC<Props> = ({ open, onClose, authService, userId
   const [movingDraft, setMovingDraft] = useState<any | null>(null);
 
   const isMy = space === 'my';
+  const isStudent = space === 'student';
 
   const folderTree = useMemo(() => {
     const byParent = new Map<string | null, any[]>();
@@ -96,6 +98,7 @@ const DraftLibraryModal: React.FC<Props> = ({ open, onClose, authService, userId
   };
 
   const reload = async (opts?: { keepFolder?: boolean }) => {
+    if (isStudent) return;
     if (!grade) return;
     setLoading(true);
     setError('');
@@ -130,10 +133,68 @@ const DraftLibraryModal: React.FC<Props> = ({ open, onClose, authService, userId
 
   useEffect(() => {
     if (!open) return;
+    if (isStudent) return;
     if (!grade) return;
     void reload({ keepFolder: true });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, space, grade, selectedFolderId]);
+
+  const createLibraryFolder = async (parentId: string | null) => {
+    if (!grade) return;
+    const next = prompt(parentId ? '輸入子folder名稱' : '輸入 folder 名稱', '');
+    const name = String(next || '').trim();
+    if (!name) return;
+    setLoading(true);
+    setError('');
+    try {
+      const resp = isMy
+        ? await authService.createMyLibraryFolder({ grade, name, parentId })
+        : await authService.createSharedLibraryFolder({ grade, name, parentId });
+      const id = String(resp?.folder?.id || '');
+      await reload({ keepFolder: true });
+      if (id) setSelectedFolderId(id);
+    } catch (e: any) {
+      setError(e?.message || '建立資料夾失敗');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const renameLibraryFolder = async () => {
+    if (!selectedFolderId) return;
+    const current = folders.find((f) => String(f?.id) === String(selectedFolderId)) || null;
+    const next = prompt('改名', String(current?.name || ''));
+    const name = String(next || '').trim();
+    if (!name || name === String(current?.name || '')) return;
+    setLoading(true);
+    setError('');
+    try {
+      if (isMy) await authService.updateMyLibraryFolder(String(selectedFolderId), { name });
+      else await authService.updateSharedLibraryFolder(String(selectedFolderId), { name });
+      await reload({ keepFolder: true });
+    } catch (e: any) {
+      setError(e?.message || '改名失敗');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const deleteLibraryFolder = async () => {
+    if (!selectedFolderId) return;
+    if (!confirm('確定要刪除此 folder 嗎？（資料夾內仍有子資料夾會刪除失敗）')) return;
+    setLoading(true);
+    setError('');
+    try {
+      if (isMy) await authService.deleteMyLibraryFolder(String(selectedFolderId));
+      else await authService.deleteSharedLibraryFolder(String(selectedFolderId));
+      setSelectedFolderId(null);
+      await reload({ keepFolder: true });
+    } catch (e: any) {
+      setError(e?.message || '刪除失敗');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   if (!open) return null;
 
@@ -169,175 +230,239 @@ const DraftLibraryModal: React.FC<Props> = ({ open, onClose, authService, userId
             >
               共用
             </button>
+            <button
+              type="button"
+              onClick={() => setSpace('student')}
+              className={`px-4 py-2 rounded-2xl border-4 font-black shadow-comic ${space === 'student' ? 'bg-[#FDEEAD] border-brand-brown text-brand-brown' : 'bg-white border-brand-brown text-brand-brown hover:bg-gray-50'}`}
+            >
+              學生
+            </button>
             <div className="flex items-center gap-2 ml-auto">
-              <div className="font-black text-gray-700">年級</div>
-              <select
-                value={grade}
-                onChange={(e) => setGrade(e.target.value)}
-                className="px-3 py-2 rounded-xl border-2 border-gray-300 font-bold"
-              >
-                {gradeOptions.map((g) => (
-                  <option key={g} value={g}>
-                    {g}年級
-                  </option>
-                ))}
-              </select>
+              {!isStudent && (
+                <>
+                  <div className="font-black text-gray-700">年級</div>
+                  <select
+                    value={grade}
+                    onChange={(e) => setGrade(e.target.value)}
+                    className="px-3 py-2 rounded-xl border-2 border-gray-300 font-bold"
+                  >
+                    {gradeOptions.map((g) => (
+                      <option key={g} value={g}>
+                        {g}年級
+                      </option>
+                    ))}
+                  </select>
+                </>
+              )}
             </div>
           </div>
 
           {error && <div className="text-red-700 font-bold">{error}</div>}
 
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-            <div className="p-4 rounded-2xl border-2 border-gray-200 bg-gray-50">
-              <div className="font-black text-gray-700 mb-3">folder</div>
-              <select
-                className="w-full px-3 py-2 rounded-xl border-2 border-gray-300 font-bold bg-white"
-                value={selectedFolderId || ''}
-                onChange={(e) => setSelectedFolderId(e.target.value ? e.target.value : null)}
-              >
-                <option value="">（未分類）</option>
-                {folderTree.map((row) => (
-                  <option key={row.folder.id} value={row.folder.id}>
-                    {'　'.repeat(row.depth)}{row.folder.name}
-                  </option>
-                ))}
-              </select>
-              <div className="text-xs text-gray-600 font-bold mt-2">（folder 建立/排序先沿用現有資料夾管理）</div>
+          {isStudent ? (
+            <div className="p-4 rounded-2xl border-2 border-gray-200 bg-white">
+              <StudentFolderManagerPanel authService={authService} availableClasses={availableClasses} />
             </div>
+          ) : (
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+              <div className="p-4 rounded-2xl border-2 border-gray-200 bg-gray-50">
+                <div className="flex items-center justify-between gap-2 mb-3">
+                  <div className="font-black text-gray-700">folder</div>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      className="px-3 py-1 rounded-xl border-2 border-gray-300 bg-white text-green-700 font-black hover:border-blue-500 disabled:opacity-60 flex items-center gap-2"
+                      disabled={loading || !grade}
+                      onClick={() => void createLibraryFolder(null)}
+                      title="新增根目錄 folder"
+                    >
+                      <FolderPlus className="w-4 h-4" />
+                      新增
+                    </button>
+                    <button
+                      type="button"
+                      className="px-3 py-1 rounded-xl border-2 border-gray-300 bg-white text-blue-700 font-black hover:border-blue-500 disabled:opacity-60 flex items-center gap-2"
+                      disabled={loading || !selectedFolderId}
+                      onClick={() => void renameLibraryFolder()}
+                      title="改名"
+                    >
+                      <Pencil className="w-4 h-4" />
+                      改名
+                    </button>
+                    <button
+                      type="button"
+                      className="px-3 py-1 rounded-xl border-2 border-red-300 bg-red-100 text-red-700 font-black hover:bg-red-200 disabled:opacity-60 flex items-center gap-2"
+                      disabled={loading || !selectedFolderId}
+                      onClick={() => void deleteLibraryFolder()}
+                      title="刪除（封存）"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                      刪除
+                    </button>
+                  </div>
+                </div>
 
-            <div className="p-4 rounded-2xl border-2 border-gray-200 bg-white lg:col-span-2">
-              <div className="flex items-center justify-between mb-3">
-                <div className="font-black text-gray-700">草稿列表</div>
-                <div className="text-sm text-gray-600 font-bold">共 {drafts.length} 個</div>
+                <select
+                  className="w-full px-3 py-2 rounded-xl border-2 border-gray-300 font-bold bg-white"
+                  value={selectedFolderId || ''}
+                  onChange={(e) => setSelectedFolderId(e.target.value ? e.target.value : null)}
+                  disabled={loading}
+                >
+                  <option value="">（未分類）</option>
+                  {folderTree.map((row) => (
+                    <option key={row.folder.id} value={row.folder.id}>
+                      {'　'.repeat(row.depth)}{row.folder.name}
+                    </option>
+                  ))}
+                </select>
+
+                <div className="mt-2 flex justify-end">
+                  <button
+                    type="button"
+                    className="px-3 py-1 rounded-xl border-2 border-gray-300 bg-white text-brand-brown font-black hover:border-blue-500 disabled:opacity-60"
+                    disabled={loading || !selectedFolderId}
+                    onClick={() => void createLibraryFolder(selectedFolderId)}
+                    title="新增子folder"
+                  >
+                    ＋子folder
+                  </button>
+                </div>
               </div>
 
-              {loading ? (
-                <div className="text-brand-brown font-bold">載入中...</div>
-              ) : drafts.length === 0 ? (
-                <div className="text-gray-500 font-bold">（未有草稿）</div>
-              ) : (
-                <div className="grid grid-cols-1 gap-3">
-                  {drafts.map((d) => {
-                    const owner = String(d.ownerTeacherId || '');
-                    const isOwner = owner === String(userId || '');
-                    const canEdit = isMy && isOwner;
-                    const canDelete = isOwner;
-                    return (
-                      <div key={d.id} className="p-4 rounded-2xl border-2 border-gray-200 bg-gray-50">
-                        <div className="flex items-start justify-between gap-3">
-                          <div className="min-w-0">
-                            <div className="font-black text-gray-800 truncate">{String(d.title || '')}</div>
-                            <div className="text-sm text-gray-600 font-bold">
-                              <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-[#FDEEAD] border border-brand-brown text-brand-brown font-black text-xs mr-2">
-                                {toolLabel(d.toolType)}
-                              </span>
-                              科目：{String(d.subject || '')} ｜ 作者：{String(d.ownerTeacherName || d.ownerTeacherId || '')}
-                            </div>
-                            <div className="text-xs text-gray-500 font-bold">
-                              更新：{d.updatedAt ? new Date(d.updatedAt).toLocaleString() : '—'}
-                            </div>
-                          </div>
+              <div className="p-4 rounded-2xl border-2 border-gray-200 bg-white lg:col-span-2">
+                <div className="flex items-center justify-between mb-3">
+                  <div className="font-black text-gray-700">草稿列表</div>
+                  <div className="text-sm text-gray-600 font-bold">共 {drafts.length} 個</div>
+                </div>
 
-                          <div className="flex flex-wrap gap-2 justify-end">
-                            <button
-                              onClick={() => onOpenDraft(d)}
-                              className="px-3 py-2 rounded-xl bg-white border-2 border-gray-300 hover:border-blue-500 font-black text-gray-700"
-                            >
-                              開啟
-                            </button>
+                {loading ? (
+                  <div className="text-brand-brown font-bold">載入中...</div>
+                ) : drafts.length === 0 ? (
+                  <div className="text-gray-500 font-bold">（未有草稿）</div>
+                ) : (
+                  <div className="grid grid-cols-1 gap-3">
+                    {drafts.map((d) => {
+                      const owner = String(d.ownerTeacherId || '');
+                      const isOwner = owner === String(userId || '');
+                      const canEdit = isMy && isOwner;
+                      const canDelete = isOwner;
+                      return (
+                        <div key={d.id} className="p-4 rounded-2xl border-2 border-gray-200 bg-gray-50">
+                          <div className="flex items-start justify-between gap-3">
+                            <div className="min-w-0">
+                              <div className="font-black text-gray-800 truncate">{String(d.title || '')}</div>
+                              <div className="text-sm text-gray-600 font-bold">
+                                <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-[#FDEEAD] border border-brand-brown text-brand-brown font-black text-xs mr-2">
+                                  {toolLabel(d.toolType)}
+                                </span>
+                                科目：{String(d.subject || '')} ｜ 作者：{String(d.ownerTeacherName || d.ownerTeacherId || '')}
+                              </div>
+                              <div className="text-xs text-gray-500 font-bold">
+                                更新：{d.updatedAt ? new Date(d.updatedAt).toLocaleString() : '—'}
+                              </div>
+                            </div>
 
-                            {space === 'shared' && !isOwner && (
+                            <div className="flex flex-wrap gap-2 justify-end">
                               <button
-                                onClick={async () => {
-                                  setLoading(true);
-                                  setError('');
-                                  try {
-                                    const resp = await authService.copyDraftToMy(String(d.id));
-                                    alert('已複製到我的草稿（未分類）');
-                                    setSpace('my');
-                                    setSelectedFolderId(null);
-                                    setGrade(String(resp?.draft?.grade || grade));
-                                  } catch (e: any) {
-                                    setError(e?.message || '複製失敗');
-                                  } finally {
-                                    setLoading(false);
-                                  }
-                                }}
-                                className="px-3 py-2 rounded-xl bg-green-600 text-white border-2 border-green-700 hover:bg-green-700 font-black flex items-center gap-2"
-                                title="複製到我的草稿後才可修改"
+                                onClick={() => onOpenDraft(d)}
+                                className="px-3 py-2 rounded-xl bg-white border-2 border-gray-300 hover:border-blue-500 font-black text-gray-700"
                               >
-                                <Copy className="w-4 h-4" />
-                                複製到我的
+                                開啟
                               </button>
-                            )}
 
-                            {canEdit && (
-                              <>
+                              {space === 'shared' && !isOwner && (
                                 <button
                                   onClick={async () => {
-                                    const next = prompt('輸入新名稱', String(d.title || ''));
-                                    const title = String(next || '').trim();
-                                    if (!title || title === String(d.title || '')) return;
                                     setLoading(true);
                                     setError('');
                                     try {
-                                      await authService.updateDraftMeta(String(d.id), { title });
-                                      await reload({ keepFolder: true });
+                                      const resp = await authService.copyDraftToMy(String(d.id));
+                                      alert('已複製到我的草稿（未分類）');
+                                      setSpace('my');
+                                      setSelectedFolderId(null);
+                                      setGrade(String(resp?.draft?.grade || grade));
                                     } catch (e: any) {
-                                      setError(e?.message || '改名失敗');
+                                      setError(e?.message || '複製失敗');
                                     } finally {
                                       setLoading(false);
                                     }
                                   }}
-                                  className="px-3 py-2 rounded-xl bg-white border-2 border-gray-300 hover:border-blue-500 font-black text-gray-700 flex items-center gap-2"
+                                  className="px-3 py-2 rounded-xl bg-green-600 text-white border-2 border-green-700 hover:bg-green-700 font-black flex items-center gap-2"
+                                  title="複製到我的草稿後才可修改"
                                 >
-                                  <Pencil className="w-4 h-4" />
-                                  改名
+                                  <Copy className="w-4 h-4" />
+                                  複製到我的
                                 </button>
-                                <button
-                                  onClick={() => {
-                                    setMovingDraft(d);
-                                    setMovePickerOpen(true);
-                                  }}
-                                  className="px-3 py-2 rounded-xl bg-white border-2 border-gray-300 hover:border-blue-500 font-black text-gray-700 flex items-center gap-2"
-                                  title="移動到其他 folder"
-                                >
-                                  <FolderInput className="w-4 h-4" />
-                                  移動
-                                </button>
-                              </>
-                            )}
+                              )}
 
-                            {canDelete && (
-                              <button
-                                onClick={async () => {
-                                  if (!window.confirm('確定要刪除此草稿嗎？')) return;
-                                  setLoading(true);
-                                  setError('');
-                                  try {
-                                    await authService.deleteDraft(String(d.id));
-                                    await reload({ keepFolder: true });
-                                  } catch (e: any) {
-                                    setError(e?.message || '刪除失敗');
-                                  } finally {
-                                    setLoading(false);
-                                  }
-                                }}
-                                className="px-3 py-2 rounded-xl bg-red-600 text-white border-2 border-red-700 hover:bg-red-700 font-black flex items-center gap-2"
-                              >
-                                <Trash2 className="w-4 h-4" />
-                                刪除
-                              </button>
-                            )}
+                              {canEdit && (
+                                <>
+                                  <button
+                                    onClick={async () => {
+                                      const next = prompt('輸入新名稱', String(d.title || ''));
+                                      const title = String(next || '').trim();
+                                      if (!title || title === String(d.title || '')) return;
+                                      setLoading(true);
+                                      setError('');
+                                      try {
+                                        await authService.updateDraftMeta(String(d.id), { title });
+                                        await reload({ keepFolder: true });
+                                      } catch (e: any) {
+                                        setError(e?.message || '改名失敗');
+                                      } finally {
+                                        setLoading(false);
+                                      }
+                                    }}
+                                    className="px-3 py-2 rounded-xl bg-white border-2 border-gray-300 hover:border-blue-500 font-black text-gray-700 flex items-center gap-2"
+                                  >
+                                    <Pencil className="w-4 h-4" />
+                                    改名
+                                  </button>
+                                  <button
+                                    onClick={() => {
+                                      setMovingDraft(d);
+                                      setMovePickerOpen(true);
+                                    }}
+                                    className="px-3 py-2 rounded-xl bg-white border-2 border-gray-300 hover:border-blue-500 font-black text-gray-700 flex items-center gap-2"
+                                    title="移動到其他 folder"
+                                  >
+                                    <FolderInput className="w-4 h-4" />
+                                    移動
+                                  </button>
+                                </>
+                              )}
+
+                              {canDelete && (
+                                <button
+                                  onClick={async () => {
+                                    if (!window.confirm('確定要刪除此草稿嗎？')) return;
+                                    setLoading(true);
+                                    setError('');
+                                    try {
+                                      await authService.deleteDraft(String(d.id));
+                                      await reload({ keepFolder: true });
+                                    } catch (e: any) {
+                                      setError(e?.message || '刪除失敗');
+                                    } finally {
+                                      setLoading(false);
+                                    }
+                                  }}
+                                  className="px-3 py-2 rounded-xl bg-red-600 text-white border-2 border-red-700 hover:bg-red-700 font-black flex items-center gap-2"
+                                >
+                                  <Trash2 className="w-4 h-4" />
+                                  刪除
+                                </button>
+                              )}
+                            </div>
                           </div>
                         </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
             </div>
-          </div>
+          )}
         </div>
       </div>
 
@@ -370,4 +495,3 @@ const DraftLibraryModal: React.FC<Props> = ({ open, onClose, authService, userId
 };
 
 export default DraftLibraryModal;
-

@@ -111,7 +111,7 @@ export const ScopeCardExplorerModal: React.FC<ScopeCardExplorerModalProps> = ({ 
             <div className="flex items-center gap-3">
               <BarChart3 className="w-6 h-6" />
               <div>
-                <h2 className="text-2xl font-bold">按學習範圍分析（學習卡）</h2>
+                <h2 className="text-2xl font-bold">學生學習分析</h2>
                 <p className="text-sm opacity-90">同一範圍（folder + 範圍文字）聚合多份小測驗/問答比賽</p>
               </div>
             </div>

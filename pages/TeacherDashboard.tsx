@@ -16,7 +16,6 @@ import ClassFolderSelectInline from '../components/ClassFolderSelectInline';
 import AssignmentExplorerModal from '../components/AssignmentExplorerModal';
 import NoteEditorModal, { NoteEditorHandle } from '../components/NoteEditorModal';
 import { AiReportModal } from '../components/AiReportModal';
-import { ScopeCardExplorerModal } from '../components/ScopeCardExplorerModal';
 import { MathExpressionBuilder, finalizeMathQuestions } from '../components/MathExpressionBuilder';
 import { MathEquationBuilder, finalizeMathEquationQuestions } from '../components/MathEquationBuilder';
 import { MathExpressionView, FractionView } from '../components/MathExpressionView';
@@ -57,7 +56,6 @@ const TeacherDashboard: React.FC = () => {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [showAiChat, setShowAiChat] = useState(false);
   const [showAppStudio, setShowAppStudio] = useState(false);
-  const [showScopeCardExplorerModal, setShowScopeCardExplorerModal] = useState(false);
 
   const [teacherSettingsDraft, setTeacherSettingsDraft] = useState<{
     homeroomClass: string;
@@ -2712,10 +2710,6 @@ const TeacherDashboard: React.FC = () => {
         open={showAppStudio}
         onClose={() => setShowAppStudio(false)}
       />
-      <ScopeCardExplorerModal
-        isOpen={showScopeCardExplorerModal}
-        onClose={() => setShowScopeCardExplorerModal(false)}
-      />
 
       <AiReportModal
         open={aiReportModalOpen}
@@ -3125,17 +3119,6 @@ const TeacherDashboard: React.FC = () => {
                   </Button>
                   <Button
                     fullWidth
-                    className="bg-[#FFF2D2] hover:bg-[#FFE7B0] flex items-center justify-center gap-2"
-                    onClick={() => {
-                      setShowScopeCardExplorerModal(true);
-                      closeSidebar();
-                    }}
-                  >
-                    <BarChart3 className="w-5 h-5" />
-                    範圍分析
-                  </Button>
-                  <Button
-                    fullWidth
                     className="bg-[#C0E2BE] hover:bg-[#A9D8A7]"
                     onClick={() => {
                       openAssignmentManagement();
@@ -3241,14 +3224,6 @@ const TeacherDashboard: React.FC = () => {
             onClick={openStudentProgress}
           >
             學生進度
-          </Button>
-          <Button
-            fullWidth
-            className="bg-[#FFF2D2] hover:bg-[#FFE7B0] text-lg flex items-center justify-center gap-2"
-            onClick={() => setShowScopeCardExplorerModal(true)}
-          >
-            <BarChart3 className="w-5 h-5" />
-            範圍分析
           </Button>
           <Button fullWidth className="bg-[#C0E2BE] hover:bg-[#A9D8A7] text-lg" onClick={openAssignmentManagement}>
             作業管理

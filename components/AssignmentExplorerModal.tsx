@@ -1,9 +1,10 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Archive, ArchiveRestore, ChevronLeft, FolderInput, Pencil, RefreshCw, Trash2, X } from 'lucide-react';
+import { Archive, ArchiveRestore, BarChart3, ChevronLeft, FolderInput, Pencil, RefreshCw, Trash2, X } from 'lucide-react';
 import { VISIBLE_SUBJECTS } from '../platform';
 import RichHtmlContent from './RichHtmlContent';
 import NoteCreateModal from './NoteCreateModal';
 import NoteEditorModal from './NoteEditorModal';
+import { ScopeCardExplorerModal } from './ScopeCardExplorerModal';
 
 type ManagedTaskType = 'assignment' | 'quiz' | 'game' | 'contest' | 'ai-bot' | 'note';
 
@@ -148,6 +149,7 @@ const AssignmentExplorerModal: React.FC<Props> = ({ open, onClose, authService, 
   const [noteEditorMode, setNoteEditorMode] = useState<'template' | 'teacher'>('teacher');
   const [noteEditorNoteId, setNoteEditorNoteId] = useState('');
   const [noteEditorStudentId, setNoteEditorStudentId] = useState('');
+  const [scopeCardOpen, setScopeCardOpen] = useState(false);
 
   const canArchive = viewerRole === 'admin';
 
@@ -182,6 +184,7 @@ const AssignmentExplorerModal: React.FC<Props> = ({ open, onClose, authService, 
     setTopicId('');
     setSelectedTask(null);
     setTaskResponses([]);
+    setScopeCardOpen(false);
     void load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
@@ -503,10 +506,19 @@ const AssignmentExplorerModal: React.FC<Props> = ({ open, onClose, authService, 
             <div className="text-sm text-brand-brown/80 font-bold">
               {breadcrumbs || '科目 → 班別 → 學段 → 課題 → 任務'}
             </div>
-		          </div>
-		          <div className="flex items-center gap-2">
-		            {canArchive && (
-		              <button
+			          </div>
+			          <div className="flex items-center gap-2">
+			            <button
+			              type="button"
+			              onClick={() => setScopeCardOpen(true)}
+			              className="px-4 py-2 rounded-2xl border-4 border-brand-brown bg-white text-brand-brown font-black shadow-comic hover:bg-gray-50 flex items-center gap-2"
+			              title="學生學習分析（範圍卡）"
+			            >
+			              <BarChart3 className="w-4 h-4" />
+			              學生學習分析
+			            </button>
+			            {canArchive && (
+			              <button
 		                type="button"
 		                onClick={() => setIncludeArchived((v) => !v)}
 	                className={`px-4 py-2 rounded-2xl border-4 font-black shadow-comic ${includeArchived ? 'bg-[#B5D8F8] border-brand-brown text-brand-brown' : 'bg-white border-brand-brown text-brand-brown hover:bg-gray-50'}`}
@@ -1057,12 +1069,17 @@ const AssignmentExplorerModal: React.FC<Props> = ({ open, onClose, authService, 
             </div>
           )}
 	        </div>
-	      </div>
+	        </div>
 
-	      <NoteCreateModal
-	        open={createNoteOpen}
-	        onClose={() => setCreateNoteOpen(false)}
-	        authService={authService}
+	        <ScopeCardExplorerModal
+	          isOpen={scopeCardOpen}
+	          onClose={() => setScopeCardOpen(false)}
+	        />
+
+	        <NoteCreateModal
+	          open={createNoteOpen}
+	          onClose={() => setCreateNoteOpen(false)}
+	          authService={authService}
 	        onCreated={(id) => {
 	          setCreateNoteOpen(false);
 	          setNoteEditorMode('template');
