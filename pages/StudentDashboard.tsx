@@ -900,13 +900,13 @@ const StudentDashboard: React.FC = () => {
       {/* Main Container */}
       <main className="max-w-[1200px] mx-auto grid grid-cols-1 lg:grid-cols-12 gap-8 pb-10">
         {/* Left Sidebar */}
-        <aside className="lg:col-span-4 cartoon-card p-6 flex-shrink-0 flex flex-col min-h-fit">
+        <aside className="lg:col-span-4 cartoon-card px-6 pt-2 pb-6 flex-shrink-0 flex flex-col min-h-fit">
           {/* Logo Section */}
-          <div className="text-center mb-0">
+          <div className="text-center -mt-2 -mb-12">
             <img
               src="/lpsparklogo.png"
               alt="LP科樂園 Logo"
-              className="h-64 mx-auto object-contain drop-shadow-sm hover:scale-105 transition-transform duration-300"
+              className="h-64 mx-auto block object-contain drop-shadow-sm hover:scale-105 transition-transform duration-300"
             />
           </div>
 
