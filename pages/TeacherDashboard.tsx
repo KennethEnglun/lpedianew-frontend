@@ -3071,10 +3071,18 @@ const TeacherDashboard: React.FC = () => {
             aria-label="關閉選單"
             onClick={closeSidebar}
           />
-          <aside className="absolute inset-y-0 left-0 w-[min(22rem,85vw)] bg-[#D9F3D5] border-r-4 border-brand-brown shadow-2xl overflow-y-auto">
+          <aside
+            className="absolute inset-y-0 left-0 w-[min(22rem,85vw)] border-r-4 border-brand-brown shadow-2xl overflow-y-auto"
+            style={{
+              backgroundImage: "url('/stubg.png')",
+              backgroundSize: 'cover',
+              backgroundRepeat: 'no-repeat',
+              backgroundPosition: 'center',
+            }}
+          >
             <div className="p-6">
               <div className="flex items-center justify-between mb-4">
-                <h1 className="text-2xl font-black text-brand-brown font-rounded">LP科樂園</h1>
+                <img src="/lpsparklogo.png" alt="LP科樂園 Logo" className="h-10 w-auto" />
                 <button
                   onClick={closeSidebar}
                   className="w-10 h-10 rounded-full bg-white border-2 border-brand-brown hover:bg-gray-100 flex items-center justify-center"
@@ -3086,9 +3094,6 @@ const TeacherDashboard: React.FC = () => {
 
               {/* User Profile Section */}
               <div className="text-center mb-6">
-                <div className="w-20 h-20 rounded-full border-4 border-brand-brown bg-white mb-3 overflow-hidden mx-auto">
-                  <img src="/teacher_login.png" alt="Teacher Avatar" className="w-full h-full object-cover" />
-                </div>
                 <div className="text-lg font-bold text-brand-brown">{user?.profile?.name || '教師'}</div>
                 <div className="text-sm text-gray-600">{user?.username}</div>
               </div>
@@ -3184,20 +3189,21 @@ const TeacherDashboard: React.FC = () => {
       )}
 
       {/* Sidebar */}
-      <aside className="hidden lg:flex relative z-10 w-full lg:w-80 bg-[#D9F3D5] min-h-fit my-0 lg:my-auto ml-0 rounded-b-[3rem] lg:rounded-b-none lg:rounded-r-[3rem] border-4 lg:border-l-0 border-brand-brown shadow-2xl flex-col p-6">
-        <div className="flex items-center justify-center mb-2">
-          <h1 className="text-4xl font-black text-brand-brown font-rounded">LP科樂園</h1>
+      <aside
+        className="hidden lg:flex relative z-10 w-full lg:w-80 min-h-fit my-0 lg:my-auto ml-0 rounded-b-[3rem] lg:rounded-b-none lg:rounded-r-[3rem] border-4 lg:border-l-0 border-brand-brown shadow-2xl flex-col p-6"
+        style={{
+          backgroundImage: "url('/stubg.png')",
+          backgroundSize: 'cover',
+          backgroundRepeat: 'no-repeat',
+          backgroundPosition: 'center',
+        }}
+      >
+        <div className="flex items-center justify-start mb-2">
+          <img src="/lpsparklogo.png" alt="LP科樂園 Logo" className="h-14 w-auto" />
         </div>
 
         {/* User Profile Section */}
         <div className="text-center mb-6">
-          <div className="w-20 h-20 rounded-full border-4 border-brand-brown bg-white mb-3 overflow-hidden mx-auto">
-            <img
-              src="/teacher_login.png"
-              alt="Teacher Avatar"
-              className="w-full h-full object-cover"
-            />
-          </div>
           <div className="text-lg font-bold text-brand-brown">
             {user?.profile?.name || '教師'}
           </div>
