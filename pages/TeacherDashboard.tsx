@@ -1242,33 +1242,14 @@ const TeacherDashboard: React.FC = () => {
     try {
       const teacherHidden = loadHiddenTaskKeys(user.id, 'teacher');
 
-      // 獲取該學生的所有任務（不使用進度篩選器限制）
-      console.log('Loading all tasks for student...');
-      const [assignmentData, quizData, gameData, botTaskData, contestData] = await Promise.all([
-        authService.getTeacherAssignments(),
-        authService.getTeacherQuizzes(),
-        authService.getTeacherGames(),
-        authService.getTeacherBotTasks(),
-        authService.getTeacherContests()
-      ]);
+	      // 獲取該學生的所有任務（不使用進度篩選器限制）
+	      console.log('Loading all tasks for student...');
+	      const manageData = await authService.getManageTasks();
+	      const allTasks = (Array.isArray(manageData?.tasks) ? manageData.tasks : [])
+	        .filter((t: any) => t && t.type && t.id)
+	        .filter((t: any) => String(t.type) !== 'note');
 
-      console.log('Raw task data loaded:', {
-        assignments: assignmentData.assignments?.length || 0,
-        quizzes: quizData.quizzes?.length || 0,
-        games: gameData.games?.length || 0,
-        botTasks: botTaskData.tasks?.length || 0,
-        contests: contestData.contests?.length || 0
-      });
-
-      const allTasks = [
-        ...(assignmentData.assignments || []).map((item: any) => ({ ...item, type: 'assignment' as const })),
-        ...(quizData.quizzes || []).map((item: any) => ({ ...item, type: 'quiz' as const })),
-        ...(gameData.games || []).map((item: any) => ({ ...item, type: 'game' as const })),
-        ...(botTaskData.tasks || []).map((item: any) => ({ ...item, type: 'ai-bot' as const })),
-        ...(contestData.contests || []).map((item: any) => ({ ...item, type: 'contest' as const }))
-      ];
-
-      console.log('All tasks combined:', allTasks.length);
+	      console.log('All tasks combined:', allTasks.length);
 
       const filteredTasks = progressIncludeHidden
         ? allTasks
@@ -1303,22 +1284,22 @@ const TeacherDashboard: React.FC = () => {
           let completed = false;
           let completionDetails: any = null;
 
-          try {
-            if (task.type === 'quiz') {
-              const data = await authService.getQuizResults(task.id);
-              const results = data.results || [];
-              const studentResult = results.find((r: any) => String(r.studentId) === String(actualStudent.id));
-              completed = !!studentResult;
-              if (studentResult) {
-                completionDetails = {
-                  score: studentResult.score || 0,
-                  totalQuestions: studentResult.totalQuestions || 0,
-                  completedAt: studentResult.completedAt
-                };
-              }
-            } else if (task.type === 'game') {
-              const data = await authService.getGameResults(task.id);
-              const scores = data.scores || [];
+	          try {
+	            if (task.type === 'quiz') {
+	              const data = await authService.getQuizResults(task.id);
+	              const results = data.results || [];
+	              const studentResult = results.find((r: any) => String(r.studentId) === String(actualStudent.id));
+	              completed = !!studentResult;
+	              if (studentResult) {
+	                completionDetails = {
+	                  score: studentResult.score || 0,
+	                  totalQuestions: studentResult.totalQuestions || 0,
+	                  completedAt: studentResult.submittedAt || studentResult.completedAt || studentResult.createdAt
+	                };
+	              }
+	            } else if (task.type === 'game') {
+	              const data = await authService.getGameResults(task.id);
+	              const scores = data.scores || [];
               const studentScores = scores.filter((s: any) => String(s.studentId) === String(actualStudent.id));
               completed = studentScores.length > 0;
               if (studentScores.length > 0) {
@@ -1329,36 +1310,35 @@ const TeacherDashboard: React.FC = () => {
                   lastPlayedAt: studentScores[studentScores.length - 1]?.completedAt
                 };
               }
-            } else if (task.type === 'ai-bot') {
-              const data = await authService.getBotTaskThreads(task.id);
-              const threads = data.threads || [];
-              const studentThread = threads.find((t: any) => String(t.studentId) === String(actualStudent.id));
-              completed = studentThread?.completed || false;
-              if (studentThread) {
-                completionDetails = {
-                  threadId: studentThread.id,
-                  messageCount: studentThread.messages?.length || 0,
-                  lastMessageAt: studentThread.updatedAt
-                };
-              }
-            } else if (task.type === 'contest') {
-              const data = await authService.getContestResults(task.id);
-              const attempts = data.attempts || [];
-              const studentAttempts = attempts.filter((a: any) => String(a.studentId) === String(actualStudent.id));
-              completed = studentAttempts.length > 0;
-              if (studentAttempts.length > 0) {
-                const bestAttempt = studentAttempts.reduce((best: any, current: any) =>
-                  (current.score || 0) > (best.score || 0) ? current : best
-                );
-                completionDetails = {
-                  bestScore: bestAttempt.score || 0,
-                  attempts: studentAttempts.length,
-                  completedAt: bestAttempt.completedAt
-                };
-              }
-            } else {
-              const data = await authService.getAssignmentResponses(task.id);
-              const responses = data.responses || [];
+	            } else if (task.type === 'ai-bot') {
+	              const data = await authService.getBotTaskThreads(task.id);
+	              const threads = data.threads || [];
+	              const studentThread = threads.find((t: any) => String(t.studentId) === String(actualStudent.id));
+	              completed = studentThread?.completed || false;
+	              if (studentThread) {
+	                completionDetails = {
+	                  threadId: studentThread.threadId || null,
+	                  lastMessageAt: studentThread.lastMessageAt || null
+	                };
+	              }
+	            } else if (task.type === 'contest') {
+	              const data = await authService.getContestResults(task.id);
+	              const attempts = data.attempts || [];
+	              const studentAttempts = attempts.filter((a: any) => String(a.studentId) === String(actualStudent.id));
+	              completed = studentAttempts.length > 0;
+	              if (studentAttempts.length > 0) {
+	                const bestAttempt = studentAttempts.reduce((best: any, current: any) =>
+	                  (current.score || 0) > (best.score || 0) ? current : best
+	                );
+	                completionDetails = {
+	                  bestScore: bestAttempt.score || 0,
+	                  attempts: studentAttempts.length,
+	                  completedAt: bestAttempt.submittedAt || bestAttempt.completedAt || bestAttempt.startedAt
+	                };
+	              }
+	            } else {
+	              const data = await authService.getAssignmentResponses(task.id);
+	              const responses = data.responses || [];
               const studentResponse = responses.find((r: any) => String(r.studentId) === String(actualStudent.id));
               completed = !!studentResponse;
               if (studentResponse) {
@@ -1372,14 +1352,14 @@ const TeacherDashboard: React.FC = () => {
             console.error('檢查任務完成狀態失敗:', task.type, task.id, error);
           }
 
-          return {
-            ...task,
-            completed,
-            completionDetails,
-            createdAtFormatted: new Date(task.createdAt).toLocaleString()
-          };
-        })
-      );
+	          return {
+	            ...task,
+	            completed,
+	            completionDetails,
+	            createdAtFormatted: task.createdAt ? new Date(task.createdAt).toLocaleString() : ''
+	          };
+	        })
+	      );
 
       setStudentTasks(tasksWithStatus.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()));
     } catch (error) {
@@ -1449,38 +1429,42 @@ const TeacherDashboard: React.FC = () => {
     return results;
   };
 
-  const loadStudentProgress = async () => {
-    if (!user?.id) return;
+	  const loadStudentProgress = async () => {
+	    if (!user?.id) return;
 
-    try {
-      setProgressLoading(true);
-      setProgressError('');
+	    try {
+	      setProgressLoading(true);
+	      setProgressError('');
 
-      const teacherHidden = loadHiddenTaskKeys(user.id, 'teacher');
-      setHiddenTaskKeys(teacherHidden);
+	      const teacherHidden = loadHiddenTaskKeys(user.id, 'teacher');
+	      setHiddenTaskKeys(teacherHidden);
 
-      const [studentsData, assignmentData, quizData, gameData, botTaskData, contestData] = await Promise.all([
-        authService.getStudentRoster({ limit: 2000 }),
-        authService.getTeacherAssignments(progressFilterSubject || undefined, progressFilterClass || undefined, progressFilterGroup || undefined),
-        authService.getTeacherQuizzes(progressFilterSubject || undefined, progressFilterClass || undefined, progressFilterGroup || undefined),
-        authService.getTeacherGames(progressFilterSubject || undefined, progressFilterClass || undefined, undefined, progressFilterGroup || undefined),
-        authService.getTeacherBotTasks(progressFilterSubject || undefined, progressFilterClass || undefined, progressFilterGroup || undefined),
-        authService.getTeacherContests(progressFilterSubject || undefined, progressFilterClass || undefined, progressFilterGroup || undefined)
-      ]);
+	      const [studentsData, manageData] = await Promise.all([
+	        authService.getStudentRoster({ limit: 2000 }),
+	        authService.getManageTasks({ ...(progressFilterSubject ? { subject: progressFilterSubject } : {}) })
+	      ]);
 
-      const students = (studentsData.users || []).filter((u: any) => u?.role === 'student');
+	      const students = (studentsData.users || []).filter((u: any) => u?.role === 'student');
 
-      const tasksAll = [
-        ...(assignmentData.assignments || []).map((item: any) => ({ ...item, type: 'assignment' as const })),
-        ...(quizData.quizzes || []).map((item: any) => ({ ...item, type: 'quiz' as const })),
-        ...(gameData.games || []).map((item: any) => ({ ...item, type: 'game' as const })),
-        ...(botTaskData.tasks || []).map((item: any) => ({ ...item, type: 'ai-bot' as const })),
-        ...(contestData.contests || []).map((item: any) => ({ ...item, type: 'contest' as const }))
-      ];
+	      const allTasksRaw = Array.isArray(manageData?.tasks) ? manageData.tasks : [];
+	      const tasksAll = allTasksRaw
+	        .filter((t: any) => t && t.type && t.id)
+	        .filter((t: any) => String(t.type) !== 'note')
+	        .filter((t: any) => {
+	          if (!progressFilterClass) return true;
+	          const classes = Array.isArray(t.targetClasses) ? t.targetClasses : [];
+	          if (classes.length === 0) return true;
+	          return classes.includes('全部') || classes.includes(progressFilterClass);
+	        })
+	        .filter((t: any) => {
+	          if (!progressFilterGroup) return true;
+	          const groups = Array.isArray(t.targetGroups) ? t.targetGroups : [];
+	          return groups.length === 0 || groups.includes(progressFilterGroup);
+	        });
 
-      const countedTasks = progressIncludeHidden
-        ? tasksAll
-        : tasksAll.filter((t: any) => !isAutoHidden(t.createdAt) && !teacherHidden.has(makeTaskKey(t.type, t.id)));
+	      const countedTasks = progressIncludeHidden
+	        ? tasksAll
+	        : tasksAll.filter((t: any) => !isAutoHidden(t.createdAt) && !teacherHidden.has(makeTaskKey(t.type, t.id)));
 
       const completionEntries = await mapWithConcurrency(
         countedTasks,

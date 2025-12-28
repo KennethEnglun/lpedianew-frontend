@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Archive, ArchiveRestore, ChevronLeft, FolderInput, Pencil, Plus, RefreshCw, Trash2, X } from 'lucide-react';
+import { Archive, ArchiveRestore, ChevronLeft, FolderInput, Pencil, RefreshCw, Trash2, X } from 'lucide-react';
 import { VISIBLE_SUBJECTS } from '../platform';
 import RichHtmlContent from './RichHtmlContent';
 import NoteCreateModal from './NoteCreateModal';
@@ -503,21 +503,12 @@ const AssignmentExplorerModal: React.FC<Props> = ({ open, onClose, authService, 
             <div className="text-sm text-brand-brown/80 font-bold">
               {breadcrumbs || '科目 → 班別 → 學段 → 課題 → 任務'}
             </div>
-	          </div>
-	          <div className="flex items-center gap-2">
-	            <button
-	              type="button"
-	              onClick={() => setCreateNoteOpen(true)}
-	              className="px-4 py-2 rounded-2xl border-4 border-brand-brown bg-white text-brand-brown font-black shadow-comic hover:bg-gray-50 flex items-center gap-2"
-	              title="新增筆記任務（草稿→編輯模板→派發）"
-	            >
-	              <Plus className="w-4 h-4" />
-	              新增筆記
-	            </button>
-	            {canArchive && (
-	              <button
-	                type="button"
-	                onClick={() => setIncludeArchived((v) => !v)}
+		          </div>
+		          <div className="flex items-center gap-2">
+		            {canArchive && (
+		              <button
+		                type="button"
+		                onClick={() => setIncludeArchived((v) => !v)}
 	                className={`px-4 py-2 rounded-2xl border-4 font-black shadow-comic ${includeArchived ? 'bg-[#B5D8F8] border-brand-brown text-brand-brown' : 'bg-white border-brand-brown text-brand-brown hover:bg-gray-50'}`}
 	                title="顯示/隱藏已封存任務"
 	              >
@@ -627,18 +618,20 @@ const AssignmentExplorerModal: React.FC<Props> = ({ open, onClose, authService, 
                   </div>
                 )}
 
-                {selectedTask.type === 'quiz' && (
-                  <div className="bg-[#FEF7EC] border-2 border-gray-200 rounded-2xl p-4 space-y-3">
-                    {quizQuestions.length === 0 ? (
-                      <div className="text-gray-500 font-bold">（未有題目資料）</div>
-                    ) : (
-                      quizQuestions.map((q: any, i: number) => {
-                        const options = Array.isArray(q?.options) ? q.options : [];
-                        const correctIndex = Number.isFinite(Number(q?.correctIndex)) ? Number(q.correctIndex) : null;
-                        return (
-                          <div key={q?.id ?? i} className="border-2 border-gray-200 rounded-2xl bg-white p-3">
-                            <div className="font-black text-brand-brown mb-2">問題 {i + 1}</div>
-                            <div className="text-gray-800 font-bold whitespace-pre-wrap">{String(q?.question || '')}</div>
+	                {selectedTask.type === 'quiz' && (
+	                  <div className="bg-[#FEF7EC] border-2 border-gray-200 rounded-2xl p-4 space-y-3">
+	                    {quizQuestions.length === 0 ? (
+	                      <div className="text-gray-500 font-bold">（未有題目資料）</div>
+	                    ) : (
+	                      quizQuestions.map((q: any, i: number) => {
+	                        const options = Array.isArray(q?.options) ? q.options : [];
+	                        const correctIndex = Number.isFinite(Number(q?.correctAnswer))
+	                          ? Number(q.correctAnswer)
+	                          : (Number.isFinite(Number(q?.correctIndex)) ? Number(q.correctIndex) : null);
+	                        return (
+	                          <div key={q?.id ?? i} className="border-2 border-gray-200 rounded-2xl bg-white p-3">
+	                            <div className="font-black text-brand-brown mb-2">問題 {i + 1}</div>
+	                            <div className="text-gray-800 font-bold whitespace-pre-wrap">{String(q?.question || '')}</div>
                             {options.length > 0 && (
                               <div className="mt-2 grid grid-cols-1 md:grid-cols-2 gap-2">
                                 {options.map((opt: any, oi: number) => {
@@ -789,8 +782,8 @@ const AssignmentExplorerModal: React.FC<Props> = ({ open, onClose, authService, 
                             </div>
                           )}
 
-                          {selectedTask.type === 'quiz' && Array.isArray(r.answers) && (
-                            <div className="mt-3">
+	                          {selectedTask.type === 'quiz' && Array.isArray(r.answers) && (
+	                            <div className="mt-3">
                               <button
                                 type="button"
                                 onClick={() => toggleQuizResult(String(r.id || idx))}
@@ -798,30 +791,43 @@ const AssignmentExplorerModal: React.FC<Props> = ({ open, onClose, authService, 
                               >
                                 {expandedQuizResultIds.has(String(r.id || idx)) ? '收起答題' : '查看答題'}
                               </button>
-                              {expandedQuizResultIds.has(String(r.id || idx)) && (
-                                <div className="mt-2 space-y-2">
-                                  {quizQuestions.length === 0 ? (
-                                    <div className="text-gray-500 font-bold">（未有題目資料）</div>
-                                  ) : (
-                                    quizQuestions.map((q: any, qi: number) => {
-                                      const options = Array.isArray(q?.options) ? q.options : [];
-                                      const correctIndex = Number.isFinite(Number(q?.correctIndex)) ? Number(q.correctIndex) : null;
-                                      const ans = Number.isFinite(Number(r.answers?.[qi])) ? Number(r.answers[qi]) : -1;
-                                      const label = ans >= 0 ? indexToLetter(ans) : '（未答）';
-                                      const isCorrect = correctIndex !== null && ans === correctIndex;
-                                      const answerText = ans >= 0 && options[ans] !== undefined ? String(options[ans]) : '';
-                                      return (
-                                        <div key={qi} className="p-2 rounded-2xl border-2 border-gray-200 bg-white">
-                                          <div className="text-xs font-black text-brand-brown">問題 {qi + 1}</div>
-                                          <div className={`text-sm font-bold ${isCorrect ? 'text-green-800' : 'text-gray-800'}`}>
-                                            答案：{label}{answerText ? `（${answerText}）` : ''}{isCorrect ? ' ✅' : ''}
-                                          </div>
-                                        </div>
-                                      );
-                                    })
-                                  )}
-                                </div>
-                              )}
+	                              {expandedQuizResultIds.has(String(r.id || idx)) && (
+	                                <div className="mt-2 space-y-2">
+	                                  {quizQuestions.length === 0 ? (
+	                                    <div className="text-gray-500 font-bold">（未有題目資料）</div>
+	                                  ) : (
+	                                    quizQuestions.map((q: any, qi: number) => {
+	                                      const options = Array.isArray(q?.options) ? q.options : [];
+	                                      const correctIndex = Number.isFinite(Number(q?.correctAnswer))
+	                                        ? Number(q.correctAnswer)
+	                                        : (Number.isFinite(Number(q?.correctIndex)) ? Number(q.correctIndex) : null);
+	                                      const ans = Number.isFinite(Number(r.answers?.[qi])) ? Number(r.answers[qi]) : -1;
+	                                      const label = ans >= 0 ? indexToLetter(ans) : '（未答）';
+	                                      const isCorrect = correctIndex !== null && ans === correctIndex;
+	                                      const answerText = ans >= 0 && options[ans] !== undefined ? String(options[ans]) : '';
+	                                      const correctLabel = correctIndex !== null ? indexToLetter(correctIndex) : '';
+	                                      const correctText = correctIndex !== null && options[correctIndex] !== undefined ? String(options[correctIndex]) : '';
+	                                      return (
+	                                        <div key={qi} className="p-3 rounded-2xl border-2 border-gray-200 bg-white">
+	                                          <div className="text-xs font-black text-brand-brown">問題 {qi + 1}</div>
+	                                          <div className="text-sm font-bold text-gray-800 whitespace-pre-wrap">{String(q?.question || '')}</div>
+	                                          <div className={`mt-1 text-sm font-black ${isCorrect ? 'text-green-800' : 'text-red-700'}`}>
+	                                            {correctIndex === null ? '結果：—' : (isCorrect ? '結果：✅ 正確' : '結果：❌ 錯誤')}
+	                                          </div>
+	                                          <div className="mt-1 text-sm font-black text-brand-brown">
+	                                            學生答案：{label}{answerText ? `（${answerText}）` : ''}
+	                                          </div>
+	                                          {!isCorrect && correctIndex !== null && (
+	                                            <div className="mt-1 text-sm font-black text-gray-700">
+	                                              正確答案：{correctLabel}{correctText ? `（${correctText}）` : ''}
+	                                            </div>
+	                                          )}
+	                                        </div>
+	                                      );
+	                                    })
+	                                  )}
+	                                </div>
+	                              )}
                             </div>
                           )}
 
