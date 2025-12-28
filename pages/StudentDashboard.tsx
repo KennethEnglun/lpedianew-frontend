@@ -902,7 +902,7 @@ const StudentDashboard: React.FC = () => {
         {/* Left Sidebar */}
         <aside className="lg:col-span-4 cartoon-card p-6 flex-shrink-0 flex flex-col min-h-fit">
           {/* Logo Section */}
-          <div className="text-center mb-6">
+          <div className="text-center mb-0">
             <img
               src="/lpsparklogo.png"
               alt="LP科樂園 Logo"

@@ -3081,7 +3081,7 @@ const TeacherDashboard: React.FC = () => {
             }}
           >
             <div className="p-6">
-              <div className="relative mb-6 flex items-center justify-center">
+              <div className="relative mb-0 flex items-center justify-center">
                 <img
                   src="/lpsparklogo.png"
                   alt="LP科樂園 Logo"
@@ -3097,96 +3097,98 @@ const TeacherDashboard: React.FC = () => {
               </div>
 
               {/* User Profile Section */}
-              <div className="text-center mb-6">
-                <div className="text-lg font-bold text-brand-brown">{user?.profile?.name || '教師'}</div>
-                <div className="text-sm text-gray-600">{user?.username}</div>
-              </div>
+              <div className="scale-[0.7] origin-top">
+                <div className="text-center mb-6">
+                  <div className="text-lg font-bold text-brand-brown">{user?.profile?.name || '教師'}</div>
+                  <div className="text-sm text-gray-600">{user?.username}</div>
+                </div>
 
-              <div className="text-center mb-6 border-b-4 border-brand-brown pb-3 mx-2">
-                <h2 className="text-xl font-bold text-brand-brown">教師工具包</h2>
-              </div>
+                <div className="text-center mb-6 border-b-4 border-brand-brown pb-3 mx-2">
+                  <h2 className="text-xl font-bold text-brand-brown">教師工具包</h2>
+                </div>
 
-              <nav className="space-y-3">
-                <Button
-                  fullWidth
-                  className="bg-[#D2EFFF] hover:bg-[#BCE0FF]"
-                  onClick={() => {
-                    setShowAiChat(true);
-                    closeSidebar();
-                  }}
-                >
-                  AI對話
-                </Button>
-                <Button
-                  fullWidth
-                  className="bg-[#E8F5E9] hover:bg-[#C8E6C9] flex items-center justify-center gap-2"
-                  onClick={() => {
-                    setShowAppStudio(true);
-                    closeSidebar();
-                  }}
-                >
-                  <Code className="w-5 h-5" />
-                  小程式工作坊
-                </Button>
-                <Button
-                  fullWidth
-                  className="bg-[#E0D2F8] hover:bg-[#D0BCF5]"
-                  onClick={() => {
-                    openStudentProgress();
-                    closeSidebar();
-                  }}
-                >
-                  學生進度
-                </Button>
-                <Button
-                  fullWidth
-                  className="bg-[#FFF2D2] hover:bg-[#FFE7B0] flex items-center justify-center gap-2"
-                  onClick={() => {
-                    setShowScopeCardExplorerModal(true);
-                    closeSidebar();
-                  }}
-                >
-                  <BarChart3 className="w-5 h-5" />
-                  範圍分析
-                </Button>
-                <Button
-                  fullWidth
-                  className="bg-[#C0E2BE] hover:bg-[#A9D8A7]"
-                  onClick={() => {
-                    openAssignmentManagement();
-	                    closeSidebar();
-	                  }}
-	                >
-	                  作業管理
-	                </Button>
-                <Button
-                  fullWidth
-                  className="bg-[#D2EFFF] hover:bg-[#BCE0FF]"
-                  onClick={async () => {
-                    if (availableSubjects.length === 0 || availableClasses.length === 0) {
-                      await loadFilterOptions();
-                    }
-                    setShowDraftLibraryModal(true);
-                    closeSidebar();
-                  }}
-                >
-                  教師資料夾
-                </Button>
-	                <Button
-	                  fullWidth
-	                  className="bg-[#F8C5C5] hover:bg-[#F0B5B5] flex items-center justify-center gap-2"
-	                  onClick={() => {
-	                    setShowCreateTaskModal(true);
+                <nav className="space-y-3">
+                  <Button
+                    fullWidth
+                    className="bg-[#D2EFFF] hover:bg-[#BCE0FF]"
+                    onClick={() => {
+                      setShowAiChat(true);
                       closeSidebar();
                     }}
-		                >
-		                  <MessageSquare className="w-5 h-5" />
-		                  建立任務
-		                </Button>
-		                <Button fullWidth className="bg-[#FAD5BE] hover:bg-[#F8C4A6]" onClick={closeSidebar}>
-		                  更多功能開發中⋯⋯
-		                </Button>
-              </nav>
+                  >
+                    AI對話
+                  </Button>
+                  <Button
+                    fullWidth
+                    className="bg-[#E8F5E9] hover:bg-[#C8E6C9] flex items-center justify-center gap-2"
+                    onClick={() => {
+                      setShowAppStudio(true);
+                      closeSidebar();
+                    }}
+                  >
+                    <Code className="w-5 h-5" />
+                    小程式工作坊
+                  </Button>
+                  <Button
+                    fullWidth
+                    className="bg-[#E0D2F8] hover:bg-[#D0BCF5]"
+                    onClick={() => {
+                      openStudentProgress();
+                      closeSidebar();
+                    }}
+                  >
+                    學生進度
+                  </Button>
+                  <Button
+                    fullWidth
+                    className="bg-[#FFF2D2] hover:bg-[#FFE7B0] flex items-center justify-center gap-2"
+                    onClick={() => {
+                      setShowScopeCardExplorerModal(true);
+                      closeSidebar();
+                    }}
+                  >
+                    <BarChart3 className="w-5 h-5" />
+                    範圍分析
+                  </Button>
+                  <Button
+                    fullWidth
+                    className="bg-[#C0E2BE] hover:bg-[#A9D8A7]"
+                    onClick={() => {
+                      openAssignmentManagement();
+                      closeSidebar();
+                    }}
+                  >
+                    作業管理
+                  </Button>
+                  <Button
+                    fullWidth
+                    className="bg-[#D2EFFF] hover:bg-[#BCE0FF]"
+                    onClick={async () => {
+                      if (availableSubjects.length === 0 || availableClasses.length === 0) {
+                        await loadFilterOptions();
+                      }
+                      setShowDraftLibraryModal(true);
+                      closeSidebar();
+                    }}
+                  >
+                    教師資料夾
+                  </Button>
+                  <Button
+                    fullWidth
+                    className="bg-[#F8C5C5] hover:bg-[#F0B5B5] flex items-center justify-center gap-2"
+                    onClick={() => {
+                      setShowCreateTaskModal(true);
+                      closeSidebar();
+                    }}
+                  >
+                    <MessageSquare className="w-5 h-5" />
+                    建立任務
+                  </Button>
+                  <Button fullWidth className="bg-[#FAD5BE] hover:bg-[#F8C4A6]" onClick={closeSidebar}>
+                    更多功能開發中⋯⋯
+                  </Button>
+                </nav>
+              </div>
             </div>
           </aside>
         </div>
@@ -3202,7 +3204,7 @@ const TeacherDashboard: React.FC = () => {
           backgroundPosition: 'center',
         }}
       >
-        <div className="flex items-center justify-center mb-6">
+        <div className="flex items-center justify-center mb-0">
           <img
             src="/lpsparklogo.png"
             alt="LP科樂園 Logo"
@@ -3210,21 +3212,22 @@ const TeacherDashboard: React.FC = () => {
           />
         </div>
 
-        {/* User Profile Section */}
-        <div className="text-center mb-6">
-          <div className="text-lg font-bold text-brand-brown">
-            {user?.profile?.name || '教師'}
+        <div className="scale-[0.7] origin-top">
+          {/* User Profile Section */}
+          <div className="text-center mb-6">
+            <div className="text-lg font-bold text-brand-brown">
+              {user?.profile?.name || '教師'}
+            </div>
+            <div className="text-sm text-gray-600">
+              {user?.username}
+            </div>
           </div>
-          <div className="text-sm text-gray-600">
-            {user?.username}
+
+          <div className="text-center mb-8 border-b-4 border-brand-brown pb-4 mx-4">
+            <h2 className="text-2xl font-bold text-brand-brown">教師工具包</h2>
           </div>
-        </div>
 
-        <div className="text-center mb-8 border-b-4 border-brand-brown pb-4 mx-4">
-          <h2 className="text-2xl font-bold text-brand-brown">教師工具包</h2>
-        </div>
-
-        <nav className="flex-1 space-y-4 px-2">
+          <nav className="flex-1 space-y-4 px-2">
           <Button
             fullWidth
             className="bg-[#D2EFFF] hover:bg-[#BCE0FF] text-lg"
@@ -3286,8 +3289,9 @@ const TeacherDashboard: React.FC = () => {
 	            <MessageSquare className="w-5 h-5" />
 	            建立任務
 	          </Button>
-	          <Button fullWidth className="bg-[#FAD5BE] hover:bg-[#F8C4A6] text-lg">更多功能開發中⋯⋯</Button>
-	        </nav>
+          <Button fullWidth className="bg-[#FAD5BE] hover:bg-[#F8C4A6] text-lg">更多功能開發中⋯⋯</Button>
+          </nav>
+        </div>
       </aside>
 
       {/* Main Content Area */}
