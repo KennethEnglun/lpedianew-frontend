@@ -84,7 +84,7 @@ const LoginPage: React.FC = () => {
                 <img
                   src="/lpsparklogo.png"
                   alt="LP科樂園"
-                  className="w-full max-w-[260px] mx-auto object-contain drop-shadow-sm"
+                  className="w-full max-w-[390px] mx-auto object-contain drop-shadow-sm hover:scale-105 transition-transform duration-300"
                 />
                 <div className="mt-4 text-xs text-brand-brown/60">
                   © 九龍婦女福利會李炳紀念學校

@@ -3081,11 +3081,15 @@ const TeacherDashboard: React.FC = () => {
             }}
           >
             <div className="p-6">
-              <div className="flex items-center justify-between mb-4">
-                <img src="/lpsparklogo.png" alt="LP科樂園 Logo" className="h-10 w-auto" />
+              <div className="relative mb-6 flex items-center justify-center">
+                <img
+                  src="/lpsparklogo.png"
+                  alt="LP科樂園 Logo"
+                  className="h-[120px] w-auto mx-auto object-contain drop-shadow-sm hover:scale-105 transition-transform duration-300"
+                />
                 <button
                   onClick={closeSidebar}
-                  className="w-10 h-10 rounded-full bg-white border-2 border-brand-brown hover:bg-gray-100 flex items-center justify-center"
+                  className="absolute right-0 w-10 h-10 rounded-full bg-white border-2 border-brand-brown hover:bg-gray-100 flex items-center justify-center"
                   aria-label="關閉"
                 >
                   <X className="w-6 h-6 text-brand-brown" />
@@ -3198,8 +3202,12 @@ const TeacherDashboard: React.FC = () => {
           backgroundPosition: 'center',
         }}
       >
-        <div className="flex items-center justify-start mb-2">
-          <img src="/lpsparklogo.png" alt="LP科樂園 Logo" className="h-14 w-auto" />
+        <div className="flex items-center justify-center mb-6">
+          <img
+            src="/lpsparklogo.png"
+            alt="LP科樂園 Logo"
+            className="h-[168px] w-auto mx-auto object-contain drop-shadow-sm hover:scale-105 transition-transform duration-300"
+          />
         </div>
 
         {/* User Profile Section */}
