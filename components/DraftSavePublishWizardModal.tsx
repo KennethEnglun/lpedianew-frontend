@@ -57,6 +57,7 @@ const DraftSavePublishWizardModal: React.FC<Props> = ({
   const [subId, setSubId] = useState('');
   const [keepDraft, setKeepDraft] = useState(keepDraftDefault !== false);
   const [publishing, setPublishing] = useState(false);
+  const [folderEditing, setFolderEditing] = useState(false);
 
   const scopes: { key: 'my' | 'shared'; label: string }[] = [
     { key: 'my', label: '私人' },
@@ -95,6 +96,24 @@ const DraftSavePublishWizardModal: React.FC<Props> = ({
   const subFolders = useMemo(() => classFolders.filter((f) => f && f.level === 3 && String(f.parentId || '') === String(topicId || '')), [classFolders, topicId]);
   const resolvedClassFolderId = subId || topicId;
 
+  const pickStageId = (list: any[], preferred?: string) => {
+    const stages = list.filter((f: any) => f && f.level === 1);
+    if (preferred && stages.some((s: any) => String(s.id) === String(preferred))) return String(preferred);
+    return stages[0] ? String(stages[0].id) : '';
+  };
+
+  const pickTopicId = (list: any[], stage: string, preferred?: string) => {
+    const topics = list.filter((f: any) => f && f.level === 2 && String(f.parentId || '') === String(stage || ''));
+    if (preferred && topics.some((t: any) => String(t.id) === String(preferred))) return String(preferred);
+    return topics[0] ? String(topics[0].id) : '';
+  };
+
+  const pickSubId = (list: any[], topic: string, preferred?: string) => {
+    const subs = list.filter((f: any) => f && f.level === 3 && String(f.parentId || '') === String(topic || ''));
+    if (preferred && subs.some((s: any) => String(s.id) === String(preferred))) return String(preferred);
+    return '';
+  };
+
   const loadTeacherFolders = async (s: 'my' | 'shared', g: string) => {
     if (!g) return [];
     if (s === 'my') {
@@ -105,7 +124,7 @@ const DraftSavePublishWizardModal: React.FC<Props> = ({
     return Array.isArray(resp.folders) ? resp.folders : [];
   };
 
-  const loadClassFolders = async (cls: string) => {
+  const loadClassFolders = async (cls: string, opts?: { stageId?: string; topicId?: string; subId?: string }) => {
     const c = String(cls || '').trim();
     if (!c) return;
     setLoadingClassFolders(true);
@@ -115,14 +134,12 @@ const DraftSavePublishWizardModal: React.FC<Props> = ({
       const list = Array.isArray(resp.folders) ? resp.folders : [];
       setClassFolders(list);
 
-      const stage = list.find((f: any) => f && f.level === 1) || null;
-      const nextStageId = stage ? String(stage.id) : '';
+      const nextStageId = pickStageId(list, opts?.stageId);
       setStageId(nextStageId);
 
-      const topics = list.filter((f: any) => f && f.level === 2 && String(f.parentId || '') === nextStageId);
-      const firstTopic = topics[0] ? String(topics[0].id) : '';
-      setTopicId(firstTopic);
-      setSubId('');
+      const nextTopicId = pickTopicId(list, nextStageId, opts?.topicId);
+      setTopicId(nextTopicId);
+      setSubId(pickSubId(list, nextTopicId, opts?.subId));
     } catch (e: any) {
       setPublishError(e?.message || '載入班級資料夾失敗');
       setClassFolders([]);
@@ -155,6 +172,7 @@ const DraftSavePublishWizardModal: React.FC<Props> = ({
     setTopicId('');
     setSubId('');
     setKeepDraft(keepDraftDefault !== false);
+    setFolderEditing(false);
     setPublishing(false);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
@@ -204,6 +222,7 @@ const DraftSavePublishWizardModal: React.FC<Props> = ({
   if (!open) return null;
 
   const headerTitle = mode === 'publish' ? '儲存及派發' : '儲存草稿';
+  const folderActionsDisabled = folderEditing || publishing || loadingClassFolders;
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 z-[90] flex items-center justify-center p-4">
@@ -375,38 +394,116 @@ const DraftSavePublishWizardModal: React.FC<Props> = ({
 
                 <div className="flex items-center gap-2">
                   <div className="w-20 font-black text-gray-700">課題</div>
-                  <select
-                    className="flex-1 px-3 py-2 rounded-xl border-2 border-gray-300 font-bold"
-                    value={topicId}
-                    onChange={(e) => setTopicId(e.target.value)}
-                    disabled={loadingClassFolders || topicFolders.length === 0}
-                  >
-                    <option value="" disabled>
-                      {loadingClassFolders ? '載入中…' : topicFolders.length === 0 ? '（此學段未有課題）' : '請選擇課題'}
-                    </option>
-                    {topicFolders.map((t) => (
-                      <option key={t.id} value={t.id}>
-                        {t.name}
+                  <div className="flex-1 flex items-center gap-2">
+                    <select
+                      className="flex-1 px-3 py-2 rounded-xl border-2 border-gray-300 font-bold"
+                      value={topicId}
+                      onChange={(e) => setTopicId(e.target.value)}
+                      disabled={loadingClassFolders || topicFolders.length === 0}
+                    >
+                      <option value="" disabled>
+                        {loadingClassFolders ? '載入中…' : topicFolders.length === 0 ? '（此學段未有課題）' : '請選擇課題'}
                       </option>
-                    ))}
-                  </select>
+                      {topicFolders.map((t) => (
+                        <option key={t.id} value={t.id}>
+                          {t.name}
+                        </option>
+                      ))}
+                    </select>
+                    <button
+                      type="button"
+                      className="px-3 py-2 rounded-xl bg-white border-2 border-gray-300 hover:border-blue-500 font-black text-gray-700 disabled:opacity-60"
+                      disabled={!className || !stageId || folderActionsDisabled}
+                      onClick={async () => {
+                        if (!className) return setPublishError('請先選擇班別');
+                        if (!stageId) return setPublishError('請先選擇學段');
+                        const raw = window.prompt('輸入課題名稱（可多行，用換行分隔）');
+                        if (raw == null) return;
+                        const names = String(raw)
+                          .split(/\r?\n/)
+                          .map((s) => String(s || '').trim())
+                          .filter(Boolean);
+                        if (names.length === 0) return setPublishError('課題名稱不可為空');
+
+                        setFolderEditing(true);
+                        setPublishError('');
+                        try {
+                          if (names.length === 1) {
+                            const resp = await authService.createClassFolder(className, { parentId: stageId, level: 2, name: names[0] });
+                            const createdId = String(resp?.folder?.id || '');
+                            await loadClassFolders(className, { stageId, topicId: createdId || undefined, subId: '' });
+                          } else {
+                            const resp = await authService.batchCreateClassFolders(className, { parentId: stageId, level: 2, names });
+                            const created = Array.isArray(resp?.folders) ? resp.folders : [];
+                            const createdId = created[0]?.id ? String(created[0].id) : '';
+                            await loadClassFolders(className, { stageId, topicId: createdId || undefined, subId: '' });
+                          }
+                        } catch (e: any) {
+                          setPublishError(e?.message || '新增課題失敗');
+                        } finally {
+                          setFolderEditing(false);
+                        }
+                      }}
+                    >
+                      ＋課題
+                    </button>
+                  </div>
                 </div>
 
                 <div className="flex items-center gap-2">
                   <div className="w-20 font-black text-gray-700">子folder</div>
-                  <select
-                    className="flex-1 px-3 py-2 rounded-xl border-2 border-gray-300 font-bold"
-                    value={subId}
-                    onChange={(e) => setSubId(e.target.value)}
-                    disabled={loadingClassFolders || !topicId}
-                  >
-                    <option value="">（不選，直接放在課題底下）</option>
-                    {subFolders.map((sf) => (
-                      <option key={sf.id} value={sf.id}>
-                        {sf.name}
-                      </option>
-                    ))}
-                  </select>
+                  <div className="flex-1 flex items-center gap-2">
+                    <select
+                      className="flex-1 px-3 py-2 rounded-xl border-2 border-gray-300 font-bold"
+                      value={subId}
+                      onChange={(e) => setSubId(e.target.value)}
+                      disabled={loadingClassFolders || !topicId}
+                    >
+                      <option value="">（不選，直接放在課題底下）</option>
+                      {subFolders.map((sf) => (
+                        <option key={sf.id} value={sf.id}>
+                          {sf.name}
+                        </option>
+                      ))}
+                    </select>
+                    <button
+                      type="button"
+                      className="px-3 py-2 rounded-xl bg-white border-2 border-gray-300 hover:border-blue-500 font-black text-gray-700 disabled:opacity-60"
+                      disabled={!className || !topicId || folderActionsDisabled}
+                      onClick={async () => {
+                        if (!className) return setPublishError('請先選擇班別');
+                        if (!topicId) return setPublishError('請先選擇課題');
+                        const raw = window.prompt('輸入子folder名稱（可多行，用換行分隔）');
+                        if (raw == null) return;
+                        const names = String(raw)
+                          .split(/\r?\n/)
+                          .map((s) => String(s || '').trim())
+                          .filter(Boolean);
+                        if (names.length === 0) return setPublishError('子folder 名稱不可為空');
+
+                        setFolderEditing(true);
+                        setPublishError('');
+                        try {
+                          if (names.length === 1) {
+                            const resp = await authService.createClassFolder(className, { parentId: topicId, level: 3, name: names[0] });
+                            const createdId = String(resp?.folder?.id || '');
+                            await loadClassFolders(className, { stageId, topicId, subId: createdId || undefined });
+                          } else {
+                            const resp = await authService.batchCreateClassFolders(className, { parentId: topicId, level: 3, names });
+                            const created = Array.isArray(resp?.folders) ? resp.folders : [];
+                            const createdId = created[0]?.id ? String(created[0].id) : '';
+                            await loadClassFolders(className, { stageId, topicId, subId: createdId || undefined });
+                          }
+                        } catch (e: any) {
+                          setPublishError(e?.message || '新增子folder失敗');
+                        } finally {
+                          setFolderEditing(false);
+                        }
+                      }}
+                    >
+                      ＋子folder
+                    </button>
+                  </div>
                 </div>
               </div>
             )}
@@ -467,4 +564,3 @@ const DraftSavePublishWizardModal: React.FC<Props> = ({
 };
 
 export default DraftSavePublishWizardModal;
-
