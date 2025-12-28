@@ -130,9 +130,16 @@ const LoginPage: React.FC = () => {
               loop
               muted
               playsInline
+              preload="auto"
+              poster="/bg.png"
               aria-hidden="true"
             >
-              <source src="/loginbg.mov" type="video/quicktime" />
+              <source src="/loginbg.mov" />
+              <img
+                src="/bg.png"
+                alt=""
+                className="absolute inset-0 w-full h-full object-cover"
+              />
             </video>
             <div className="absolute inset-0 bg-gradient-to-br from-white/10 via-transparent to-black/15" aria-hidden="true" />
           </div>
