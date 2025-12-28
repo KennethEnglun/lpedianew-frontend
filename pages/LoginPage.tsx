@@ -81,19 +81,11 @@ const LoginPage: React.FC = () => {
           <div className="bg-[#FDE7F4] p-6 sm:p-10 lg:w-1/4 lg:flex-none min-h-0 flex items-center justify-center">
             <div className="w-full max-w-sm max-h-full overflow-y-auto">
               <div className="mb-10 text-center">
-                <h1 className="text-6xl sm:text-7xl font-rounded font-black leading-none tracking-tight">
-                  <span className="text-blue-600">LP</span>
-                  <span className="text-orange-500">科</span>
-                  <span className="text-blue-600">樂園</span>
-                </h1>
-                <div className="text-lg sm:text-xl font-bold mb-2">
-                  <span className="text-blue-600">LP</span>
-                  <span className="text-orange-500"> S</span>
-                  <span className="text-blue-600">PARK</span>
-                </div>
-                <div className="text-sm sm:text-base font-bold text-brand-brown/80">
-                  李炳科學AI學習平台
-                </div>
+                <img
+                  src="/lpsparklogo.png"
+                  alt="LP科樂園"
+                  className="w-full max-w-[260px] mx-auto object-contain drop-shadow-sm"
+                />
                 <div className="mt-4 text-xs text-brand-brown/60">
                   © 九龍婦女福利會李炳紀念學校
                 </div>
@@ -140,8 +132,7 @@ const LoginPage: React.FC = () => {
               playsInline
               aria-hidden="true"
             >
-              <source src="/loginmov2.mov" type="video/quicktime" />
-              <source src="/loginmov.mp4" type="video/mp4" />
+              <source src="/loginbg.mov" type="video/quicktime" />
             </video>
             <div className="absolute inset-0 bg-gradient-to-br from-white/10 via-transparent to-black/15" aria-hidden="true" />
           </div>
