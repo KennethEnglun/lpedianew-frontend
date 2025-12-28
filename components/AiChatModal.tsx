@@ -214,7 +214,7 @@ const AiChatModal: React.FC<{
   const [studentMessages, setStudentMessages] = useState<ChatMessage[]>([]);
   const [studentError, setStudentError] = useState('');
 
-  // myChatBotId is used for teacher's "Pedia聊天" context; UI stays in Pedia tab.
+  // myChatBotId is used for teacher's "AI小助手聊天" context; UI stays in AI小助手 tab.
   const effectiveTeacherBotId = isTeacher ? (mySidebarView === 'bot' ? myChatBotId : 'global') : 'global';
 
   const endRef = useRef<HTMLDivElement | null>(null);
@@ -652,7 +652,7 @@ const AiChatModal: React.FC<{
   };
 
   const removeBot = async (botId: string) => {
-    if (!confirm('確定要刪除這個 Pedia 嗎？（不會刪除已存在的對話記錄）')) return;
+    if (!confirm('確定要刪除這個 AI小助手 嗎？（不會刪除已存在的對話記錄）')) return;
     await authService.deleteMyChatBot(botId);
     setMyBots((prev) => prev.filter((b) => String(b?.id) !== String(botId)));
   };
@@ -857,22 +857,22 @@ const AiChatModal: React.FC<{
 	                      : 'bg-white border-gray-200 text-gray-700 hover:border-brand-brown'
 	                      }`}
 	                  >
-	                    Pedia
+	                    AI小助手
 	                  </button>
 	                ) : (
-	                  <div className="px-3 py-2 rounded-2xl bg-white border-2 border-gray-200 text-gray-400 font-black">Pedia（教師專用）</div>
+	                  <div className="px-3 py-2 rounded-2xl bg-white border-2 border-gray-200 text-gray-400 font-black">AI小助手（教師專用）</div>
 			                )}
 		              </div>
 
 	              {isTeacher && mySidebarView === 'bot' && (
                 <div className="mb-4">
                   <div className="flex items-center justify-between mb-2">
-	                    <div className="text-xs font-black text-gray-600">我的 Pedia</div>
+	                    <div className="text-xs font-black text-gray-600">我的 AI小助手</div>
 	                    <button
 	                      type="button"
 	                      onClick={() => setCreatingBot((v) => !v)}
 	                      className="inline-flex items-center gap-1 px-2 py-1 rounded-lg border border-gray-200 bg-white hover:border-brand-brown text-xs font-black text-gray-700"
-	                      title="新增 Pedia"
+	                      title="新增 AI小助手"
 	                    >
 	                      <Bot className="w-4 h-4" />
 	                      新增
@@ -884,13 +884,13 @@ const AiChatModal: React.FC<{
 	                      <input
 	                        value={newBotName}
 	                        onChange={(e) => setNewBotName(e.target.value)}
-	                        placeholder="Pedia 名稱"
+	                        placeholder="AI小助手名稱"
 	                        className="w-full px-3 py-2 border-2 border-gray-300 rounded-xl"
 	                      />
 	                      <textarea
 	                        value={newBotPrompt}
 	                        onChange={(e) => setNewBotPrompt(e.target.value)}
-	                        placeholder="Pedia 指令（可選）"
+	                        placeholder="AI小助手指令（可選）"
 	                        className="w-full px-3 py-2 border-2 border-gray-300 rounded-xl min-h-[110px]"
 	                      />
                       <div className="flex gap-2">
@@ -938,7 +938,7 @@ const AiChatModal: React.FC<{
 	                            setSelectedFolderId('all');
 	                          }
 	                        }}
-	                        aria-label={`使用 Pedia 聊天：${String(b?.name || '')}`}
+	                        aria-label={`使用 AI小助手 聊天：${String(b?.name || '')}`}
 	                      >
                         <div className="flex items-start gap-2">
                           <div className="flex-1 flex items-start gap-2 text-left font-black text-gray-800">
@@ -950,14 +950,14 @@ const AiChatModal: React.FC<{
 	                                  onChange={(e) => setEditingBotName(e.target.value)}
 	                                  onClick={(e) => e.stopPropagation()}
 	                                  className="w-full px-2 py-1 border border-gray-300 rounded"
-	                                  placeholder="Pedia 名稱"
+	                                  placeholder="AI小助手名稱"
 	                                />
 	                                <textarea
 	                                  value={editingBotPrompt}
 	                                  onChange={(e) => setEditingBotPrompt(e.target.value)}
 	                                  onClick={(e) => e.stopPropagation()}
 	                                  className="w-full px-2 py-1 border border-gray-300 rounded min-h-[90px]"
-	                                  placeholder="Pedia 指令（可選）"
+	                                  placeholder="AI小助手指令（可選）"
 	                                />
                                 <div className="flex gap-2">
                                   <button
@@ -1006,7 +1006,7 @@ const AiChatModal: React.FC<{
                     ))}
                     {myBots.length === 0 && (
                       <div className="text-sm text-gray-500 font-bold px-3 py-2">
-	                        目前未建立任何 Pedia
+	                        目前未建立任何 AI小助手
 	                      </div>
 	                    )}
                   </div>

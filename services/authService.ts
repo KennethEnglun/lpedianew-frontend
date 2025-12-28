@@ -387,7 +387,7 @@ class AuthService {
     return this.handleResponse(response);
   }
 
-  // === Pedia 任務（派發自建 Pedia）===
+  // === AI小助手任務（派發自建 AI小助手）===
   async createBotTask(payload: { botId: string; subject: string; targetClasses?: string[]; targetGroups?: string[]; targetClass?: string; classFolderId?: string }): Promise<{ task: any }> {
     const response = await fetch(`${this.API_BASE}/bot-tasks`, {
       method: 'POST',

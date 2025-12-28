@@ -613,7 +613,7 @@ const TeacherDashboard: React.FC = () => {
 	        ...(botTaskData.tasks || []).map((item: any) => ({
 	          ...item,
 	          type: 'ai-bot',
-	          title: item.title || item.botName || 'Pedia 任務',
+	          title: item.title || item.botName || 'AI小助手任務',
 	          targetClasses: item.targetClasses || [],
 	          responseCount: item.completedStudents ?? 0,
 	          uniqueStudents: item.completedStudents ?? 0
@@ -703,7 +703,7 @@ const TeacherDashboard: React.FC = () => {
 	    }
 
 	    if (bots.length === 0) {
-	      alert('請先在「AI對話 → Pedia」建立一個 Pedia，才可以派發。');
+	      alert('請先在「AI對話 → AI小助手」建立一個 AI小助手，才可以派發。');
 	      return;
 	    }
 
@@ -722,7 +722,7 @@ const TeacherDashboard: React.FC = () => {
 
   const submitBotTaskAssign = async () => {
     try {
-      if (!botTaskForm.botId) return alert('請選擇 Pedia');
+      if (!botTaskForm.botId) return alert('請選擇 AI小助手');
       if (!botTaskForm.subject) return alert('請選擇科目');
       if (botTaskForm.targetClasses.length === 0) return alert('請選擇班級');
       if (botTaskForm.targetClasses.length !== 1) return alert('請只選擇 1 個班級（資料夾屬於單一班別）');
@@ -735,7 +735,7 @@ const TeacherDashboard: React.FC = () => {
         targetGroups: GROUPS_ENABLED ? botTaskForm.targetGroups : [],
         classFolderId: botTaskClassFolderId
       });
-      alert('Pedia 任務已派發！');
+      alert('AI小助手任務已派發！');
       setShowBotTaskAssignModal(false);
       await loadAssignments();
     } catch (error) {
@@ -1006,7 +1006,7 @@ const TeacherDashboard: React.FC = () => {
 
   // 刪除整個作業或小測驗
   const handleDeleteAssignment = async (assignment: any) => {
-    const itemType = assignment.type === 'quiz' ? '小測驗' : assignment.type === 'game' ? '遊戲' : assignment.type === 'ai-bot' ? 'Pedia任務' : assignment.type === 'contest' ? '問答比賽' : '作業';
+    const itemType = assignment.type === 'quiz' ? '小測驗' : assignment.type === 'game' ? '遊戲' : assignment.type === 'ai-bot' ? 'AI小助手任務' : assignment.type === 'contest' ? '問答比賽' : '作業';
     if (!confirm(`確定要刪除整個${itemType}及其所有回應嗎？此操作無法復原！`)) return;
 
     try {
@@ -2963,7 +2963,7 @@ const TeacherDashboard: React.FC = () => {
                             <div className="text-sm text-gray-600 mb-2">
                               <span className="font-medium">科目：</span>{task.subject} •
                               <span className="font-medium ml-2">類型：</span>
-                              {isQuiz ? '小測驗' : isGame ? '遊戲' : isBot ? 'Pedia任務' : isContest ? '問答比賽' : '討論串'}
+                              {isQuiz ? '小測驗' : isGame ? '遊戲' : isBot ? 'AI小助手任務' : isContest ? '問答比賽' : '討論串'}
                             </div>
                             {task.description && (
                               <div className="text-sm text-gray-600 mb-2">
@@ -5570,7 +5570,7 @@ const TeacherDashboard: React.FC = () => {
 	                                                  ? '答題塔防'
 	                                                  : '小遊戲')
 			                                                : isBot
-			                                                  ? 'Pedia任務'
+			                                                  ? 'AI小助手任務'
 			                                                  : '討論串'}
 		                                      </span>
 		                                      <span>創建時間: {new Date(assignment.createdAt).toLocaleString()}</span>
@@ -5721,7 +5721,7 @@ const TeacherDashboard: React.FC = () => {
                                                         ? '答題塔防'
                                                         : '小遊戲')
 		                                                  : isBot
-		                                                    ? 'Pedia任務'
+		                                                    ? 'AI小助手任務'
 		                                                    : '討論串'}
 	                                          </span>
                                           <span>創建時間: {new Date(assignment.createdAt).toLocaleString()}</span>
@@ -5814,7 +5814,7 @@ const TeacherDashboard: React.FC = () => {
 	                            : selectedAssignment?.type === 'game'
 	                              ? '遊戲資訊'
 		                              : selectedAssignment?.type === 'ai-bot'
-		                                ? 'Pedia任務資訊'
+		                                ? 'AI小助手任務資訊'
 		                                : '教師原始內容'}
 	                        </h4>
 	                        {selectedAssignment?.type === 'assignment' && !(selectedAssignment as any).isShared && (
@@ -5896,7 +5896,7 @@ const TeacherDashboard: React.FC = () => {
 	                        <div className="bg-white p-4 rounded-xl border-2 border-yellow-300">
 	                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
 	                            <div>
-		                              <span className="font-bold text-brand-brown">Pedia：</span>
+		                              <span className="font-bold text-brand-brown">AI小助手：</span>
 		                              <span>{selectedAssignment.botName || selectedAssignment.title}</span>
 		                            </div>
 	                            <div>
@@ -6291,8 +6291,8 @@ const TeacherDashboard: React.FC = () => {
 	              <div className="p-6 border-b-4 border-brand-brown bg-[#D2EFFF] flex items-center justify-between">
 		                <h2 className="text-2xl font-black text-brand-brown flex items-center gap-2">
 		                  <Bot className="w-6 h-6" />
-		                  派發 Pedia 任務
-	                </h2>
+		                  派發 AI小助手任務
+		                </h2>
                 <button
                   onClick={() => setShowBotTaskAssignModal(false)}
                   className="w-10 h-10 rounded-full bg-white border-2 border-brand-brown hover:bg-gray-100 flex items-center justify-center"
@@ -6302,9 +6302,9 @@ const TeacherDashboard: React.FC = () => {
               </div>
               <div className="p-6 space-y-4">
                 <div>
-	                  <label className="block text-sm font-bold text-brand-brown mb-2">選擇 Pedia</label>
-                  <select
-                    value={botTaskForm.botId}
+	                  <label className="block text-sm font-bold text-brand-brown mb-2">選擇 AI小助手</label>
+	                  <select
+	                    value={botTaskForm.botId}
                     onChange={(e) => setBotTaskForm((prev) => ({ ...prev, botId: e.target.value }))}
                     className="w-full px-4 py-2 border-4 border-brand-brown rounded-2xl bg-white font-bold"
                   >
@@ -6409,8 +6409,8 @@ const TeacherDashboard: React.FC = () => {
 	                )}
 
                 <div className="p-4 bg-gray-50 border-2 border-gray-200 rounded-2xl text-sm text-gray-700 font-bold">
-	                  學生在「我的學科 → 我的任務」看到此 Pedia 任務，學生只要送出任意一句對話就算完成；你可在作業管理中查看學生對話記錄。
-	                </div>
+	                  學生在「我的學科 → 我的任務」看到此 AI小助手任務，學生只要送出任意一句對話就算完成；你可在作業管理中查看學生對話記錄。
+		                </div>
 
                 <div className="flex gap-4 pt-2">
                   <Button

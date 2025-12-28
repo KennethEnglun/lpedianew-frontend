@@ -491,7 +491,7 @@ const StudentDashboard: React.FC = () => {
 
       const botTasks: Task[] = (botTaskResponse.tasks || []).map((t: any) => ({
         id: String(t.id),
-        title: String(t.botName || t.title || 'Pedia 任務'),
+        title: String(t.botName || t.title || 'AI小助手任務'),
         type: 'ai-bot',
         subject: coerceSubject(t.subject),
         teacherName: t.teacherName || '教師',
@@ -1171,7 +1171,7 @@ const StudentDashboard: React.FC = () => {
                                 const typeLabel =
                                   task.type === 'quiz' ? '小測驗'
                                     : task.type === 'contest' ? '問答比賽'
-                                      : task.type === 'ai-bot' ? 'Pedia任務'
+                                      : task.type === 'ai-bot' ? 'AI小助手任務'
                                         : task.type === 'discussion' ? '討論串'
                                           : task.type === 'note' ? '筆記'
                                             : task.type === 'game' ? '遊戲'

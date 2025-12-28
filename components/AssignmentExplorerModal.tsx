@@ -106,7 +106,7 @@ const getTaskLabel = (t: any) => {
     case 'quiz': return '小測驗';
     case 'game': return '遊戲';
     case 'contest': return '問答比賽';
-    case 'ai-bot': return 'Pedia 任務';
+    case 'ai-bot': return 'AI小助手任務';
     case 'note': return '筆記';
     default: return '任務';
   }
@@ -712,7 +712,7 @@ const AssignmentExplorerModal: React.FC<Props> = ({ open, onClose, authService, 
 
                 {selectedTask.type === 'ai-bot' && (
                   <div className="bg-[#FEF7EC] border-2 border-gray-200 rounded-2xl p-4 space-y-1">
-                    <div className="font-bold text-gray-800">Pedia：{String(taskDetail?.botName || selectedTask?.botName || selectedTask?.title || '')}</div>
+                    <div className="font-bold text-gray-800">AI小助手：{String(taskDetail?.botName || selectedTask?.botName || selectedTask?.title || '')}</div>
                     <div className="text-sm text-gray-600 font-bold">（對話內容請到學生清單點選對話查看）</div>
                   </div>
                 )}

@@ -24,7 +24,7 @@ const toolLabel = (toolType: string) => {
     case 'quiz': return '小測驗';
     case 'game': return '遊戲';
     case 'contest': return '問答比賽';
-    case 'ai-bot': return 'Pedia 任務';
+    case 'ai-bot': return 'AI小助手任務';
     default: return toolType || '草稿';
   }
 };

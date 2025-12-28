@@ -62,7 +62,7 @@ const templateTypeLabel = (t: any) => {
     case 'quiz': return '小測驗';
     case 'game': return '遊戲';
     case 'contest': return '問答比賽';
-    case 'ai-bot': return 'Pedia 任務';
+    case 'ai-bot': return 'AI小助手任務';
     case 'note': return '筆記';
     default: return '任務';
   }
