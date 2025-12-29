@@ -302,23 +302,78 @@ export const StudyAnalyticsModal: React.FC<StudyAnalyticsModalProps> = ({
     return lines.slice(0, 2);
   };
 
-  const renderMindMap = () => {
-    const sections = analytics?.revisionNotes?.sections || [];
-    const nodes = sections.slice(0, 8).map((s) => String(s.title || '').trim()).filter(Boolean);
-    if (nodes.length === 0) return null;
+  const ellipsis = (text: string, maxLen: number) => {
+    const s = String(text || '').trim();
+    if (!s) return '';
+    if (s.length <= maxLen) return s;
+    return `${s.slice(0, Math.max(0, maxLen - 1))}…`;
+  };
 
-    const W = 860;
-    const H = 420;
+  const renderMindMap = () => {
+    const sectionsRaw = analytics?.revisionNotes?.sections || [];
+    const sections = sectionsRaw
+      .map((s) => ({
+        title: String(s?.title || '').trim(),
+        bullets: Array.isArray(s?.bullets) ? s.bullets.map((b) => String(b || '').trim()).filter(Boolean) : []
+      }))
+      .filter((s) => s.title)
+      .slice(0, 8);
+    if (sections.length === 0) return null;
+
+    const W = 980;
+    const H = 520;
     const cx = W / 2;
     const cy = H / 2;
-    const r = 150;
-    const rectW = 150;
-    const rectH = 54;
-    const centerLabel = `${analytics?.subject || '溫習'}重點`;
 
-    const toPos = (i: number, total: number) => {
-      const angle = (Math.PI * 2 * i) / total - Math.PI / 2;
-      return { x: cx + r * Math.cos(angle), y: cy + r * Math.sin(angle) };
+    const centerLabel = `${analytics?.subject || '溫習'}重點`;
+    const centerW = 220;
+    const centerH = 64;
+
+    const mainW = 170;
+    const mainH = 60;
+    const subW = 150;
+    const subH = 42;
+
+    const leftX = 240;
+    const rightX = W - 240;
+    const mainDx = 80;
+    const subDx = 120;
+
+    const palette = [
+      { stroke: '#7C3AED', fill: '#F3E8FF' }, // purple
+      { stroke: '#EF4444', fill: '#FEE2E2' }, // red
+      { stroke: '#10B981', fill: '#D1FAE5' }, // green
+      { stroke: '#F59E0B', fill: '#FEF3C7' }, // amber
+      { stroke: '#3B82F6', fill: '#DBEAFE' }, // blue
+      { stroke: '#EC4899', fill: '#FCE7F3' }  // pink
+    ];
+
+    const left = sections.filter((_, i) => i % 2 === 0);
+    const right = sections.filter((_, i) => i % 2 === 1);
+
+    const positions = (items: any[], side: 'left' | 'right') => {
+      const n = items.length;
+      if (n === 0) return [];
+      const top = 110;
+      const bottom = H - 110;
+      const gap = n === 1 ? 0 : (bottom - top) / (n - 1);
+      return items.map((_, i) => ({
+        x: side === 'left' ? leftX : rightX,
+        y: n === 1 ? cy : top + i * gap
+      }));
+    };
+
+    const leftPos = positions(left, 'left');
+    const rightPos = positions(right, 'right');
+
+    const centerBox = { x: cx - centerW / 2, y: cy - centerH / 2, w: centerW, h: centerH };
+    const mainBoxAt = (p: { x: number; y: number }) => ({ x: p.x - mainW / 2, y: p.y - mainH / 2, w: mainW, h: mainH });
+
+    const cubicPath = (from: { x: number; y: number }, to: { x: number; y: number }, bend: number) => {
+      const dx = to.x - from.x;
+      const c1 = { x: from.x + dx * bend, y: from.y };
+      const c2 = { x: to.x - dx * bend, y: to.y };
+      return `M ${from.x} ${from.y} C ${c1.x} ${c1.y}, ${c2.x} ${c2.y}, ${to.x} ${to.y}`;
     };
 
     return (
@@ -335,27 +390,115 @@ export const StudyAnalyticsModal: React.FC<StudyAnalyticsModalProps> = ({
               </filter>
             </defs>
 
+            {/* Center */}
             <g filter="url(#shadow)">
-              <rect x={cx - 90} y={cy - 28} width={180} height={56} rx={18} fill="#FDEEAD" stroke="#6B4F3A" strokeWidth="3" />
-              <text x={cx} y={cy + 6} textAnchor="middle" fontSize="16" fontWeight="700" fill="#6B4F3A">
+              <rect
+                x={centerBox.x}
+                y={centerBox.y}
+                width={centerBox.w}
+                height={centerBox.h}
+                rx={22}
+                fill="#111827"
+                stroke="#111827"
+                strokeWidth="3"
+              />
+              <text x={cx} y={cy + 6} textAnchor="middle" fontSize="18" fontWeight="700" fill="#FFFFFF">
                 {centerLabel}
               </text>
             </g>
 
-            {nodes.map((title, i) => {
-              const p = toPos(i, nodes.length);
-              const x = p.x - rectW / 2;
-              const y = p.y - rectH / 2;
-              const lines = wrapText(title, 8);
+            {/* Left side branches */}
+            {left.map((node, i) => {
+              const p = leftPos[i];
+              const box = mainBoxAt(p);
+              const color = palette[i % palette.length];
+
+              const from = { x: centerBox.x, y: cy };
+              const to = { x: box.x + box.w, y: p.y };
+              const path = cubicPath(from, to, 0.45);
+
+              const bullets = node.bullets.slice(0, 4);
+              const subGap = bullets.length <= 1 ? 0 : 46;
+              const subStartY = p.y - (subGap * (bullets.length - 1)) / 2;
+
               return (
-                <g key={i} filter="url(#shadow)">
-                  <line x1={cx} y1={cy} x2={p.x} y2={p.y} stroke="#6B4F3A" strokeWidth="3" />
-                  <rect x={x} y={y} width={rectW} height={rectH} rx={16} fill="#ffffff" stroke="#6B4F3A" strokeWidth="3" />
-                  <text x={p.x} y={p.y - (lines.length === 2 ? 6 : 0)} textAnchor="middle" fontSize="14" fontWeight="700" fill="#6B4F3A">
-                    {lines.map((ln, idx) => (
-                      <tspan key={idx} x={p.x} dy={idx === 0 ? 0 : 18}>{ln}</tspan>
-                    ))}
-                  </text>
+                <g key={`L-${i}`}>
+                  <path d={path} fill="none" stroke={color.stroke} strokeWidth="4" strokeLinecap="round" />
+
+                  <g filter="url(#shadow)">
+                    <rect x={box.x} y={box.y} width={box.w} height={box.h} rx={18} fill="#FFFFFF" stroke={color.stroke} strokeWidth="3" />
+                    <text x={p.x} y={p.y + 6} textAnchor="middle" fontSize="14" fontWeight="700" fill="#111827">
+                      {ellipsis(node.title, 18)}
+                    </text>
+                  </g>
+
+                  {bullets.map((b: string, j: number) => {
+                    const sy = subStartY + j * subGap;
+                    const sx = box.x - subDx;
+                    const subBox = { x: sx - subW / 2, y: sy - subH / 2, w: subW, h: subH };
+                    const lineFrom = { x: box.x, y: sy };
+                    const lineTo = { x: subBox.x + subBox.w, y: sy };
+                    const subPath = cubicPath(lineFrom, lineTo, 0.25);
+                    return (
+                      <g key={`L-${i}-S-${j}`}>
+                        <path d={subPath} fill="none" stroke={color.stroke} strokeWidth="3" strokeLinecap="round" opacity="0.9" />
+                        <g filter="url(#shadow)">
+                          <rect x={subBox.x} y={subBox.y} width={subBox.w} height={subBox.h} rx={14} fill={color.fill} stroke={color.stroke} strokeWidth="2" />
+                          <text x={sx} y={sy + 5} textAnchor="middle" fontSize="12" fontWeight="700" fill="#111827">
+                            {ellipsis(b, 16)}
+                          </text>
+                        </g>
+                      </g>
+                    );
+                  })}
+                </g>
+              );
+            })}
+
+            {/* Right side branches */}
+            {right.map((node, i) => {
+              const p = rightPos[i];
+              const box = mainBoxAt(p);
+              const color = palette[(i + 1) % palette.length];
+
+              const from = { x: centerBox.x + centerBox.w, y: cy };
+              const to = { x: box.x, y: p.y };
+              const path = cubicPath(from, to, 0.45);
+
+              const bullets = node.bullets.slice(0, 4);
+              const subGap = bullets.length <= 1 ? 0 : 46;
+              const subStartY = p.y - (subGap * (bullets.length - 1)) / 2;
+
+              return (
+                <g key={`R-${i}`}>
+                  <path d={path} fill="none" stroke={color.stroke} strokeWidth="4" strokeLinecap="round" />
+
+                  <g filter="url(#shadow)">
+                    <rect x={box.x} y={box.y} width={box.w} height={box.h} rx={18} fill="#FFFFFF" stroke={color.stroke} strokeWidth="3" />
+                    <text x={p.x} y={p.y + 6} textAnchor="middle" fontSize="14" fontWeight="700" fill="#111827">
+                      {ellipsis(node.title, 18)}
+                    </text>
+                  </g>
+
+                  {bullets.map((b: string, j: number) => {
+                    const sy = subStartY + j * subGap;
+                    const sx = box.x + box.w + subDx;
+                    const subBox = { x: sx - subW / 2, y: sy - subH / 2, w: subW, h: subH };
+                    const lineFrom = { x: box.x + box.w, y: sy };
+                    const lineTo = { x: subBox.x, y: sy };
+                    const subPath = cubicPath(lineFrom, lineTo, 0.25);
+                    return (
+                      <g key={`R-${i}-S-${j}`}>
+                        <path d={subPath} fill="none" stroke={color.stroke} strokeWidth="3" strokeLinecap="round" opacity="0.9" />
+                        <g filter="url(#shadow)">
+                          <rect x={subBox.x} y={subBox.y} width={subBox.w} height={subBox.h} rx={14} fill={color.fill} stroke={color.stroke} strokeWidth="2" />
+                          <text x={sx} y={sy + 5} textAnchor="middle" fontSize="12" fontWeight="700" fill="#111827">
+                            {ellipsis(b, 16)}
+                          </text>
+                        </g>
+                      </g>
+                    );
+                  })}
                 </g>
               );
             })}
