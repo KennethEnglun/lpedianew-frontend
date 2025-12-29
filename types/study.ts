@@ -111,6 +111,7 @@ export interface StudyAnalytics {
 
   // 溫習筆記（AI 生成）
   revisionNotes?: {
+    title?: string;
     sections: Array<{
       title: string;
       bullets: string[];

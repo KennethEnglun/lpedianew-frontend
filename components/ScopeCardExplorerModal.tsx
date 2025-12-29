@@ -75,6 +75,13 @@ export const ScopeCardExplorerModal: React.FC<ScopeCardExplorerModalProps> = ({ 
     setAnalyticsOpen(true);
   };
 
+  const loadReport = async () => {
+    if (!activeFetch) return;
+    const { cardId, scope, studentId } = activeFetch;
+    const res = await authService.getScopeCardAiReport(cardId, { scope, studentId });
+    setAnalyticsData(res.report as StudyAnalytics);
+  };
+
   const regenerateReport = async () => {
     if (!activeFetch) return;
     const { cardId, scope, studentId } = activeFetch;
@@ -240,6 +247,7 @@ export const ScopeCardExplorerModal: React.FC<ScopeCardExplorerModalProps> = ({ 
         isOpen={analyticsOpen}
         onClose={() => setAnalyticsOpen(false)}
         analytics={analyticsData}
+        onLoadAnalytics={activeFetch ? loadReport : undefined}
         onRegenerateAnalytics={activeFetch ? regenerateReport : undefined}
       />
     </>,

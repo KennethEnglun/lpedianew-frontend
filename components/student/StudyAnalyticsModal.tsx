@@ -17,6 +17,9 @@ import {
   FileText,
   BarChart3,
   Lightbulb,
+  RefreshCw,
+  Maximize2,
+  Download,
   CheckCircle,
   AlertCircle
 } from 'lucide-react';
@@ -28,6 +31,7 @@ interface StudyAnalyticsModalProps {
   isOpen: boolean;
   onClose: () => void;
   analytics: StudyAnalytics | null;
+  onLoadAnalytics?: () => void;
   onRegenerateAnalytics?: () => void;
 }
 
@@ -35,12 +39,27 @@ export const StudyAnalyticsModal: React.FC<StudyAnalyticsModalProps> = ({
   isOpen,
   onClose,
   analytics,
+  onLoadAnalytics,
   onRegenerateAnalytics
 }) => {
   const [loading, setLoading] = useState(false);
   const [activeTab, setActiveTab] = useState<'overview' | 'topics' | 'trends' | 'recommendations' | 'notes'>('overview');
   const hasAutoRegeneratedRef = useRef(false);
   const [autoRegenerateFailed, setAutoRegenerateFailed] = useState(false);
+  const [mindMapFullscreen, setMindMapFullscreen] = useState(false);
+
+  const handleLoadAnalytics = async () => {
+    if (!onLoadAnalytics) return;
+    setLoading(true);
+    setAutoRegenerateFailed(false);
+    try {
+      await onLoadAnalytics();
+    } catch {
+      setAutoRegenerateFailed(true);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const handleRegenerateAnalytics = async () => {
     if (!onRegenerateAnalytics) return;
@@ -60,13 +79,72 @@ export const StudyAnalyticsModal: React.FC<StudyAnalyticsModalProps> = ({
     if (!isOpen) {
       hasAutoRegeneratedRef.current = false;
       setAutoRegenerateFailed(false);
+      setMindMapFullscreen(false);
       return;
     }
-    if (!onRegenerateAnalytics) return;
+    if (analytics) return;
     if (hasAutoRegeneratedRef.current) return;
     hasAutoRegeneratedRef.current = true;
-    void handleRegenerateAnalytics();
-  }, [isOpen, onRegenerateAnalytics]);
+    if (onLoadAnalytics) {
+      void handleLoadAnalytics();
+      return;
+    }
+    if (onRegenerateAnalytics) {
+      void handleRegenerateAnalytics();
+    }
+  }, [isOpen, analytics, onLoadAnalytics, onRegenerateAnalytics]);
+  const downloadMindMapAsPng = async () => {
+    const svgEl = (document.querySelector('svg[data-mindmap-svg="fullscreen"]') || document.querySelector('svg[data-mindmap-svg="normal"]')) as SVGSVGElement | null;
+    if (!svgEl) return;
+
+    const serializer = new XMLSerializer();
+    const svgString = serializer.serializeToString(svgEl);
+    const blob = new Blob([svgString], { type: 'image/svg+xml;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+
+    const vb = svgEl.viewBox?.baseVal;
+    const width = (vb && vb.width) ? vb.width : Number(svgEl.getAttribute('width')) || 1200;
+    const height = (vb && vb.height) ? vb.height : Number(svgEl.getAttribute('height')) || 620;
+    const scale = 2;
+
+    await new Promise<void>((resolve, reject) => {
+      const img = new Image();
+      img.onload = () => {
+        try {
+          const canvas = document.createElement('canvas');
+          canvas.width = Math.floor(width * scale);
+          canvas.height = Math.floor(height * scale);
+          const ctx = canvas.getContext('2d');
+          if (!ctx) throw new Error('Canvas not supported');
+          ctx.fillStyle = '#ffffff';
+          ctx.fillRect(0, 0, canvas.width, canvas.height);
+          ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+          canvas.toBlob((png) => {
+            if (!png) {
+              reject(new Error('Failed to export PNG'));
+              return;
+            }
+            const a = document.createElement('a');
+            a.href = URL.createObjectURL(png);
+            a.download = `mindmap-${Date.now()}.png`;
+            document.body.appendChild(a);
+            a.click();
+            a.remove();
+            resolve();
+          }, 'image/png');
+        } catch (e) {
+          reject(e);
+        } finally {
+          URL.revokeObjectURL(url);
+        }
+      };
+      img.onerror = () => {
+        URL.revokeObjectURL(url);
+        reject(new Error('Failed to load SVG for export'));
+      };
+      img.src = url;
+    });
+  };
 
   if (!isOpen) return null;
 
@@ -320,12 +398,12 @@ export const StudyAnalyticsModal: React.FC<StudyAnalyticsModalProps> = ({
       .slice(0, 8);
     if (sections.length === 0) return null;
 
-    const W = 980;
-    const H = 520;
+    const W = 1200;
+    const H = 620;
     const cx = W / 2;
     const cy = H / 2;
 
-    const centerLabel = `${analytics?.subject || '溫習'}重點`;
+    const centerLabel = String(analytics?.revisionNotes?.title || '').trim() || `${analytics?.subject || '溫習'}重點`;
     const centerW = 220;
     const centerH = 64;
 
@@ -337,7 +415,7 @@ export const StudyAnalyticsModal: React.FC<StudyAnalyticsModalProps> = ({
     const leftX = 240;
     const rightX = W - 240;
     const mainDx = 80;
-    const subDx = 120;
+    const subDx = 160;
 
     const palette = [
       { stroke: '#7C3AED', fill: '#F3E8FF' }, // purple
@@ -354,8 +432,8 @@ export const StudyAnalyticsModal: React.FC<StudyAnalyticsModalProps> = ({
     const positions = (items: any[], side: 'left' | 'right') => {
       const n = items.length;
       if (n === 0) return [];
-      const top = 110;
-      const bottom = H - 110;
+      const top = 150;
+      const bottom = H - 150;
       const gap = n === 1 ? 0 : (bottom - top) / (n - 1);
       return items.map((_, i) => ({
         x: side === 'left' ? leftX : rightX,
@@ -376,14 +454,8 @@ export const StudyAnalyticsModal: React.FC<StudyAnalyticsModalProps> = ({
       return `M ${from.x} ${from.y} C ${c1.x} ${c1.y}, ${c2.x} ${c2.y}, ${to.x} ${to.y}`;
     };
 
-    return (
-      <div className="bg-white rounded-2xl p-4 border-2 border-gray-100">
-        <div className="font-bold text-brand-brown mb-3 flex items-center gap-2">
-          <FileText className="w-5 h-5" />
-          思維圖
-        </div>
-        <div className="w-full overflow-x-auto">
-          <svg width={W} height={H} viewBox={`0 0 ${W} ${H}`}>
+    const svg = (variant: 'normal' | 'fullscreen') => (
+      <svg data-mindmap-svg={variant} width={W} height={H} viewBox={`0 0 ${W} ${H}`}>
             <defs>
               <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
                 <feDropShadow dx="0" dy="2" stdDeviation="2" floodColor="#000000" floodOpacity="0.18" />
@@ -417,8 +489,8 @@ export const StudyAnalyticsModal: React.FC<StudyAnalyticsModalProps> = ({
               const to = { x: box.x + box.w, y: p.y };
               const path = cubicPath(from, to, 0.45);
 
-              const bullets = node.bullets.slice(0, 4);
-              const subGap = bullets.length <= 1 ? 0 : 46;
+              const bullets = node.bullets.slice(0, 2);
+              const subGap = bullets.length <= 1 ? 0 : 70;
               const subStartY = p.y - (subGap * (bullets.length - 1)) / 2;
 
               return (
@@ -428,7 +500,7 @@ export const StudyAnalyticsModal: React.FC<StudyAnalyticsModalProps> = ({
                   <g filter="url(#shadow)">
                     <rect x={box.x} y={box.y} width={box.w} height={box.h} rx={18} fill="#FFFFFF" stroke={color.stroke} strokeWidth="3" />
                     <text x={p.x} y={p.y + 6} textAnchor="middle" fontSize="14" fontWeight="700" fill="#111827">
-                      {ellipsis(node.title, 18)}
+                      {ellipsis(node.title, 16)}
                     </text>
                   </g>
 
@@ -445,7 +517,7 @@ export const StudyAnalyticsModal: React.FC<StudyAnalyticsModalProps> = ({
                         <g filter="url(#shadow)">
                           <rect x={subBox.x} y={subBox.y} width={subBox.w} height={subBox.h} rx={14} fill={color.fill} stroke={color.stroke} strokeWidth="2" />
                           <text x={sx} y={sy + 5} textAnchor="middle" fontSize="12" fontWeight="700" fill="#111827">
-                            {ellipsis(b, 16)}
+                            {ellipsis(b, 14)}
                           </text>
                         </g>
                       </g>
@@ -465,8 +537,8 @@ export const StudyAnalyticsModal: React.FC<StudyAnalyticsModalProps> = ({
               const to = { x: box.x, y: p.y };
               const path = cubicPath(from, to, 0.45);
 
-              const bullets = node.bullets.slice(0, 4);
-              const subGap = bullets.length <= 1 ? 0 : 46;
+              const bullets = node.bullets.slice(0, 2);
+              const subGap = bullets.length <= 1 ? 0 : 70;
               const subStartY = p.y - (subGap * (bullets.length - 1)) / 2;
 
               return (
@@ -476,7 +548,7 @@ export const StudyAnalyticsModal: React.FC<StudyAnalyticsModalProps> = ({
                   <g filter="url(#shadow)">
                     <rect x={box.x} y={box.y} width={box.w} height={box.h} rx={18} fill="#FFFFFF" stroke={color.stroke} strokeWidth="3" />
                     <text x={p.x} y={p.y + 6} textAnchor="middle" fontSize="14" fontWeight="700" fill="#111827">
-                      {ellipsis(node.title, 18)}
+                      {ellipsis(node.title, 16)}
                     </text>
                   </g>
 
@@ -493,7 +565,7 @@ export const StudyAnalyticsModal: React.FC<StudyAnalyticsModalProps> = ({
                         <g filter="url(#shadow)">
                           <rect x={subBox.x} y={subBox.y} width={subBox.w} height={subBox.h} rx={14} fill={color.fill} stroke={color.stroke} strokeWidth="2" />
                           <text x={sx} y={sy + 5} textAnchor="middle" fontSize="12" fontWeight="700" fill="#111827">
-                            {ellipsis(b, 16)}
+                            {ellipsis(b, 14)}
                           </text>
                         </g>
                       </g>
@@ -502,8 +574,71 @@ export const StudyAnalyticsModal: React.FC<StudyAnalyticsModalProps> = ({
                 </g>
               );
             })}
-          </svg>
+      </svg>
+    );
+
+    return (
+      <div className="bg-white rounded-2xl p-4 border-2 border-gray-100">
+        <div className="flex items-center justify-between gap-3 mb-3">
+          <div className="font-bold text-brand-brown flex items-center gap-2">
+            <FileText className="w-5 h-5" />
+            思維圖
+          </div>
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={() => setMindMapFullscreen(true)}
+              className="px-3 py-2 rounded-xl border-2 border-gray-300 bg-white text-gray-700 font-bold hover:bg-gray-50 inline-flex items-center gap-2"
+            >
+              <Maximize2 className="w-4 h-4" />
+              全螢幕
+            </button>
+            <button
+              type="button"
+              onClick={() => void downloadMindMapAsPng()}
+              className="px-3 py-2 rounded-xl border-2 border-gray-300 bg-white text-gray-700 font-bold hover:bg-gray-50 inline-flex items-center gap-2"
+            >
+              <Download className="w-4 h-4" />
+              另存圖片
+            </button>
+          </div>
         </div>
+        <div className="w-full overflow-x-auto">
+          {svg('normal')}
+        </div>
+
+        {mindMapFullscreen ? (
+          <div className="fixed inset-0 z-[70] bg-black/70 flex items-center justify-center p-4">
+            <div className="bg-white rounded-3xl w-full h-full max-w-[98vw] max-h-[96vh] overflow-hidden shadow-comic-xl border-4 border-brand-brown">
+              <div className="bg-brand-brown text-white p-4 flex items-center justify-between">
+                <div className="font-bold">{centerLabel}</div>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => void downloadMindMapAsPng()}
+                    className="bg-white/20 hover:bg-white/30 px-3 py-2 rounded-xl font-bold inline-flex items-center gap-2"
+                  >
+                    <Download className="w-4 h-4" />
+                    另存圖片
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setMindMapFullscreen(false)}
+                    className="bg-white/20 hover:bg-white/30 p-2 rounded-xl transition-all"
+                    aria-label="關閉"
+                  >
+                    <X className="w-6 h-6" />
+                  </button>
+                </div>
+              </div>
+              <div className="w-full h-[calc(96vh-70px)] overflow-auto bg-white p-4">
+                <div className="min-w-[1200px]">
+                  {svg('fullscreen')}
+                </div>
+              </div>
+            </div>
+          </div>
+        ) : null}
       </div>
     );
   };
@@ -559,6 +694,18 @@ export const StudyAnalyticsModal: React.FC<StudyAnalyticsModalProps> = ({
             </div>
           </div>
           <div className="flex items-center gap-2">
+            {onRegenerateAnalytics ? (
+              <button
+                type="button"
+                onClick={() => void handleRegenerateAnalytics()}
+                className="bg-white/20 hover:bg-white/30 px-3 py-2 rounded-xl transition-all inline-flex items-center gap-2 font-bold"
+                disabled={loading}
+                title="重新生成（較慢）"
+              >
+                <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+                重新生成
+              </button>
+            ) : null}
             <button
               onClick={onClose}
               className="bg-white/20 hover:bg-white/30 p-2 rounded-xl transition-all"
@@ -568,7 +715,7 @@ export const StudyAnalyticsModal: React.FC<StudyAnalyticsModalProps> = ({
           </div>
         </div>
 
-        {loading || (onRegenerateAnalytics && !analytics && !autoRegenerateFailed) ? (
+        {loading || ((onLoadAnalytics || onRegenerateAnalytics) && !analytics && !autoRegenerateFailed) ? (
           <div className="flex justify-center items-center py-16">
             <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-brand-brown"></div>
             <span className="ml-4 text-brand-brown">正在生成分析報告...</span>
