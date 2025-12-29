@@ -108,6 +108,14 @@ export interface StudyAnalytics {
   recommendations: string[]; // AI生成的学习建议
   suggestedTopics: string[]; // 建议练习的知识点
   estimatedStudyTime: number; // 建议学习时间(小时)
+
+  // 溫習筆記（AI 生成）
+  revisionNotes?: {
+    sections: Array<{
+      title: string;
+      bullets: string[];
+    }>;
+  } | null;
 }
 
 // 学习统计概览

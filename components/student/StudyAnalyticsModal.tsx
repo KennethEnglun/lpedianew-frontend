@@ -14,6 +14,7 @@ import {
   Clock,
   Award,
   BookOpen,
+  FileText,
   BarChart3,
   Lightbulb,
   CheckCircle,
@@ -37,7 +38,7 @@ export const StudyAnalyticsModal: React.FC<StudyAnalyticsModalProps> = ({
   onRegenerateAnalytics
 }) => {
   const [loading, setLoading] = useState(false);
-  const [activeTab, setActiveTab] = useState<'overview' | 'topics' | 'trends' | 'recommendations'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'topics' | 'trends' | 'recommendations' | 'notes'>('overview');
   const hasAutoRegeneratedRef = useRef(false);
   const [autoRegenerateFailed, setAutoRegenerateFailed] = useState(false);
 
@@ -286,6 +287,120 @@ export const StudyAnalyticsModal: React.FC<StudyAnalyticsModalProps> = ({
     </div>
   );
 
+  const wrapText = (text: string, maxCharsPerLine = 8) => {
+    const s = String(text || '');
+    const lines: string[] = [];
+    let buf = '';
+    for (const ch of s) {
+      buf += ch;
+      if (buf.length >= maxCharsPerLine) {
+        lines.push(buf);
+        buf = '';
+      }
+    }
+    if (buf) lines.push(buf);
+    return lines.slice(0, 2);
+  };
+
+  const renderMindMap = () => {
+    const sections = analytics?.revisionNotes?.sections || [];
+    const nodes = sections.slice(0, 8).map((s) => String(s.title || '').trim()).filter(Boolean);
+    if (nodes.length === 0) return null;
+
+    const W = 860;
+    const H = 420;
+    const cx = W / 2;
+    const cy = H / 2;
+    const r = 150;
+    const rectW = 150;
+    const rectH = 54;
+    const centerLabel = `${analytics?.subject || '溫習'}重點`;
+
+    const toPos = (i: number, total: number) => {
+      const angle = (Math.PI * 2 * i) / total - Math.PI / 2;
+      return { x: cx + r * Math.cos(angle), y: cy + r * Math.sin(angle) };
+    };
+
+    return (
+      <div className="bg-white rounded-2xl p-4 border-2 border-gray-100">
+        <div className="font-bold text-brand-brown mb-3 flex items-center gap-2">
+          <FileText className="w-5 h-5" />
+          思維圖
+        </div>
+        <div className="w-full overflow-x-auto">
+          <svg width={W} height={H} viewBox={`0 0 ${W} ${H}`}>
+            <defs>
+              <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
+                <feDropShadow dx="0" dy="2" stdDeviation="2" floodColor="#000000" floodOpacity="0.18" />
+              </filter>
+            </defs>
+
+            <g filter="url(#shadow)">
+              <rect x={cx - 90} y={cy - 28} width={180} height={56} rx={18} fill="#FDEEAD" stroke="#6B4F3A" strokeWidth="3" />
+              <text x={cx} y={cy + 6} textAnchor="middle" fontSize="16" fontWeight="700" fill="#6B4F3A">
+                {centerLabel}
+              </text>
+            </g>
+
+            {nodes.map((title, i) => {
+              const p = toPos(i, nodes.length);
+              const x = p.x - rectW / 2;
+              const y = p.y - rectH / 2;
+              const lines = wrapText(title, 8);
+              return (
+                <g key={i} filter="url(#shadow)">
+                  <line x1={cx} y1={cy} x2={p.x} y2={p.y} stroke="#6B4F3A" strokeWidth="3" />
+                  <rect x={x} y={y} width={rectW} height={rectH} rx={16} fill="#ffffff" stroke="#6B4F3A" strokeWidth="3" />
+                  <text x={p.x} y={p.y - (lines.length === 2 ? 6 : 0)} textAnchor="middle" fontSize="14" fontWeight="700" fill="#6B4F3A">
+                    {lines.map((ln, idx) => (
+                      <tspan key={idx} x={p.x} dy={idx === 0 ? 0 : 18}>{ln}</tspan>
+                    ))}
+                  </text>
+                </g>
+              );
+            })}
+          </svg>
+        </div>
+      </div>
+    );
+  };
+
+  const renderNotesTab = () => {
+    const sections = analytics?.revisionNotes?.sections || [];
+    if (!sections.length) {
+      return (
+        <div className="text-center py-8 text-gray-500">
+          <FileText className="w-12 h-12 mx-auto mb-4 opacity-50" />
+          <p>暫無溫習筆記</p>
+        </div>
+      );
+    }
+
+    return (
+      <div className="space-y-6">
+        <div className="bg-brand-cream rounded-2xl p-6 shadow-comic">
+          <div className="flex items-center gap-2 mb-4">
+            <FileText className="w-6 h-6 text-brand-brown" />
+            <h3 className="text-lg font-bold text-brand-brown">溫習筆記</h3>
+          </div>
+          <div className="space-y-5">
+            {sections.map((s, idx) => (
+              <div key={idx} className="bg-white rounded-2xl p-4 border-2 border-gray-100">
+                <div className="font-black text-brand-brown mb-2">{s.title}</div>
+                <ul className="list-disc pl-6 space-y-1 text-gray-700">
+                  {(Array.isArray(s.bullets) ? s.bullets : []).map((b, j) => (
+                    <li key={j}>{b}</li>
+                  ))}
+                </ul>
+              </div>
+            ))}
+          </div>
+        </div>
+        {renderMindMap()}
+      </div>
+    );
+  };
+
   return createPortal(
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
       <div className="bg-white rounded-3xl max-w-4xl w-full max-h-[90vh] overflow-hidden shadow-comic-xl">
@@ -324,7 +439,8 @@ export const StudyAnalyticsModal: React.FC<StudyAnalyticsModalProps> = ({
                   { id: 'overview', label: '總覽', icon: BarChart3 },
                   { id: 'topics', label: '知識點分析', icon: BookOpen },
                   { id: 'trends', label: '進度趨勢', icon: TrendingUp },
-                  { id: 'recommendations', label: '學習建議', icon: Lightbulb }
+                  { id: 'recommendations', label: '學習建議', icon: Lightbulb },
+                  { id: 'notes', label: '溫習筆記', icon: FileText }
                 ].map(tab => {
                   const Icon = tab.icon;
                   return (
@@ -351,6 +467,7 @@ export const StudyAnalyticsModal: React.FC<StudyAnalyticsModalProps> = ({
               {activeTab === 'topics' && renderTopicsTab()}
               {activeTab === 'trends' && renderTrendsTab()}
               {activeTab === 'recommendations' && renderRecommendationsTab()}
+              {activeTab === 'notes' && renderNotesTab()}
             </div>
 
             {/* 底部信息 */}
