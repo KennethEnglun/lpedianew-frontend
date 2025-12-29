@@ -27,6 +27,7 @@ export function StudentQuizModal({ open, quizId, onClose, onFinished }: Props) {
   const [quiz, setQuiz] = useState<any | null>(null);
   const [studentResult, setStudentResult] = useState<any | null>(null);
   const [answers, setAnswers] = useState<number[]>([]);
+  const [shuffleSeed, setShuffleSeed] = useState<string | null>(null);
   const [startAt, setStartAt] = useState<number | null>(null);
   const [submitResult, setSubmitResult] = useState<any | null>(null);
   const [showScopeReport, setShowScopeReport] = useState(false);
@@ -41,6 +42,7 @@ export function StudentQuizModal({ open, quizId, onClose, onFinished }: Props) {
     setStudentResult(null);
     setSubmitResult(null);
     setAnswers([]);
+    setShuffleSeed(null);
     setStartAt(Date.now());
     setShowScopeReport(false);
     setScopeReport(null);
@@ -50,6 +52,7 @@ export function StudentQuizModal({ open, quizId, onClose, onFinished }: Props) {
         setMode(resp?.mode === 'review' ? 'review' : 'take');
         setQuiz(resp?.quiz || null);
         setStudentResult(resp?.studentResult || null);
+        setShuffleSeed(typeof (resp as any)?.shuffleSeed === 'string' ? String((resp as any).shuffleSeed) : null);
         const qs = Array.isArray(resp?.quiz?.questions) ? resp.quiz.questions : [];
         if (resp?.mode === 'review' && resp?.studentResult?.answers && Array.isArray(resp.studentResult.answers)) {
           setAnswers(resp.studentResult.answers.map((x: any) => (Number.isInteger(Number(x)) ? Number(x) : -1)));
@@ -78,7 +81,7 @@ export function StudentQuizModal({ open, quizId, onClose, onFinished }: Props) {
     setError('');
     try {
       const timeSpent = startAt ? Math.floor((Date.now() - startAt) / 1000) : undefined;
-      const resp = await authService.submitQuizAnswer(quizId, answers, timeSpent);
+      const resp = await authService.submitQuizAnswer(quizId, answers, timeSpent, shuffleSeed);
       setSubmitResult(resp?.result || null);
       onFinished?.();
       // 轉為複習模式：重新載入含正確答案與作答記錄

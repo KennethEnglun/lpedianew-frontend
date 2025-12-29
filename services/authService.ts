@@ -1355,11 +1355,11 @@ class AuthService {
   }
 
   // 提交小測驗答案
-  async submitQuizAnswer(quizId: string, answers: number[], timeSpent?: number): Promise<{ message: string, result: any }> {
+  async submitQuizAnswer(quizId: string, answers: number[], timeSpent?: number, shuffleSeed?: string | null): Promise<{ message: string, result: any }> {
     const response = await fetch(`${this.API_BASE}/quizzes/${quizId}/submit`, {
       method: 'POST',
       headers: this.getAuthHeaders(),
-      body: JSON.stringify({ answers, timeSpent })
+      body: JSON.stringify({ answers, timeSpent, shuffleSeed })
     });
 
     return this.handleResponse(response);

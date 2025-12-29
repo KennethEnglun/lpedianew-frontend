@@ -838,7 +838,7 @@ const StudentDashboard: React.FC = () => {
       setSubmittingQuiz(true);
       const timeSpent = quizStartTime ? Math.round((Date.now() - quizStartTime.getTime()) / 1000) : 0;
 
-      const result = await authService.submitQuizAnswer(selectedQuiz.id, quizAnswers, timeSpent);
+      const result = await authService.submitQuizAnswer(selectedQuiz.id, quizAnswers, timeSpent, null);
 
       alert(`測驗提交成功！\n您的得分：${Math.round(result.result.score)}%\n正確答案：${result.result.correctAnswers}/${result.result.totalQuestions}`);
 
