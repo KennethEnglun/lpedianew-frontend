@@ -89,6 +89,13 @@ export function StudentQuizModal({ open, quizId, onClose, onFinished }: Props) {
       setMode(detail?.mode === 'review' ? 'review' : 'take');
       setQuiz(detail?.quiz || null);
       setStudentResult(detail?.studentResult || null);
+      setShuffleSeed(null);
+      const qs = Array.isArray(detail?.quiz?.questions) ? detail.quiz.questions : [];
+      if (detail?.mode === 'review' && detail?.studentResult?.answers && Array.isArray(detail.studentResult.answers)) {
+        setAnswers(detail.studentResult.answers.map((x: any) => (Number.isInteger(Number(x)) ? Number(x) : -1)));
+      } else {
+        setAnswers(new Array(qs.length).fill(-1));
+      }
     } catch (e: any) {
       setError(e?.message || '提交失敗');
     } finally {
