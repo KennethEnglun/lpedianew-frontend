@@ -102,7 +102,11 @@ class AuthService {
   private async handleResponse<T>(response: Response): Promise<T> {
     if (!response.ok) {
       const error = await response.json().catch(() => ({ message: '網絡錯誤' }));
-      throw new Error(error.message || `HTTP Error: ${response.status}`);
+      const message =
+        (error && typeof error === 'object' && 'message' in error && typeof (error as any).message === 'string' && (error as any).message)
+        || (error && typeof error === 'object' && 'error' in error && typeof (error as any).error === 'string' && (error as any).error)
+        || `HTTP Error: ${response.status}`;
+      throw new Error(message);
     }
     return response.json();
   }
