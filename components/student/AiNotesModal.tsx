@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { BookOpen, Download, RefreshCw, Send, Trash2, X } from 'lucide-react';
+import { BookOpen, Download, Hand, LocateFixed, RefreshCw, Send, Trash2, X, ZoomIn, ZoomOut } from 'lucide-react';
 import Button from '../Button';
 import { useAuth } from '../../contexts/AuthContext';
 import { authService } from '../../services/authService';
@@ -319,7 +319,13 @@ export const AiNotesModal: React.FC<Props> = ({ open, onClose }) => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [result, setResult] = useState<AiNotesResult | null>(null);
-  const svgRef = useRef<SVGSVGElement | null>(null);
+  const mindmapViewportRef = useRef<HTMLDivElement | null>(null);
+  const mindmapSvgRef = useRef<SVGSVGElement | null>(null);
+  const mindmapExportSvgRef = useRef<SVGSVGElement | null>(null);
+  const [mindmapScale, setMindmapScale] = useState(1);
+  const [mindmapOffset, setMindmapOffset] = useState({ x: 0, y: 0 });
+  const [mindmapDragging, setMindmapDragging] = useState(false);
+  const mindmapDragStartRef = useRef<{ x: number; y: number; ox: number; oy: number } | null>(null);
 
   const grade = useMemo(() => {
     const cls = String(user?.profile?.class || '').trim();
@@ -336,8 +342,75 @@ export const AiNotesModal: React.FC<Props> = ({ open, onClose }) => {
       setLoading(false);
       setResult(null);
       setText('');
+      setMindmapScale(1);
+      setMindmapOffset({ x: 0, y: 0 });
     }
   }, [open]);
+
+  const clamp = (n: number, min: number, max: number) => Math.min(max, Math.max(min, n));
+
+  const fitMindmap = () => {
+    const viewport = mindmapViewportRef.current;
+    const svg = mindmapSvgRef.current;
+    if (!viewport || !svg) return;
+
+    const vpRect = viewport.getBoundingClientRect();
+    const vb = svg.viewBox?.baseVal;
+    const svgW = (vb && vb.width) ? vb.width : Number(svg.getAttribute('width')) || 1200;
+    const svgH = (vb && vb.height) ? vb.height : Number(svg.getAttribute('height')) || 620;
+
+    const scale = clamp(Math.min(vpRect.width / svgW, vpRect.height / svgH) * 0.95, 0.25, 2.5);
+    const x = (vpRect.width - svgW * scale) / 2;
+    const y = (vpRect.height - svgH * scale) / 2;
+    setMindmapScale(scale);
+    setMindmapOffset({ x, y });
+  };
+
+  useEffect(() => {
+    if (!open) return;
+    if (!result?.mindmap) return;
+    // Ensure SVG is mounted before measuring.
+    const t = window.setTimeout(() => fitMindmap(), 0);
+    return () => window.clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, result?.mindmap]);
+
+  useEffect(() => {
+    if (!open) return;
+    if (!result?.mindmap) return;
+    const viewport = mindmapViewportRef.current;
+    if (!viewport || typeof ResizeObserver === 'undefined') return;
+    const ro = new ResizeObserver(() => {
+      // Keep current view, but if it's still default (0,0,1) then fit.
+      if (Math.abs(mindmapScale - 1) < 1e-6 && Math.abs(mindmapOffset.x) < 1e-6 && Math.abs(mindmapOffset.y) < 1e-6) {
+        fitMindmap();
+      }
+    });
+    ro.observe(viewport);
+    return () => ro.disconnect();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, result?.mindmap, mindmapScale, mindmapOffset.x, mindmapOffset.y]);
+
+  const zoomBy = (factor: number) => {
+    const viewport = mindmapViewportRef.current;
+    if (!viewport) return;
+    const rect = viewport.getBoundingClientRect();
+    const cx = rect.width / 2;
+    const cy = rect.height / 2;
+
+    const nextScale = clamp(mindmapScale * factor, 0.25, 3.5);
+    if (Math.abs(nextScale - mindmapScale) < 1e-6) return;
+
+    // Keep zoom centered around viewport center:
+    // screen = scale * content + offset  => content = (screen - offset) / scale
+    const contentX = (cx - mindmapOffset.x) / mindmapScale;
+    const contentY = (cy - mindmapOffset.y) / mindmapScale;
+    const nextOffsetX = cx - contentX * nextScale;
+    const nextOffsetY = cy - contentY * nextScale;
+
+    setMindmapScale(nextScale);
+    setMindmapOffset({ x: nextOffsetX, y: nextOffsetY });
+  };
 
   const handleGenerate = async () => {
     const input = String(text || '').trim();
@@ -356,6 +429,7 @@ export const AiNotesModal: React.FC<Props> = ({ open, onClose }) => {
         ...(grade ? { grade } : null)
       });
       setResult(resp as any);
+      window.setTimeout(() => fitMindmap(), 0);
     } catch (e) {
       const msg = e instanceof Error ? e.message : 'AI筆記生成失敗';
       setError(msg);
@@ -376,8 +450,8 @@ export const AiNotesModal: React.FC<Props> = ({ open, onClose }) => {
   };
 
   const handleDownloadMindmap = async () => {
-    if (!svgRef.current) return;
-    await downloadSvgAsPng(svgRef.current, 'ai-mindmap');
+    if (!mindmapExportSvgRef.current) return;
+    await downloadSvgAsPng(mindmapExportSvgRef.current, 'ai-mindmap');
   };
 
   if (!open) return null;
@@ -501,8 +575,90 @@ export const AiNotesModal: React.FC<Props> = ({ open, onClose }) => {
 
               <div className="bg-white rounded-2xl p-5 shadow-comic border-2 border-brand-brown/10">
                 <div className="font-black text-brand-brown text-lg mb-3">思維圖（樹狀）</div>
-                <div className="w-full overflow-x-auto bg-white rounded-2xl border-2 border-gray-100 p-3">
-                  <MindmapTree mindmap={result.mindmap} svgRef={svgRef} dataAttr="ai-notes" />
+                <div className="bg-white rounded-2xl border-2 border-gray-100 p-3">
+                  <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
+                    <div className="text-sm text-gray-600 font-bold inline-flex items-center gap-2">
+                      <Hand className="w-4 h-4" />
+                      拖曳移動｜{Math.round(mindmapScale * 100)}%
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => zoomBy(1 / 1.2)}
+                        className="px-3 py-2 rounded-xl border-2 border-gray-300 bg-white text-gray-700 font-bold hover:bg-gray-50 inline-flex items-center gap-2"
+                        aria-label="縮小"
+                      >
+                        <ZoomOut className="w-4 h-4" />
+                        縮小
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => zoomBy(1.2)}
+                        className="px-3 py-2 rounded-xl border-2 border-gray-300 bg-white text-gray-700 font-bold hover:bg-gray-50 inline-flex items-center gap-2"
+                        aria-label="放大"
+                      >
+                        <ZoomIn className="w-4 h-4" />
+                        放大
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => fitMindmap()}
+                        className="px-3 py-2 rounded-xl border-2 border-gray-300 bg-white text-gray-700 font-bold hover:bg-gray-50 inline-flex items-center gap-2"
+                        aria-label="置中"
+                      >
+                        <LocateFixed className="w-4 h-4" />
+                        置中
+                      </button>
+                    </div>
+                  </div>
+
+                  <div
+                    ref={mindmapViewportRef}
+                    className={`relative w-full h-[420px] md:h-[520px] overflow-hidden rounded-2xl border-2 border-[#E6D2B5] bg-white ${mindmapDragging ? 'cursor-grabbing' : 'cursor-grab'}`}
+                    style={{ touchAction: 'none' }}
+                    onPointerDown={(e) => {
+                      if (!result?.mindmap) return;
+                      (e.currentTarget as HTMLDivElement).setPointerCapture(e.pointerId);
+                      setMindmapDragging(true);
+                      mindmapDragStartRef.current = { x: e.clientX, y: e.clientY, ox: mindmapOffset.x, oy: mindmapOffset.y };
+                    }}
+                    onPointerMove={(e) => {
+                      const start = mindmapDragStartRef.current;
+                      if (!start) return;
+                      const dx = e.clientX - start.x;
+                      const dy = e.clientY - start.y;
+                      setMindmapOffset({ x: start.ox + dx, y: start.oy + dy });
+                    }}
+                    onPointerUp={() => {
+                      setMindmapDragging(false);
+                      mindmapDragStartRef.current = null;
+                    }}
+                    onPointerCancel={() => {
+                      setMindmapDragging(false);
+                      mindmapDragStartRef.current = null;
+                    }}
+                    onPointerLeave={() => {
+                      // If pointer capture is active, pointerleave won't matter; this is just a fallback.
+                      if (!mindmapDragStartRef.current) return;
+                      setMindmapDragging(false);
+                      mindmapDragStartRef.current = null;
+                    }}
+                  >
+                    <div
+                      className="absolute left-0 top-0 will-change-transform"
+                      style={{
+                        transform: `translate(${mindmapOffset.x}px, ${mindmapOffset.y}px) scale(${mindmapScale})`,
+                        transformOrigin: '0 0'
+                      }}
+                    >
+                      <MindmapTree mindmap={result.mindmap} svgRef={mindmapSvgRef} dataAttr="ai-notes" />
+                    </div>
+                  </div>
+
+                  {/* Full-size SVG for export (not affected by zoom/pan) */}
+                  <div className="hidden">
+                    <MindmapTree mindmap={result.mindmap} svgRef={mindmapExportSvgRef} dataAttr="ai-notes-export" />
+                  </div>
                 </div>
               </div>
             </div>
@@ -514,4 +670,3 @@ export const AiNotesModal: React.FC<Props> = ({ open, onClose }) => {
 
   return createPortal(modal, document.body);
 };
-
