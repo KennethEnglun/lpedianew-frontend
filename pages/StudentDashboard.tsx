@@ -17,6 +17,7 @@ import { QuizContestModal } from '../components/QuizContestModal';
 import { StudentQuizModal } from '../components/student/StudentQuizModal';
 import { StudentDiscussionModal } from '../components/student/StudentDiscussionModal';
 import NoteEditorModal from '../components/NoteEditorModal';
+import { AiNotesModal } from '../components/student/AiNotesModal';
 import { aiAnalyticsService } from '../services/aiAnalyticsService';
 import type { StudyAnalytics, StudyScope } from '../types/study';
 
@@ -25,6 +26,7 @@ const StudentDashboard: React.FC = () => {
   const { user, logout } = useAuth();
   const [showUiSettings, setShowUiSettings] = useState(false);
   const [showAiChat, setShowAiChat] = useState(false);
+  const [showAiNotes, setShowAiNotes] = useState(false);
   const [showBotTaskChat, setShowBotTaskChat] = useState(false);
   const [showAppStudio, setShowAppStudio] = useState(false);
   const [showStudyPractice, setShowStudyPractice] = useState(false);
@@ -947,6 +949,20 @@ const StudentDashboard: React.FC = () => {
               onClick={(e) => {
                 e.preventDefault();
                 e.stopPropagation();
+                setShowAiNotes(true);
+              }}
+              className="w-[calc(100%-10px)] flex items-center gap-3 px-4 py-2 rounded-2xl border-4 transition-all duration-150 border-[#E6D2B5] bg-[#F3E8FF] hover:bg-white hover:-translate-y-1 shadow-sm"
+              title="AI筆記"
+            >
+              <BookOpen className="w-6 h-6 text-[#5E4C40]" />
+              <span className="text-lg font-bold text-[#5E4C40] flex-1 text-left">AI筆記</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
                 setActiveTab('practice');
                 setShowSelfStudyHub(true);
               }}
@@ -1366,6 +1382,10 @@ const StudentDashboard: React.FC = () => {
         pointsTransactions={pointsTransactions}
         onRefreshPoints={refreshPoints}
         executeImageGeneration={executeImagePrompt}
+      />
+      <AiNotesModal
+        open={showAiNotes}
+        onClose={() => setShowAiNotes(false)}
       />
       <AppStudioModal
         open={showAppStudio}

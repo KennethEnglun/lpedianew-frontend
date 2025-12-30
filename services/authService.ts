@@ -391,6 +391,20 @@ class AuthService {
     return this.handleResponse(response);
   }
 
+  async generateAiNotes(payload: { text: string; locale?: 'zh-HK' | 'zh-CN' | 'en'; maxNodes?: number; grade?: string }): Promise<{
+    topic: string;
+    corrections: Array<{ claim: string; issue: string; correction: string; needsVerification: boolean }>;
+    notesMarkdown: string;
+    mindmap: { nodes: Array<{ id: string; label: string }>; edges: Array<{ from: string; to: string; label?: string }> };
+  }> {
+    const response = await fetch(`${this.API_BASE}/ai/notes`, {
+      method: 'POST',
+      headers: this.getAuthHeaders(),
+      body: JSON.stringify(payload || {})
+    });
+    return this.handleResponse(response);
+  }
+
   // === AI小助手任務（派發自建 AI小助手）===
   async createBotTask(payload: { botId: string; subject: string; targetClasses?: string[]; targetGroups?: string[]; targetClass?: string; classFolderId?: string }): Promise<{ task: any }> {
     const response = await fetch(`${this.API_BASE}/bot-tasks`, {
