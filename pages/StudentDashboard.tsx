@@ -533,7 +533,8 @@ const StudentDashboard: React.FC = () => {
         createdAt: n.createdAt || n.updatedAt || n.assignedAt,
         folderId: n.classFolderId || n.folderSnapshot?.folderId || null,
         folderSnapshot: n.folderSnapshot || null,
-        completed: !!n.completed
+        completed: !!n.completed,
+        ...(n.needsRevision ? { needsRevision: true } : {})
       }));
 
       const allTasks: Task[] = [...discussionTasks, ...quizTasks, ...gameTasks, ...botTasks, ...contestTasks, ...noteTasks];
@@ -1194,10 +1195,15 @@ const StudentDashboard: React.FC = () => {
                                         <div className="mt-1 text-sm text-gray-700 font-bold">
                                           {typeLabel} • {task.subject}{pathNames ? ` • ${pathNames}` : ''}{task.createdAt ? ` • ${new Date(task.createdAt).toLocaleString()}` : ''}
                                         </div>
-                                        <div className="mt-2 text-xs font-bold">
+                                        <div className="mt-2 text-xs font-bold flex items-center gap-2 flex-wrap">
                                           <span className={`px-2 py-1 rounded-lg border-2 ${done ? 'bg-green-50 border-green-300 text-green-800' : 'bg-yellow-50 border-yellow-300 text-yellow-800'}`}>
                                             {done ? '已完成' : '未完成'}
                                           </span>
+                                          {task.type === 'note' && (task as any).needsRevision && (
+                                            <span className="px-2 py-1 rounded-lg border-2 bg-red-50 border-red-300 text-red-800">
+                                              待改正
+                                            </span>
+                                          )}
                                           {typeof task.score === 'number' && (
                                             <span className="ml-2 text-gray-700">分數：{Math.round(task.score)}%</span>
                                           )}

@@ -493,6 +493,7 @@ const NoteEditorModal = React.forwardRef<NoteEditorHandle, Props>(
   const [error, setError] = useState('');
   const [noteTitle, setNoteTitle] = useState('筆記');
   const [submittedAt, setSubmittedAt] = useState<string | null>(null);
+  const [resubmitOpen, setResubmitOpen] = useState(false);
   const [canEdit, setCanEdit] = useState(true);
   const [fullscreen, setFullscreen] = useState(false);
   const [annotationMode, setAnnotationMode] = useState(false);
@@ -536,6 +537,7 @@ const NoteEditorModal = React.forwardRef<NoteEditorHandle, Props>(
     mode,
     canEdit,
     submittedAt,
+    resubmitOpen: false,
     annotationMode,
     canTemplateEdit: false
   });
@@ -543,13 +545,13 @@ const NoteEditorModal = React.forwardRef<NoteEditorHandle, Props>(
   const canTemplateEdit = (mode === 'template' || mode === 'draft') && canEdit;
   const canAddPage =
     ((mode === 'template' || mode === 'draft') && canEdit) ||
-    (mode === 'student' && canEdit && !submittedAt);
-  const canSubmit = mode === 'student' && canEdit && !submittedAt;
+    (mode === 'student' && canEdit && (!submittedAt || resubmitOpen));
+  const canSubmit = mode === 'student' && canEdit && (!submittedAt || resubmitOpen);
   const canAnnotate = mode === 'teacher' && (viewerRole === 'teacher' || viewerRole === 'admin');
 
   pageSizeRef.current = getA4Size(pageOrientation);
   penStateRef.current = { color: String(penColor || '#111827'), width: Math.max(1, Number(penWidth) || 2) };
-  latestStateRef.current = { open, mode, canEdit, submittedAt, annotationMode, canTemplateEdit };
+  latestStateRef.current = { open, mode, canEdit, submittedAt, resubmitOpen, annotationMode, canTemplateEdit };
 
   const applyPermissionsToObjects = (canvas: fabric.Canvas) => {
     const objs = canvas.getObjects();
@@ -567,7 +569,13 @@ const NoteEditorModal = React.forwardRef<NoteEditorHandle, Props>(
         (o as any).lockRotation = true;
         continue;
       }
-      const locked = Boolean((o as any).lpediaLocked);
+      const locked =
+        Boolean((o as any).lpediaLocked) ||
+        !!(o as any).lockMovementX ||
+        !!(o as any).lockMovementY ||
+        !!(o as any).lockScalingX ||
+        !!(o as any).lockScalingY ||
+        !!(o as any).lockRotation;
       const layer = String((o as any).lpediaLayer || 'base');
 
       if (mode === 'teacher') {
@@ -580,7 +588,7 @@ const NoteEditorModal = React.forwardRef<NoteEditorHandle, Props>(
       }
 
       if (mode === 'student') {
-        const readOnly = !!submittedAt || !canEdit;
+        const readOnly = (!!submittedAt && !resubmitOpen) || !canEdit;
         const isAnnotation = layer === 'annotation';
         const shouldLock = readOnly || locked || isAnnotation;
         if (isAnnotation) o.visible = true;
@@ -681,7 +689,7 @@ const NoteEditorModal = React.forwardRef<NoteEditorHandle, Props>(
         await idbSet(buildLocalKey(nid, viewerId), { savedAt: new Date().toISOString(), snapshot: doc });
 
         if (!navigator.onLine) return;
-        if (submittedAt) return;
+        if (submittedAt && !resubmitOpen) return;
         await authService.saveMyNoteDraft(nid, doc);
       } catch {
         // keep silent (offline / network)
@@ -898,7 +906,8 @@ const NoteEditorModal = React.forwardRef<NoteEditorHandle, Props>(
   };
 
   const canChangePageOrientation =
-    ((mode === 'template' || mode === 'draft') && canTemplateEdit) || (mode === 'student' && canEdit && !submittedAt);
+    ((mode === 'template' || mode === 'draft') && canTemplateEdit) ||
+    (mode === 'student' && canEdit && (!submittedAt || resubmitOpen));
 
   const fitView = () => {
     const canvas = fabricRef.current;
@@ -938,7 +947,7 @@ const NoteEditorModal = React.forwardRef<NoteEditorHandle, Props>(
     const canvas = fabricRef.current;
     if (!canvas) return;
     if (!canEdit) return;
-    if (mode === 'student' && submittedAt) return;
+    if (mode === 'student' && submittedAt && !resubmitOpen) return;
     if (mode === 'teacher' && !annotationMode) return;
 
     const v = canvas.viewportTransform || [1, 0, 0, 1, 0, 0];
@@ -1131,7 +1140,7 @@ const NoteEditorModal = React.forwardRef<NoteEditorHandle, Props>(
     const canvas = fabricRef.current;
     if (!canvas) return;
     if (!canEdit) return;
-    if (mode === 'student' && submittedAt) return;
+    if (mode === 'student' && submittedAt && !resubmitOpen) return;
     if (mode === 'teacher' && !annotationMode) return;
 
     setLoading(true);
@@ -1183,7 +1192,9 @@ const NoteEditorModal = React.forwardRef<NoteEditorHandle, Props>(
         try { return JSON.parse(v); } catch { return v; }
       };
       const serverSnap = safeJsonParse(server?.submission?.snapshot);
-      const serverAnn = safeJsonParse(server?.submission?.annotations);
+      const serverAnnRaw = safeJsonParse(server?.submission?.annotations);
+      const serverAnn = serverAnnRaw && typeof serverAnnRaw === 'object' ? serverAnnRaw : null;
+      const serverResubmitOpen = !!serverAnn?.meta?.resubmitOpen;
       const localSnap = local?.snapshot;
       const localSavedAt = Date.parse(String(local?.savedAt || ''));
       const serverUpdatedAt = Date.parse(String(server?.submission?.updatedAt || ''));
@@ -1223,8 +1234,9 @@ const NoteEditorModal = React.forwardRef<NoteEditorHandle, Props>(
       }
 
       setSubmittedAt(server?.submission?.submittedAt || null);
+      setResubmitOpen(serverResubmitOpen);
       setNoteTitle(String(server?.note?.title || '筆記'));
-      setCanEdit(!server?.submission?.submittedAt);
+      setCanEdit(!server?.submission?.submittedAt || serverResubmitOpen);
       setPageOrientation(docRef.current?.page?.orientation === 'landscape' ? 'landscape' : 'portrait');
       setPenColor('#111827');
       setPenWidth(2);
@@ -1462,7 +1474,7 @@ const NoteEditorModal = React.forwardRef<NoteEditorHandle, Props>(
     const allowEdit = () => {
       const st = latestStateRef.current;
       if (!st.canEdit) return false;
-      if (st.mode === 'student' && st.submittedAt) return false;
+      if (st.mode === 'student' && st.submittedAt && !st.resubmitOpen) return false;
       if (st.mode === 'teacher' && !st.annotationMode) return false;
       if ((st.mode === 'template' || st.mode === 'draft') && !st.canTemplateEdit) return false;
       return true;
@@ -1731,7 +1743,9 @@ const NoteEditorModal = React.forwardRef<NoteEditorHandle, Props>(
   const statusText =
     mode === 'student'
       ? submittedAt
-        ? `已交回（${submittedAt}）`
+        ? resubmitOpen
+          ? `已批改，可修改後再交回（上次交回：${submittedAt}）`
+          : `已交回（${submittedAt}）`
         : navigator.onLine
           ? '自動保存中'
           : '離線模式（只保存到本機）'
@@ -2199,7 +2213,7 @@ const NoteEditorModal = React.forwardRef<NoteEditorHandle, Props>(
               <button
                 type="button"
                 onClick={async () => {
-                  if (submittedAt) return;
+                  if (submittedAt && !resubmitOpen) return;
                   if (!window.confirm('確定要交回？交回後不能再修改。')) return;
                   const nid = String(noteId || '').trim();
                   if (!nid) return;
@@ -2210,6 +2224,7 @@ const NoteEditorModal = React.forwardRef<NoteEditorHandle, Props>(
 	                    await authService.saveMyNoteDraft(nid, docRef.current);
 	                    const resp = await authService.submitMyNote(nid);
 	                    setSubmittedAt(resp?.submission?.submittedAt || new Date().toISOString());
+	                    setResubmitOpen(!!resp?.submission?.annotations?.meta?.resubmitOpen);
 	                    setCanEdit(false);
 	                    onSubmitted?.();
 	                    alert('已交回！');
