@@ -34,6 +34,15 @@ import * as fabric from 'fabric';
 import { compressImageToMaxBytes } from '../services/imageCompression';
 import { VISIBLE_SUBJECTS } from '../platform';
 
+// Ensure Fabric restores our custom fields from JSON snapshots.
+try {
+  const customProps = ['lpediaLocked', 'lpediaLayer', 'crossOrigin', 'lpediaPaper', 'lpediaPageIndex'];
+  const existing = Array.isArray((fabric as any).Object?.customProperties) ? (fabric as any).Object.customProperties : [];
+  (fabric as any).Object.customProperties = Array.from(new Set([...existing, ...customProps]));
+} catch {
+  // ignore (shouldn't happen in browser)
+}
+
 type Mode = 'student' | 'template' | 'teacher' | 'draft';
 
 export type NoteEditorHandle = {
@@ -459,6 +468,7 @@ const NoteEditorModal = React.forwardRef<NoteEditorHandle, Props>(
     {
       open,
       onClose,
+      onSubmitted,
       authService,
       mode,
       noteId,
@@ -573,6 +583,7 @@ const NoteEditorModal = React.forwardRef<NoteEditorHandle, Props>(
         const readOnly = !!submittedAt || !canEdit;
         const isAnnotation = layer === 'annotation';
         const shouldLock = readOnly || locked || isAnnotation;
+        if (isAnnotation) o.visible = true;
         if (shouldLock) {
           o.selectable = false;
           o.evented = false;
@@ -1167,8 +1178,12 @@ const NoteEditorModal = React.forwardRef<NoteEditorHandle, Props>(
         server = null;
       }
       const local = (await idbGet(buildLocalKey(nid, viewerId)).catch(() => null)) as any;
-      const serverSnap = server?.submission?.snapshot;
-      const serverAnn = server?.submission?.annotations;
+      const safeJsonParse = (v: any) => {
+        if (typeof v !== 'string') return v;
+        try { return JSON.parse(v); } catch { return v; }
+      };
+      const serverSnap = safeJsonParse(server?.submission?.snapshot);
+      const serverAnn = safeJsonParse(server?.submission?.annotations);
       const localSnap = local?.snapshot;
       const localSavedAt = Date.parse(String(local?.savedAt || ''));
       const serverUpdatedAt = Date.parse(String(server?.submission?.updatedAt || ''));
