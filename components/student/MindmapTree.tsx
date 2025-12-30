@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useId, useMemo } from 'react';
 
 export type MindmapGraph = {
   nodes: Array<{ id: string; label: string }>;
@@ -98,6 +98,9 @@ const buildTree = (mindmap: MindmapGraph | null | undefined) => {
 };
 
 export const MindmapTree: React.FC<Props> = ({ mindmap, svgRef, dataAttr }) => {
+  const reactId = useId();
+  const shadowId = `mindmap-shadow-${String(dataAttr || 'tree')}-${reactId.replace(/[:]/g, '')}`;
+
   const computed = useMemo(() => {
     const tree = buildTree(mindmap);
     if (!tree) return null;
@@ -106,8 +109,8 @@ export const MindmapTree: React.FC<Props> = ({ mindmap, svgRef, dataAttr }) => {
     const NODE_H = 64;
     const GAP_X = 48;
     const GAP_Y = 92;
-    const PAD_X = 70;
-    const PAD_Y = 70;
+    const PAD_X = 90;
+    const PAD_Y = 90;
 
     const pos = new Map<string, { x: number; y: number; depth: number }>();
     let leafIndex = 0;
@@ -140,11 +143,14 @@ export const MindmapTree: React.FC<Props> = ({ mindmap, svgRef, dataAttr }) => {
     dfs(tree.rootId, 0);
 
     const leafCount = Math.max(1, leafIndex);
-    const W = Math.ceil(PAD_X * 2 + (leafCount - 1) * (NODE_W + GAP_X) + NODE_W);
-    const H = Math.ceil(PAD_Y * 2 + maxDepth * (NODE_H + GAP_Y) + NODE_H);
+    // Include half node size in the layout so nodes are never clipped by the SVG viewBox.
+    const contentW = leafCount * NODE_W + Math.max(0, leafCount - 1) * GAP_X;
+    const contentH = (maxDepth + 1) * NODE_H + Math.max(0, maxDepth) * GAP_Y;
+    const W = Math.ceil(PAD_X * 2 + contentW);
+    const H = Math.ceil(PAD_Y * 2 + contentH);
 
-    const toPx = (x: number) => PAD_X + x * (NODE_W + GAP_X);
-    const toPy = (y: number) => PAD_Y + y * (NODE_H + GAP_Y);
+    const toPx = (x: number) => PAD_X + NODE_W / 2 + x * (NODE_W + GAP_X);
+    const toPy = (y: number) => PAD_Y + NODE_H / 2 + y * (NODE_H + GAP_Y);
 
     const edgeLines = tree.edges
       .map((e) => {
@@ -183,14 +189,15 @@ export const MindmapTree: React.FC<Props> = ({ mindmap, svgRef, dataAttr }) => {
       width={computed.W}
       height={computed.H}
       viewBox={`0 0 ${computed.W} ${computed.H}`}
+      style={{ overflow: 'visible' }}
     >
       <defs>
-        <filter id="mindmap-shadow" x="-20%" y="-20%" width="140%" height="140%">
+        <filter id={shadowId} x="-20%" y="-20%" width="140%" height="140%">
           <feDropShadow dx="0" dy="2" stdDeviation="2" floodColor="#000000" floodOpacity="0.18" />
         </filter>
       </defs>
 
-      <g filter="url(#mindmap-shadow)">
+      <g filter={`url(#${shadowId})`}>
         {computed.edgeLines.map((e, idx) => (
           <path
             key={idx}
@@ -240,4 +247,3 @@ export const MindmapTree: React.FC<Props> = ({ mindmap, svgRef, dataAttr }) => {
     </svg>
   );
 };
-
