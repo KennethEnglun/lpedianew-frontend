@@ -569,13 +569,7 @@ const NoteEditorModal = React.forwardRef<NoteEditorHandle, Props>(
         (o as any).lockRotation = true;
         continue;
       }
-      const locked =
-        Boolean((o as any).lpediaLocked) ||
-        !!(o as any).lockMovementX ||
-        !!(o as any).lockMovementY ||
-        !!(o as any).lockScalingX ||
-        !!(o as any).lockScalingY ||
-        !!(o as any).lockRotation;
+      const locked = Boolean((o as any).lpediaLocked);
       const layer = String((o as any).lpediaLayer || 'base');
 
       if (mode === 'teacher') {
@@ -2190,11 +2184,14 @@ const NoteEditorModal = React.forwardRef<NoteEditorHandle, Props>(
 	                        pages: docRef.current.pages.map(() => emptyPage())
 	                      };
 	                    }
-	                    saveCanvasAnnotationsToRef();
-	                    await authService.saveNoteAnnotations(nid, sid, annotationDocRef.current);
-	                    alert('已保存批改');
-	                    setAnnotationMode(false);
-	                  } catch (e: any) {
+		                    const needRevision = window.confirm(
+		                      '需要學生做改正嗎？\n\n確定：需要（學生端會顯示「待修正」，狀態變未完成，並可再修改交回）\n取消：不需要（任務真正完成）'
+		                    );
+		                    saveCanvasAnnotationsToRef();
+		                    await authService.saveNoteAnnotations(nid, sid, annotationDocRef.current, { needsRevision: needRevision });
+		                    alert('已保存批改');
+		                    setAnnotationMode(false);
+		                  } catch (e: any) {
                       setError(e?.message || '保存失敗');
                     } finally {
                       setLoading(false);
@@ -2235,7 +2232,7 @@ const NoteEditorModal = React.forwardRef<NoteEditorHandle, Props>(
                   }
                 }}
                 className="px-3 py-2 rounded-2xl border-4 border-green-700 bg-green-600 text-white font-black shadow-comic hover:bg-green-700 flex items-center gap-2"
-                disabled={loading || !canEdit || !!submittedAt}
+                disabled={loading || !canEdit || (!!submittedAt && !resubmitOpen)}
               >
                 <Send className="w-4 h-4" />
                 交回

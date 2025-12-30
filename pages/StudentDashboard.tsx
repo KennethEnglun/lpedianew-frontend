@@ -1201,7 +1201,7 @@ const StudentDashboard: React.FC = () => {
                                           </span>
                                           {task.type === 'note' && (task as any).needsRevision && (
                                             <span className="px-2 py-1 rounded-lg border-2 bg-red-50 border-red-300 text-red-800">
-                                              待改正
+                                              待修正
                                             </span>
                                           )}
                                           {typeof task.score === 'number' && (

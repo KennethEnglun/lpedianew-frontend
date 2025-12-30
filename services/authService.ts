@@ -1205,11 +1205,16 @@ class AuthService {
     return this.handleResponse(response);
   }
 
-  async saveNoteAnnotations(noteId: string, studentId: string, annotations: any): Promise<{ message: string; submission: any }> {
+  async saveNoteAnnotations(
+    noteId: string,
+    studentId: string,
+    annotations: any,
+    opts?: { needsRevision?: boolean }
+  ): Promise<{ message: string; submission: any }> {
     const response = await fetch(`${this.API_BASE}/notes/${encodeURIComponent(noteId)}/submissions/${encodeURIComponent(studentId)}/annotations`, {
       method: 'PUT',
       headers: this.getAuthHeaders(),
-      body: JSON.stringify({ annotations })
+      body: JSON.stringify({ annotations, needsRevision: !!opts?.needsRevision })
     });
     return this.handleResponse(response);
   }
