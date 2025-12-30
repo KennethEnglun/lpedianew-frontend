@@ -444,21 +444,21 @@ export const studyAnalytics = {
     const recommendations: string[] = [];
 
     if (overallAccuracy >= 0.8) {
-      recommendations.push('🎉 太棒了！你的整体掌握度很好，建议挑战更高难度的题目');
+      recommendations.push('🎉 太棒了！你的整體掌握度很好，建議挑戰更高難度的題目。');
     } else if (overallAccuracy >= 0.6) {
-      recommendations.push('💪 你的基础不错，继续加油！重点复习薄弱知识点');
+      recommendations.push('💪 你的基礎不錯，繼續加油！建議重點複習較薄弱的知識點。');
     } else {
-      recommendations.push('📚 建议加强基础知识的学习，多做练习巩固');
+      recommendations.push('📚 建議加強基礎知識的學習，多做練習以鞏固。');
     }
 
     const weakTopics = topicMasteries.filter(t => t.masteryLevel === 'weak');
     if (weakTopics.length > 0) {
-      recommendations.push(`🎯 重点关注：${weakTopics.slice(0, 3).map(t => t.topic).join('、')}`);
+      recommendations.push(`🎯 重點關注：${weakTopics.slice(0, 3).map(t => t.topic).join('、')}`);
     }
 
     const strongTopics = topicMasteries.filter(t => t.masteryLevel === 'strong');
     if (strongTopics.length > 0) {
-      recommendations.push(`⭐ 你的优势：${strongTopics.slice(0, 3).map(t => t.topic).join('、')}`);
+      recommendations.push(`⭐ 你的優勢：${strongTopics.slice(0, 3).map(t => t.topic).join('、')}`);
     }
 
     return recommendations;
@@ -533,7 +533,7 @@ export const formatUtils = {
     const secs = seconds % 60;
 
     if (hours > 0) {
-      return `${hours}小时${minutes}分钟`;
+      return `${hours}小時${minutes}分鐘`;
     } else if (minutes > 0) {
       return `${minutes}分${secs}秒`;
     } else {
@@ -559,7 +559,7 @@ export const formatUtils = {
    * 格式化日期
    */
   formatDate: (dateString: string): string => {
-    return new Date(dateString).toLocaleDateString('zh-TW', {
+    return new Date(dateString).toLocaleDateString('zh-HK', {
       year: 'numeric',
       month: 'short',
       day: 'numeric',

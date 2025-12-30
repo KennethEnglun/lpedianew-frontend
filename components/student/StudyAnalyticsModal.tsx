@@ -146,6 +146,111 @@ export const StudyAnalyticsModal: React.FC<StudyAnalyticsModalProps> = ({
     });
   };
 
+  const downloadTextReport = () => {
+    if (!analytics) return;
+
+    const safeName = (s: string) => String(s || '').trim().replace(/[\\/:*?"<>|]/g, '_');
+    const percent = (n: number) => `${(Math.max(0, Math.min(1, n)) * 100).toFixed(1)}%`;
+    const masteryLabel = (level: TopicMastery['masteryLevel']) => {
+      switch (level) {
+        case 'strong': return '優秀';
+        case 'average': return '良好';
+        case 'weak': return '需加強';
+        default: return '未知';
+      }
+    };
+
+    const lines: string[] = [];
+    lines.push('AI學習分析報告');
+    lines.push('');
+    lines.push(`學生：${analytics.studentName || ''}`);
+    lines.push(`科目：${analytics.subject || ''}`);
+    lines.push(`分析日期：${analytics.analysisDate ? formatUtils.formatDate(analytics.analysisDate) : ''}`);
+    lines.push('');
+
+    lines.push('一、總覽');
+    lines.push(`- 練習次數：${analytics.totalSessions} 次`);
+    lines.push(`- 總題數：${analytics.totalQuestions} 題`);
+    lines.push(`- 總正確率：${percent(analytics.overallAccuracy)}`);
+    lines.push(`- 平均分數：${Math.round(analytics.averageScore)} 分`);
+    lines.push('');
+
+    lines.push('二、AI智能建議');
+    if (Array.isArray(analytics.recommendations) && analytics.recommendations.length > 0) {
+      analytics.recommendations.slice(0, 12).forEach((r, idx) => lines.push(`${idx + 1}. ${String(r || '').trim()}`));
+    } else {
+      lines.push('（暫無）');
+    }
+    lines.push('');
+
+    lines.push('三、建議加強練習');
+    if (Array.isArray(analytics.suggestedTopics) && analytics.suggestedTopics.length > 0) {
+      analytics.suggestedTopics.slice(0, 12).forEach((t) => lines.push(`- ${String(t || '').trim()}`));
+    } else {
+      lines.push('（暫無）');
+    }
+    if (analytics.estimatedStudyTime) {
+      lines.push(`- 預估學習時間：${analytics.estimatedStudyTime} 小時`);
+    }
+    lines.push('');
+
+    lines.push('四、知識點掌握（詳細）');
+    if (Array.isArray(analytics.topicMasteries) && analytics.topicMasteries.length > 0) {
+      analytics.topicMasteries.forEach((tm) => {
+        lines.push(`- ${tm.topic}：${percent(tm.accuracy)}（${tm.correctAnswers}/${tm.totalQuestions}）｜掌握：${masteryLabel(tm.masteryLevel)}｜平均用時：${formatUtils.formatDuration(Math.round(tm.averageTime || 0))}`);
+      });
+    } else {
+      lines.push('（暫無）');
+    }
+    lines.push('');
+
+    lines.push('五、強項 / 弱項');
+    lines.push(`- 優勢：${(Array.isArray(analytics.strengths) && analytics.strengths.length > 0) ? analytics.strengths.slice(0, 8).join('、') : '（未識別）'}`);
+    lines.push(`- 待加強：${(Array.isArray(analytics.weaknesses) && analytics.weaknesses.length > 0) ? analytics.weaknesses.slice(0, 8).join('、') : '（無）'}`);
+    lines.push('');
+
+    lines.push('六、趨勢');
+    if (Array.isArray(analytics.progressTrend) && analytics.progressTrend.length > 0) {
+      lines.push(`- 分數趨勢（最近）：${analytics.progressTrend.slice(-10).map((n) => Math.round(Number(n))).join('、')}`);
+    } else {
+      lines.push('- 分數趨勢（最近）：（暫無）');
+    }
+    if (Array.isArray(analytics.accuracyTrend) && analytics.accuracyTrend.length > 0) {
+      lines.push(`- 正確率趨勢（最近）：${analytics.accuracyTrend.slice(-10).map((n) => percent(Number(n))).join('、')}`);
+    } else {
+      lines.push('- 正確率趨勢（最近）：（暫無）');
+    }
+    lines.push('');
+
+    lines.push('七、溫習筆記');
+    const sections = analytics.revisionNotes?.sections || [];
+    if (sections.length > 0) {
+      const title = String(analytics.revisionNotes?.title || '').trim();
+      if (title) lines.push(`標題：${title}`);
+      sections.forEach((s) => {
+        lines.push('');
+        lines.push(`【${String(s?.title || '').trim()}】`);
+        const bullets = Array.isArray(s?.bullets) ? s.bullets : [];
+        bullets.filter(Boolean).forEach((b) => lines.push(`- ${String(b).trim()}`));
+      });
+      lines.push('');
+    } else {
+      lines.push('（暫無）');
+      lines.push('');
+    }
+
+    const content = lines.join('\n').replace(/\n{3,}/g, '\n\n').trim() + '\n';
+    const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${safeName(`AI學習分析報告-${analytics.studentName || 'student'}-${Date.now()}`)}.txt`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+  };
+
   if (!isOpen) return null;
 
   const getMasteryLevelText = (level: 'weak' | 'average' | 'strong') => {
@@ -736,6 +841,16 @@ export const StudyAnalyticsModal: React.FC<StudyAnalyticsModalProps> = ({
             </div>
           </div>
           <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={downloadTextReport}
+              className="bg-white/20 hover:bg-white/30 px-3 py-2 rounded-xl transition-all inline-flex items-center gap-2 font-bold"
+              disabled={!analytics || loading}
+              title="匯出成文字分析報告"
+            >
+              <Download className="w-4 h-4" />
+              匯出文字
+            </button>
             {onRegenerateAnalytics ? (
               <button
                 type="button"
