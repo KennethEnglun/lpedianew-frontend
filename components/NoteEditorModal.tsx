@@ -22,7 +22,6 @@ import {
   Scan,
   Save,
   Send,
-  Sparkles,
   Trash2,
   Type,
   X,
@@ -337,6 +336,8 @@ const stripPaperFromCanvasJson = (json: any) => {
   return { ...json, objects: nextObjects, background: '#ffffff', backgroundColor: undefined };
 };
 
+const NOTE_EXPORT_MULTIPLIER = 3; // 300% resolution for rasterized export
+
 const exportPdfFromDoc = async (doc: FabricDocSnapshot) => {
   const orientation: PageOrientation = doc?.page?.orientation === 'landscape' ? 'landscape' : 'portrait';
   const { w: pageW, h: pageH } = getA4Size(orientation);
@@ -349,7 +350,7 @@ const exportPdfFromDoc = async (doc: FabricDocSnapshot) => {
     sc.backgroundColor = '#ffffff';
     await withTimeout(sc.loadFromJSON(pageJson), 15000, 'PDF 匯出時載入頁面超時');
     sc.renderAll();
-    const dataUrl = sc.toDataURL({ format: 'png', multiplier: 2 });
+    const dataUrl = sc.toDataURL({ format: 'png', multiplier: NOTE_EXPORT_MULTIPLIER });
     const bytes = Uint8Array.from(atob(dataUrl.split(',')[1] || ''), (c) => c.charCodeAt(0));
     const png = await pdf.embedPng(bytes);
     const page = pdf.addPage([pageW, pageH]);
@@ -746,11 +747,13 @@ const NoteEditorModal = React.forwardRef<NoteEditorHandle, Props>(
     ann.currentPage = clamp(ann.currentPage ?? 0, 0, ann.pages.length - 1);
   };
 
-  const reloadCanvas = async (opts?: { fit?: boolean }) => {
+  const reloadCanvas = async (opts?: { fit?: boolean; pageW?: number; pageH?: number }) => {
     const canvas = fabricRef.current;
     const container = containerRef.current;
     if (!canvas || !container) return;
-    const { w: pageW, h: pageH } = pageSizeRef.current;
+    const { w: pageWFromRef, h: pageHFromRef } = pageSizeRef.current;
+    const pageW = Number.isFinite(opts?.pageW) ? (opts?.pageW as number) : pageWFromRef;
+    const pageH = Number.isFinite(opts?.pageH) ? (opts?.pageH as number) : pageHFromRef;
     const pageCountNow = docRef.current.pages.length;
     if (pendingLoadAbortRef.current) pendingLoadAbortRef.current.abort();
     const loadAbort = new AbortController();
@@ -901,7 +904,9 @@ const NoteEditorModal = React.forwardRef<NoteEditorHandle, Props>(
     saveCanvasToDoc();
     docRef.current.page = { ...(docRef.current.page || {}), orientation: next };
     setPageOrientation(next);
-    void reloadCanvas({ fit: true }).then(() => {
+    const nextSize = getA4Size(next);
+    pageSizeRef.current = nextSize;
+    void reloadCanvas({ fit: true, pageW: nextSize.w, pageH: nextSize.h }).then(() => {
       goToPage(docRef.current.currentPage);
     });
   };
@@ -1993,37 +1998,6 @@ const NoteEditorModal = React.forwardRef<NoteEditorHandle, Props>(
                   置底
                 </button>
               </div>
-            )}
-
-            {mode === 'student' && canEdit && (
-              <button
-                type="button"
-                onClick={async () => {
-                  const prompt = window.prompt('輸入要生成思維圖的內容（可貼上段落/重點）');
-                  if (!prompt || !prompt.trim()) return;
-                    const canvas = fabricRef.current;
-                    if (!canvas) return;
-                    setLoading(true);
-                    setError('');
-                    try {
-                      const resp = await authService.generateMindmap({ prompt: prompt.trim() });
-                      const { w: pageW, h: pageH } = pageSizeRef.current;
-                      const offsetY = getPageOffsetY(docRef.current.currentPage ?? 0, pageH);
-                      insertMindmap(canvas, resp, pageW, pageH, offsetY);
-                      await scheduleStudentSave();
-                    } catch (e: any) {
-                      setError(e?.message || '生成失敗');
-                    } finally {
-                      setLoading(false);
-                    }
-                }}
-                className="px-3 py-2 rounded-2xl border-4 border-brand-brown bg-white text-brand-brown font-black shadow-comic hover:bg-gray-50 flex items-center gap-2"
-                disabled={loading}
-                title="AI 思維圖（會插入到本頁）"
-              >
-                <Sparkles className="w-4 h-4" />
-                AI思維圖
-              </button>
             )}
 
             {(mode === 'template' || mode === 'draft') && (
