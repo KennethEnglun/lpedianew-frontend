@@ -395,6 +395,8 @@ class AuthService {
     topic: string;
     corrections: Array<{ claim: string; issue: string; correction: string; needsVerification: boolean }>;
     notesMarkdown: string;
+    enrichment: string[];
+    selfCheck: Array<{ question: string; answer: string }>;
     mindmap: { nodes: Array<{ id: string; label: string }>; edges: Array<{ from: string; to: string; label?: string }> };
   }> {
     const response = await fetch(`${this.API_BASE}/ai/notes`, {

@@ -323,6 +323,22 @@ const StudentDashboard: React.FC = () => {
     setShowStudyPractice(true);
   }, []);
 
+  const handleExportAiNotesToSelfStudy = useCallback((payload: { content: string; difficulty?: string }) => {
+    const customContent = String(payload?.content || '').trim();
+    if (!customContent) return;
+
+    setRetrySessionScope({
+      contentSource: 'custom',
+      customContent,
+      difficulty: (payload?.difficulty as any) || '小三',
+      questionCount: 10,
+      topics: []
+    });
+    setShowAiNotes(false);
+    setShowSelfStudyHub(false);
+    setShowStudyPractice(true);
+  }, []);
+
   // 重新生成分析報告
   const handleRegenerateAnalytics = useCallback(async () => {
     if (!user?.id || !user?.username) return;
@@ -1386,6 +1402,7 @@ const StudentDashboard: React.FC = () => {
       <AiNotesModal
         open={showAiNotes}
         onClose={() => setShowAiNotes(false)}
+        onExportToSelfStudy={handleExportAiNotesToSelfStudy}
       />
       <AppStudioModal
         open={showAppStudio}

@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { BookOpen, Download, Hand, LocateFixed, RefreshCw, Send, Trash2, X, ZoomIn, ZoomOut } from 'lucide-react';
+import { BookOpen, Brain, Download, Hand, LocateFixed, RefreshCw, Send, Trash2, X, ZoomIn, ZoomOut } from 'lucide-react';
 import Button from '../Button';
 import { useAuth } from '../../contexts/AuthContext';
 import { authService } from '../../services/authService';
@@ -10,12 +10,15 @@ type AiNotesResult = {
   topic: string;
   corrections: Array<{ claim: string; issue: string; correction: string; needsVerification: boolean }>;
   notesMarkdown: string;
+  enrichment: string[];
+  selfCheck: Array<{ question: string; answer: string }>;
   mindmap: MindmapGraph;
 };
 
 type Props = {
   open: boolean;
   onClose: () => void;
+  onExportToSelfStudy?: (payload: { content: string; difficulty?: string }) => void;
 };
 
 const escapeHtml = (input: string) =>
@@ -145,6 +148,43 @@ const markdownToPlainText = (markdown: string) => {
     .replace(/\*([^*]+)\*/g, '$1')
     .replace(/`([^`]+)`/g, '$1')
     .replace(/\[([^\]]+)\]\(([^)]+)\)/g, '$1 ($2)');
+};
+
+const buildExportText = (result: AiNotesResult, opts?: { includeEnrichment?: boolean; includeSelfCheck?: boolean }) => {
+  const includeEnrichment = opts?.includeEnrichment !== false;
+  const includeSelfCheck = opts?.includeSelfCheck === true;
+
+  const parts: string[] = [];
+  const topic = String(result.topic || '').trim();
+  if (topic) parts.push(`主題：${topic}`);
+
+  const notesPlain = markdownToPlainText(result.notesMarkdown || '');
+  if (notesPlain.trim()) parts.push(`\n整理筆記：\n${notesPlain.trim()}`);
+
+  if (includeEnrichment) {
+    const enrich = Array.isArray(result.enrichment) ? result.enrichment.map((s) => String(s || '').trim()).filter(Boolean) : [];
+    if (enrich.length > 0) {
+      parts.push('\n知識增潤：');
+      for (const e of enrich) parts.push(`• ${e}`);
+    }
+  }
+
+  if (includeSelfCheck) {
+    const qs = Array.isArray(result.selfCheck) ? result.selfCheck : [];
+    const cleaned = qs
+      .map((q) => ({ question: String(q?.question || '').trim(), answer: String(q?.answer || '').trim() }))
+      .filter((q) => q.question && q.answer)
+      .slice(0, 5);
+    if (cleaned.length > 0) {
+      parts.push('\n自我檢查：');
+      cleaned.forEach((q, idx) => {
+        parts.push(`${idx + 1}. ${q.question}`);
+        parts.push(`   參考答案：${q.answer}`);
+      });
+    }
+  }
+
+  return parts.join('\n').replace(/\n{3,}/g, '\n\n').trim();
 };
 
 const wrapLineByChars = (ctx: CanvasRenderingContext2D, line: string, maxWidth: number) => {
@@ -313,7 +353,7 @@ const downloadSvgAsPng = async (svgEl: SVGSVGElement, filenamePrefix: string) =>
   });
 };
 
-export const AiNotesModal: React.FC<Props> = ({ open, onClose }) => {
+export const AiNotesModal: React.FC<Props> = ({ open, onClose, onExportToSelfStudy }) => {
   const { user } = useAuth();
   const [text, setText] = useState('');
   const [loading, setLoading] = useState(false);
@@ -440,8 +480,8 @@ export const AiNotesModal: React.FC<Props> = ({ open, onClose }) => {
 
   const handleDownloadNotes = async () => {
     if (!result) return;
-    const plain = markdownToPlainText(result.notesMarkdown);
     const title = String(result.topic || 'AI筆記').trim() || 'AI筆記';
+    const plain = buildExportText(result, { includeEnrichment: true, includeSelfCheck: true });
     await downloadTextAsPngPages({
       title: `AI筆記：${title}`,
       text: plain,
@@ -527,6 +567,21 @@ export const AiNotesModal: React.FC<Props> = ({ open, onClose }) => {
                   <div className="flex gap-2">
                     <button
                       type="button"
+                      onClick={() => {
+                        if (!result) return;
+                        const raw = buildExportText(result, { includeEnrichment: true, includeSelfCheck: false });
+                        // StudyPractice 自定義內容限制 2000 字
+                        const limit = 2000;
+                        const content = raw.length > limit ? `${raw.slice(0, Math.max(0, limit - 18))}\n\n（內容已截短以配合出題限制）` : raw;
+                        onExportToSelfStudy?.({ content, difficulty: grade });
+                      }}
+                      className="px-3 py-2 rounded-xl border-2 border-gray-300 bg-white text-gray-700 font-bold hover:bg-gray-50 inline-flex items-center gap-2"
+                    >
+                      <Brain className="w-4 h-4" />
+                      匯到自學天地出題
+                    </button>
+                    <button
+                      type="button"
                       onClick={() => void handleDownloadNotes()}
                       className="px-3 py-2 rounded-xl border-2 border-gray-300 bg-white text-gray-700 font-bold hover:bg-gray-50 inline-flex items-center gap-2"
                     >
@@ -571,6 +626,37 @@ export const AiNotesModal: React.FC<Props> = ({ open, onClose }) => {
                 <div className="bg-white rounded-2xl border-2 border-gray-100 p-4">
                   <div dangerouslySetInnerHTML={{ __html: markdownToSafeHtml(result.notesMarkdown) }} />
                 </div>
+              </div>
+
+              <div className="bg-white rounded-2xl p-5 shadow-comic border-2 border-brand-brown/10">
+                <div className="font-black text-brand-brown text-lg mb-3">知識增潤</div>
+                {Array.isArray(result.enrichment) && result.enrichment.length > 0 ? (
+                  <ul className="list-disc pl-6 space-y-2 text-gray-700 font-bold">
+                    {result.enrichment.slice(0, 5).map((e, idx) => (
+                      <li key={idx}>{e}</li>
+                    ))}
+                  </ul>
+                ) : (
+                  <div className="text-gray-600 font-bold">暫無增潤內容。</div>
+                )}
+              </div>
+
+              <div className="bg-white rounded-2xl p-5 shadow-comic border-2 border-brand-brown/10">
+                <div className="font-black text-brand-brown text-lg mb-3">自我檢查題</div>
+                {Array.isArray(result.selfCheck) && result.selfCheck.length > 0 ? (
+                  <div className="space-y-3">
+                    {result.selfCheck.slice(0, 5).map((q, idx) => (
+                      <div key={idx} className="bg-brand-cream rounded-2xl p-4 border-2 border-[#E6D2B5]">
+                        <div className="font-black text-[#2F2A26]">{idx + 1}. {q.question}</div>
+                        <div className="text-sm text-gray-700 mt-2">
+                          <span className="font-black">參考答案：</span>{q.answer}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="text-gray-600 font-bold">暫無自我檢查題。</div>
+                )}
               </div>
 
               <div className="bg-white rounded-2xl p-5 shadow-comic border-2 border-brand-brown/10">
