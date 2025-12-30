@@ -43,6 +43,7 @@ export type NoteEditorHandle = {
 type Props = {
   open: boolean;
   onClose: () => void;
+  onSubmitted?: () => void;
   authService: any;
   mode: Mode;
   noteId?: string;
@@ -569,7 +570,10 @@ const NoteEditorModal = React.forwardRef<NoteEditorHandle, Props>(
       }
 
       if (mode === 'student') {
-        if (locked) {
+        const readOnly = !!submittedAt || !canEdit;
+        const isAnnotation = layer === 'annotation';
+        const shouldLock = readOnly || locked || isAnnotation;
+        if (shouldLock) {
           o.selectable = false;
           o.evented = false;
           (o as any).hasControls = false;
@@ -579,6 +583,11 @@ const NoteEditorModal = React.forwardRef<NoteEditorHandle, Props>(
           (o as any).lockScalingX = true;
           (o as any).lockScalingY = true;
           (o as any).lockRotation = true;
+          if (isAnnotation) o.opacity = 1;
+          // fabric IText/Textbox uses `editable` to allow entering editing mode.
+          if ((o as any).type === 'textbox' || (o as any).type === 'i-text' || (o as any).type === 'text') {
+            (o as any).editable = false;
+          }
         } else {
           o.selectable = true;
           o.evented = true;
@@ -589,6 +598,9 @@ const NoteEditorModal = React.forwardRef<NoteEditorHandle, Props>(
           (o as any).lockScalingX = false;
           (o as any).lockScalingY = false;
           (o as any).lockRotation = false;
+          if ((o as any).type === 'textbox' || (o as any).type === 'i-text' || (o as any).type === 'text') {
+            (o as any).editable = true;
+          }
         }
         continue;
       }
@@ -783,7 +795,7 @@ const NoteEditorModal = React.forwardRef<NoteEditorHandle, Props>(
             lpediaPageIndex: i
           });
         }
-        if (mode === 'teacher') {
+        if (mode === 'teacher' || mode === 'student') {
           const ann = annotationDocRef.current;
           const annPage = ann ? ann.pages[i] : null;
           const annObjects = Array.isArray((annPage as any)?.objects) ? (annPage as any).objects : [];
@@ -1156,6 +1168,7 @@ const NoteEditorModal = React.forwardRef<NoteEditorHandle, Props>(
       }
       const local = (await idbGet(buildLocalKey(nid, viewerId)).catch(() => null)) as any;
       const serverSnap = server?.submission?.snapshot;
+      const serverAnn = server?.submission?.annotations;
       const localSnap = local?.snapshot;
       const localSavedAt = Date.parse(String(local?.savedAt || ''));
       const serverUpdatedAt = Date.parse(String(server?.submission?.updatedAt || ''));
@@ -1177,6 +1190,21 @@ const NoteEditorModal = React.forwardRef<NoteEditorHandle, Props>(
         setError('此筆記為舊版格式（tldraw），已改用新方案（Fabric）。請重新建立筆記任務。');
       } else {
         docRef.current = normalizeDoc(chosen);
+      }
+
+      // Load teacher annotations (批改層) for student to view (read-only overlay)
+      if (serverAnn && !looksLikeLegacyTldrawSnapshot(serverAnn)) {
+        const annDoc = normalizeDoc(serverAnn);
+        const aligned: FabricDocSnapshot = {
+          format: 'fabric-v1',
+          version: 1,
+          page: { orientation: docRef.current?.page?.orientation === 'landscape' ? 'landscape' : 'portrait' },
+          currentPage: docRef.current.currentPage,
+          pages: docRef.current.pages.map((_, idx) => annDoc.pages[idx] || emptyPage())
+        };
+        annotationDocRef.current = aligned;
+      } else {
+        annotationDocRef.current = null;
       }
 
       setSubmittedAt(server?.submission?.submittedAt || null);
@@ -1503,6 +1531,13 @@ const NoteEditorModal = React.forwardRef<NoteEditorHandle, Props>(
     const onKeyDown = (evt: KeyboardEvent) => {
       if (!open) return;
       if (evt.code === 'Space') {
+        const active = canvas.getActiveObject() as any;
+        const isEditingText = !!active && !!(active as any).isEditing;
+        const el = document.activeElement as any;
+        const isTyping =
+          isEditingText ||
+          (el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.isContentEditable));
+        if (isTyping) return;
         spaceDownRef.current = true;
         evt.preventDefault();
         canvas.defaultCursor = 'grab';
@@ -2155,17 +2190,18 @@ const NoteEditorModal = React.forwardRef<NoteEditorHandle, Props>(
                   if (!nid) return;
                   setLoading(true);
                   setError('');
-                  try {
-                    saveCanvasToDoc();
-                    await authService.saveMyNoteDraft(nid, docRef.current);
-                    const resp = await authService.submitMyNote(nid);
-                    setSubmittedAt(resp?.submission?.submittedAt || new Date().toISOString());
-                    setCanEdit(false);
-                    alert('已交回！');
-                  } catch (e: any) {
-                    setError(e?.message || '交回失敗');
-                  } finally {
-                    setLoading(false);
+	                  try {
+	                    saveCanvasToDoc();
+	                    await authService.saveMyNoteDraft(nid, docRef.current);
+	                    const resp = await authService.submitMyNote(nid);
+	                    setSubmittedAt(resp?.submission?.submittedAt || new Date().toISOString());
+	                    setCanEdit(false);
+	                    onSubmitted?.();
+	                    alert('已交回！');
+	                  } catch (e: any) {
+	                    setError(e?.message || '交回失敗');
+	                  } finally {
+	                    setLoading(false);
                   }
                 }}
                 className="px-3 py-2 rounded-2xl border-4 border-green-700 bg-green-600 text-white font-black shadow-comic hover:bg-green-700 flex items-center gap-2"

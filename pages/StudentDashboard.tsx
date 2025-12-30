@@ -1497,6 +1497,7 @@ const StudentDashboard: React.FC = () => {
         <NoteEditorModal
           open={showNoteModal}
           onClose={() => { setShowNoteModal(false); setSelectedNoteId(null); }}
+          onSubmitted={() => loadStudentTasks()}
           authService={authService}
           mode="student"
           noteId={selectedNoteId || undefined}
