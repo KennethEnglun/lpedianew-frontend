@@ -1306,6 +1306,67 @@ class AuthService {
     return this.handleResponse(response);
   }
 
+  async createMyTopicFolder(payload: { parentId: string; name: string }): Promise<{ folder: any }> {
+    const response = await fetch(`${this.API_BASE}/class-folders/me/topics`, {
+      method: 'POST',
+      headers: this.getAuthHeaders(),
+      body: JSON.stringify(payload || {})
+    });
+    return this.handleResponse(response);
+  }
+
+  // === AI筆記（儲存/資料夾）===
+  async listMyAiNotes(params?: { folderId?: string | null }): Promise<{ notes: any[] }> {
+    const search = new URLSearchParams();
+    if (params?.folderId !== undefined) search.append('folderId', params.folderId ? String(params.folderId) : '');
+    const qs = search.toString() ? `?${search.toString()}` : '';
+    const response = await fetch(`${this.API_BASE}/ai-notes/me${qs}`, {
+      headers: this.getAuthHeaders()
+    });
+    return this.handleResponse(response);
+  }
+
+  async createMyAiNote(payload: {
+    folderId?: string | null;
+    title?: string;
+    sourceText?: string;
+    aiResult: any;
+  }): Promise<{ note: any }> {
+    const response = await fetch(`${this.API_BASE}/ai-notes/me`, {
+      method: 'POST',
+      headers: this.getAuthHeaders(),
+      body: JSON.stringify(payload || {})
+    });
+    return this.handleResponse(response);
+  }
+
+  async updateMyAiNote(noteId: string, patch: { folderId?: string | null; title?: string }): Promise<{ note: any }> {
+    const response = await fetch(`${this.API_BASE}/ai-notes/me/${encodeURIComponent(noteId)}`, {
+      method: 'PATCH',
+      headers: this.getAuthHeaders(),
+      body: JSON.stringify(patch || {})
+    });
+    return this.handleResponse(response);
+  }
+
+  async deleteMyAiNote(noteId: string): Promise<{ deleted: boolean }> {
+    const response = await fetch(`${this.API_BASE}/ai-notes/me/${encodeURIComponent(noteId)}`, {
+      method: 'DELETE',
+      headers: this.getAuthHeaders()
+    });
+    return this.handleResponse(response);
+  }
+
+  async listStudentAiNotes(studentId: string, params?: { folderId?: string | null }): Promise<{ notes: any[] }> {
+    const search = new URLSearchParams();
+    if (params?.folderId !== undefined) search.append('folderId', params.folderId ? String(params.folderId) : '');
+    const qs = search.toString() ? `?${search.toString()}` : '';
+    const response = await fetch(`${this.API_BASE}/ai-notes/teacher/${encodeURIComponent(studentId)}${qs}`, {
+      headers: this.getAuthHeaders()
+    });
+    return this.handleResponse(response);
+  }
+
   // === 小測驗相關API ===
 
   // 創建小測驗（教師專用）

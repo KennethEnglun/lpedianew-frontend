@@ -1,10 +1,11 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Archive, ArchiveRestore, BarChart3, ChevronLeft, FolderInput, Pencil, RefreshCw, Trash2, X } from 'lucide-react';
+import { Archive, ArchiveRestore, BarChart3, BookOpen, ChevronLeft, FolderInput, Pencil, RefreshCw, Trash2, X } from 'lucide-react';
 import { VISIBLE_SUBJECTS } from '../platform';
 import RichHtmlContent from './RichHtmlContent';
 import NoteCreateModal from './NoteCreateModal';
 import NoteEditorModal from './NoteEditorModal';
 import { ScopeCardExplorerModal } from './ScopeCardExplorerModal';
+import { StudentAiNotesModal } from './StudentAiNotesModal';
 
 type ManagedTaskType = 'assignment' | 'quiz' | 'game' | 'contest' | 'ai-bot' | 'note';
 
@@ -150,6 +151,7 @@ const AssignmentExplorerModal: React.FC<Props> = ({ open, onClose, authService, 
   const [noteEditorNoteId, setNoteEditorNoteId] = useState('');
   const [noteEditorStudentId, setNoteEditorStudentId] = useState('');
   const [scopeCardOpen, setScopeCardOpen] = useState(false);
+  const [studentAiNotesOpen, setStudentAiNotesOpen] = useState(false);
 
   const canArchive = viewerRole === 'admin';
 
@@ -516,6 +518,15 @@ const AssignmentExplorerModal: React.FC<Props> = ({ open, onClose, authService, 
 			            >
 			              <BarChart3 className="w-4 h-4" />
 			              學生學習分析
+			            </button>
+			            <button
+			              type="button"
+			              onClick={() => setStudentAiNotesOpen(true)}
+			              className="px-4 py-2 rounded-2xl border-4 border-brand-brown bg-white text-brand-brown font-black shadow-comic hover:bg-gray-50 flex items-center gap-2"
+			              title="查看每位學生的 AI筆記"
+			            >
+			              <BookOpen className="w-4 h-4" />
+			              學生AI筆記
 			            </button>
 			            {canArchive && (
 			              <button
@@ -1070,6 +1081,12 @@ const AssignmentExplorerModal: React.FC<Props> = ({ open, onClose, authService, 
           )}
 	        </div>
 	        </div>
+
+	        <StudentAiNotesModal
+	          open={studentAiNotesOpen}
+	          onClose={() => setStudentAiNotesOpen(false)}
+	          authService={authService}
+	        />
 
 	        <ScopeCardExplorerModal
 	          isOpen={scopeCardOpen}

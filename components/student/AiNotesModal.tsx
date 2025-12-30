@@ -21,6 +21,16 @@ type Props = {
   onExportToSelfStudy?: (payload: { content: string; difficulty?: string }) => void;
 };
 
+type AiNoteRecord = AiNotesResult & {
+  id: string;
+  title: string;
+  folderId: string | null;
+  folderSnapshot: any | null;
+  sourceText?: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
 const escapeHtml = (input: string) =>
   input
     .replace(/&/g, '&amp;')
@@ -355,10 +365,23 @@ const downloadSvgAsPng = async (svgEl: SVGSVGElement, filenamePrefix: string) =>
 
 export const AiNotesModal: React.FC<Props> = ({ open, onClose, onExportToSelfStudy }) => {
   const { user } = useAuth();
+  const [tab, setTab] = useState<'create' | 'library'>('create');
   const [text, setText] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const [result, setResult] = useState<AiNotesResult | null>(null);
+  const [generatedResult, setGeneratedResult] = useState<AiNotesResult | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [saveTitle, setSaveTitle] = useState('');
+  const [foldersLoading, setFoldersLoading] = useState(false);
+  const [foldersError, setFoldersError] = useState('');
+  const [classFolders, setClassFolders] = useState<any[]>([]);
+  const [selectedStageId, setSelectedStageId] = useState('');
+  const [selectedTopicId, setSelectedTopicId] = useState('');
+  const [selectedSubfolderId, setSelectedSubfolderId] = useState('');
+  const [myNotesLoading, setMyNotesLoading] = useState(false);
+  const [myNotesError, setMyNotesError] = useState('');
+  const [myNotes, setMyNotes] = useState<AiNoteRecord[]>([]);
+  const [selectedNoteId, setSelectedNoteId] = useState<string | null>(null);
   const mindmapViewportRef = useRef<HTMLDivElement | null>(null);
   const mindmapSvgRef = useRef<SVGSVGElement | null>(null);
   const mindmapExportSvgRef = useRef<SVGSVGElement | null>(null);
@@ -380,12 +403,45 @@ export const AiNotesModal: React.FC<Props> = ({ open, onClose, onExportToSelfStu
     if (!open) {
       setError('');
       setLoading(false);
-      setResult(null);
+      setGeneratedResult(null);
       setText('');
+      setTab('create');
+      setSaving(false);
+      setSaveTitle('');
+      setFoldersLoading(false);
+      setFoldersError('');
+      setClassFolders([]);
+      setSelectedStageId('');
+      setSelectedTopicId('');
+      setSelectedSubfolderId('');
+      setMyNotesLoading(false);
+      setMyNotesError('');
+      setMyNotes([]);
+      setSelectedNoteId(null);
       setMindmapScale(1);
       setMindmapOffset({ x: 0, y: 0 });
     }
   }, [open]);
+
+  const displayedNote: AiNotesResult | null = useMemo(() => {
+    if (tab === 'library') {
+      const note = myNotes.find((n) => String(n.id) === String(selectedNoteId || '')) || null;
+      return note ? {
+        topic: note.topic,
+        corrections: note.corrections,
+        notesMarkdown: note.notesMarkdown,
+        enrichment: note.enrichment,
+        selfCheck: note.selfCheck,
+        mindmap: note.mindmap
+      } : null;
+    }
+    return generatedResult;
+  }, [generatedResult, myNotes, selectedNoteId, tab]);
+
+  const displayedNoteMeta = useMemo(() => {
+    if (tab !== 'library') return null;
+    return myNotes.find((n) => String(n.id) === String(selectedNoteId || '')) || null;
+  }, [myNotes, selectedNoteId, tab]);
 
   const clamp = (n: number, min: number, max: number) => Math.min(max, Math.max(min, n));
 
@@ -408,16 +464,15 @@ export const AiNotesModal: React.FC<Props> = ({ open, onClose, onExportToSelfStu
 
   useEffect(() => {
     if (!open) return;
-    if (!result?.mindmap) return;
-    // Ensure SVG is mounted before measuring.
+    if (!displayedNote?.mindmap) return;
     const t = window.setTimeout(() => fitMindmap(), 0);
     return () => window.clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, result?.mindmap]);
+  }, [open, displayedNote?.mindmap, selectedNoteId, tab]);
 
   useEffect(() => {
     if (!open) return;
-    if (!result?.mindmap) return;
+    if (!displayedNote?.mindmap) return;
     const viewport = mindmapViewportRef.current;
     if (!viewport || typeof ResizeObserver === 'undefined') return;
     const ro = new ResizeObserver(() => {
@@ -429,7 +484,7 @@ export const AiNotesModal: React.FC<Props> = ({ open, onClose, onExportToSelfStu
     ro.observe(viewport);
     return () => ro.disconnect();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, result?.mindmap, mindmapScale, mindmapOffset.x, mindmapOffset.y]);
+  }, [open, displayedNote?.mindmap, mindmapScale, mindmapOffset.x, mindmapOffset.y]);
 
   const zoomBy = (factor: number) => {
     const viewport = mindmapViewportRef.current;
@@ -468,7 +523,8 @@ export const AiNotesModal: React.FC<Props> = ({ open, onClose, onExportToSelfStu
         maxNodes: 18,
         ...(grade ? { grade } : null)
       });
-      setResult(resp as any);
+      setGeneratedResult(resp as any);
+      setSaveTitle(String((resp as any)?.topic || 'AI筆記').trim());
       window.setTimeout(() => fitMindmap(), 0);
     } catch (e) {
       const msg = e instanceof Error ? e.message : 'AI筆記生成失敗';
@@ -479,9 +535,9 @@ export const AiNotesModal: React.FC<Props> = ({ open, onClose, onExportToSelfStu
   };
 
   const handleDownloadNotes = async () => {
-    if (!result) return;
-    const title = String(result.topic || 'AI筆記').trim() || 'AI筆記';
-    const plain = buildExportText(result, { includeEnrichment: true, includeSelfCheck: true });
+    if (!displayedNote) return;
+    const title = String(displayedNote.topic || 'AI筆記').trim() || 'AI筆記';
+    const plain = buildExportText(displayedNote, { includeEnrichment: true, includeSelfCheck: true });
     await downloadTextAsPngPages({
       title: `AI筆記：${title}`,
       text: plain,
@@ -492,6 +548,121 @@ export const AiNotesModal: React.FC<Props> = ({ open, onClose, onExportToSelfStu
   const handleDownloadMindmap = async () => {
     if (!mindmapExportSvgRef.current) return;
     await downloadSvgAsPng(mindmapExportSvgRef.current, 'ai-mindmap');
+  };
+
+  const loadFolders = async () => {
+    setFoldersLoading(true);
+    setFoldersError('');
+    try {
+      const resp = await authService.getMyClassFolders();
+      setClassFolders(Array.isArray(resp?.folders) ? resp.folders : []);
+      if (!selectedStageId) {
+        const stages = (Array.isArray(resp?.folders) ? resp.folders : []).filter((f: any) => f && Number(f.level) === 1 && !f.archivedAt);
+        if (stages.length > 0) setSelectedStageId(String(stages[0].id));
+      }
+    } catch (e) {
+      setClassFolders([]);
+      setFoldersError(e instanceof Error ? e.message : '載入資料夾失敗');
+    } finally {
+      setFoldersLoading(false);
+    }
+  };
+
+  const loadMyNotes = async (opts?: { folderId?: string | null }) => {
+    setMyNotesLoading(true);
+    setMyNotesError('');
+    try {
+      const resp = await authService.listMyAiNotes(opts || {});
+      setMyNotes(Array.isArray(resp?.notes) ? resp.notes : []);
+      if (!selectedNoteId && Array.isArray(resp?.notes) && resp.notes.length > 0) {
+        setSelectedNoteId(String(resp.notes[0].id));
+      }
+    } catch (e) {
+      setMyNotes([]);
+      setMyNotesError(e instanceof Error ? e.message : '載入AI筆記失敗');
+    } finally {
+      setMyNotesLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (!open) return;
+    void loadFolders();
+    void loadMyNotes();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
+
+  useEffect(() => {
+    // Reset lower levels when parent changes
+    setSelectedTopicId('');
+    setSelectedSubfolderId('');
+  }, [selectedStageId]);
+
+  useEffect(() => {
+    setSelectedSubfolderId('');
+  }, [selectedTopicId]);
+
+  const stageFolders = useMemo(() => classFolders.filter((f: any) => f && Number(f.level) === 1 && !f.archivedAt), [classFolders]);
+  const topicFolders = useMemo(() => classFolders.filter((f: any) => f && Number(f.level) === 2 && !f.archivedAt && String(f.parentId || '') === String(selectedStageId || '')), [classFolders, selectedStageId]);
+  const subFolders = useMemo(() => classFolders.filter((f: any) => f && Number(f.level) === 3 && !f.archivedAt && String(f.parentId || '') === String(selectedTopicId || '')), [classFolders, selectedTopicId]);
+
+  const getFolderPathText = (snapshot: any | null) => {
+    const path = Array.isArray(snapshot?.path) ? snapshot.path : [];
+    const names = path.map((p: any) => String(p?.name || '').trim()).filter(Boolean);
+    return names.join(' / ');
+  };
+
+  const handleCreateTopic = async () => {
+    if (!selectedStageId) return alert('請先選擇學段');
+    const name = prompt('輸入新課題名稱', '');
+    if (!name || !name.trim()) return;
+    try {
+      await authService.createMyTopicFolder({ parentId: selectedStageId, name: name.trim() });
+      const refreshed = await authService.getMyClassFolders();
+      const nextFolders = Array.isArray(refreshed?.folders) ? refreshed.folders : [];
+      setClassFolders(nextFolders);
+      const topics = nextFolders.filter((f: any) => f && Number(f.level) === 2 && !f.archivedAt && String(f.parentId || '') === String(selectedStageId));
+      const found = topics.find((t: any) => String(t.name || '').trim() === name.trim());
+      if (found?.id) setSelectedTopicId(String(found.id));
+    } catch (e) {
+      alert(e instanceof Error ? e.message : '新增課題失敗');
+    }
+  };
+
+  const handleSave = async () => {
+    if (!generatedResult) return;
+    const folderId = selectedSubfolderId || selectedTopicId || null;
+    setSaving(true);
+    try {
+      const resp = await authService.createMyAiNote({
+        folderId,
+        title: String(saveTitle || generatedResult.topic || 'AI筆記').trim(),
+        sourceText: text,
+        aiResult: generatedResult
+      });
+      const savedId = String(resp?.note?.id || '');
+      await loadMyNotes();
+      if (savedId) setSelectedNoteId(savedId);
+      setTab('library');
+      alert('已儲存 AI筆記');
+    } catch (e) {
+      alert(e instanceof Error ? e.message : '儲存失敗');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleDeleteNote = async (noteId: string) => {
+    if (!noteId) return;
+    if (!confirm('確定要刪除此AI筆記嗎？此操作無法復原。')) return;
+    try {
+      await authService.deleteMyAiNote(noteId);
+      const next = myNotes.filter((n) => String(n.id) !== String(noteId));
+      setMyNotes(next);
+      setSelectedNoteId(next[0]?.id ? String(next[0].id) : null);
+    } catch (e) {
+      alert(e instanceof Error ? e.message : '刪除失敗');
+    }
   };
 
   if (!open) return null;
@@ -515,6 +686,28 @@ export const AiNotesModal: React.FC<Props> = ({ open, onClose, onExportToSelfStu
         </div>
 
         <div className="p-6 overflow-y-auto max-h-[calc(92vh-76px)] bg-brand-cream">
+          <div className="flex gap-2 mb-4">
+            <button
+              type="button"
+              onClick={() => setTab('create')}
+              className={`px-4 py-2 rounded-xl font-black border-2 transition-all ${
+                tab === 'create' ? 'bg-brand-brown text-white border-brand-brown' : 'bg-white text-brand-brown border-brand-brown/40 hover:bg-brand-cream'
+              }`}
+            >
+              新筆記
+            </button>
+            <button
+              type="button"
+              onClick={() => { setTab('library'); void loadMyNotes(); }}
+              className={`px-4 py-2 rounded-xl font-black border-2 transition-all ${
+                tab === 'library' ? 'bg-brand-brown text-white border-brand-brown' : 'bg-white text-brand-brown border-brand-brown/40 hover:bg-brand-cream'
+              }`}
+            >
+              我的筆記
+            </button>
+          </div>
+
+          {tab === 'create' ? (
           <div className="bg-white rounded-2xl p-5 shadow-comic border-2 border-brand-brown/10">
             <div className="font-black text-brand-brown mb-3">把你的記錄貼上來（可自由換行）</div>
             <textarea
@@ -547,7 +740,7 @@ export const AiNotesModal: React.FC<Props> = ({ open, onClose, onExportToSelfStu
               </Button>
               <Button
                 className="bg-gray-200 hover:bg-gray-300 text-gray-700 font-black inline-flex items-center gap-2"
-                onClick={() => { setText(''); setResult(null); setError(''); }}
+                onClick={() => { setText(''); setGeneratedResult(null); setError(''); }}
                 disabled={loading}
               >
                 <Trash2 className="w-5 h-5" />
@@ -558,8 +751,191 @@ export const AiNotesModal: React.FC<Props> = ({ open, onClose, onExportToSelfStu
               </div>
             </div>
           </div>
+          ) : (
+            <div className="bg-white rounded-2xl p-5 shadow-comic border-2 border-brand-brown/10">
+              <div className="flex items-center justify-between gap-3 mb-3">
+                <div className="font-black text-brand-brown">我的 AI筆記</div>
+                <button
+                  type="button"
+                  onClick={() => void loadMyNotes()}
+                  className="px-3 py-2 rounded-xl border-2 border-gray-300 bg-white text-gray-700 font-bold hover:bg-gray-50 inline-flex items-center gap-2"
+                >
+                  <RefreshCw className={`w-4 h-4 ${myNotesLoading ? 'animate-spin' : ''}`} />
+                  重新載入
+                </button>
+              </div>
 
-          {result ? (
+              {myNotesError ? (
+                <div className="bg-red-50 border-2 border-red-200 text-red-700 rounded-2xl p-3 font-bold">
+                  {myNotesError}
+                </div>
+              ) : null}
+
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="md:col-span-1">
+                  <div className="text-sm font-black text-[#5E4C40] mb-2">資料夾篩選</div>
+                  <div className="space-y-2">
+                    <select
+                      value={selectedStageId}
+                      onChange={(e) => setSelectedStageId(e.target.value)}
+                      className="w-full px-3 py-2 border-2 border-gray-300 rounded-xl focus:outline-none focus:border-brand-brown"
+                      disabled={foldersLoading}
+                    >
+                      <option value="">（選擇學段）</option>
+                      {stageFolders.map((f: any) => (
+                        <option key={f.id} value={String(f.id)}>{String(f.name || '')}</option>
+                      ))}
+                    </select>
+                    <select
+                      value={selectedTopicId}
+                      onChange={(e) => setSelectedTopicId(e.target.value)}
+                      className="w-full px-3 py-2 border-2 border-gray-300 rounded-xl focus:outline-none focus:border-brand-brown"
+                      disabled={!selectedStageId || foldersLoading}
+                    >
+                      <option value="">（全部課題）</option>
+                      {topicFolders.map((f: any) => (
+                        <option key={f.id} value={String(f.id)}>{String(f.name || '')}</option>
+                      ))}
+                    </select>
+                    <div className="flex gap-2">
+                      <button
+                        type="button"
+                        onClick={() => void handleCreateTopic()}
+                        className="flex-1 px-3 py-2 rounded-xl border-2 border-gray-300 bg-white text-gray-700 font-bold hover:bg-gray-50"
+                        disabled={!selectedStageId || foldersLoading}
+                      >
+                        新增課題
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => void loadMyNotes({ folderId: selectedSubfolderId || selectedTopicId || null })}
+                        className="px-3 py-2 rounded-xl border-2 border-gray-300 bg-white text-gray-700 font-bold hover:bg-gray-50"
+                        disabled={myNotesLoading}
+                        title="套用篩選"
+                      >
+                        套用
+                      </button>
+                    </div>
+                    {foldersError ? (
+                      <div className="text-xs text-red-600 font-bold">{foldersError}</div>
+                    ) : null}
+                  </div>
+                </div>
+                <div className="md:col-span-2">
+                  <div className="text-sm font-black text-[#5E4C40] mb-2">筆記列表</div>
+                  {myNotesLoading ? (
+                    <div className="text-gray-600 font-bold">載入中...</div>
+                  ) : myNotes.length === 0 ? (
+                    <div className="text-gray-600 font-bold">暫無已儲存的筆記。</div>
+                  ) : (
+                    <div className="space-y-2 max-h-[260px] overflow-y-auto pr-1">
+                      {myNotes.slice(0, 200).map((n) => {
+                        const selected = String(n.id) === String(selectedNoteId || '');
+                        return (
+                          <button
+                            key={n.id}
+                            type="button"
+                            onClick={() => setSelectedNoteId(String(n.id))}
+                            className={`w-full text-left rounded-2xl border-2 p-3 transition-all ${
+                              selected ? 'bg-blue-50 border-blue-300' : 'bg-white border-gray-200 hover:bg-gray-50'
+                            }`}
+                          >
+                            <div className="font-black text-[#2F2A26]">{n.title || n.topic || 'AI筆記'}</div>
+                            <div className="text-xs text-gray-600 font-bold mt-1">
+                              {getFolderPathText(n.folderSnapshot) || '未分類'} ｜ {n.createdAt ? new Date(n.createdAt).toLocaleString('zh-HK') : ''}
+                            </div>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {tab === 'create' && generatedResult ? (
+            <div className="mt-4 bg-white rounded-2xl p-5 shadow-comic border-2 border-brand-brown/10">
+              <div className="font-black text-brand-brown text-lg mb-3">儲存到資料夾</div>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                <div>
+                  <div className="text-sm font-bold text-gray-700 mb-1">學段</div>
+                  <select
+                    value={selectedStageId}
+                    onChange={(e) => setSelectedStageId(e.target.value)}
+                    className="w-full px-3 py-2 border-2 border-gray-300 rounded-xl focus:outline-none focus:border-brand-brown"
+                    disabled={foldersLoading}
+                  >
+                    <option value="">（未分類）</option>
+                    {stageFolders.map((f: any) => (
+                      <option key={f.id} value={String(f.id)}>{String(f.name || '')}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <div className="text-sm font-bold text-gray-700 mb-1">課題</div>
+                  <select
+                    value={selectedTopicId}
+                    onChange={(e) => setSelectedTopicId(e.target.value)}
+                    className="w-full px-3 py-2 border-2 border-gray-300 rounded-xl focus:outline-none focus:border-brand-brown"
+                    disabled={!selectedStageId || foldersLoading}
+                  >
+                    <option value="">（不選）</option>
+                    {topicFolders.map((f: any) => (
+                      <option key={f.id} value={String(f.id)}>{String(f.name || '')}</option>
+                    ))}
+                  </select>
+                  <div className="mt-2">
+                    <button
+                      type="button"
+                      onClick={() => void handleCreateTopic()}
+                      className="px-3 py-2 rounded-xl border-2 border-gray-300 bg-white text-gray-700 font-bold hover:bg-gray-50"
+                      disabled={!selectedStageId || foldersLoading}
+                    >
+                      新增課題
+                    </button>
+                  </div>
+                </div>
+                <div>
+                  <div className="text-sm font-bold text-gray-700 mb-1">子資料夾（可選）</div>
+                  <select
+                    value={selectedSubfolderId}
+                    onChange={(e) => setSelectedSubfolderId(e.target.value)}
+                    className="w-full px-3 py-2 border-2 border-gray-300 rounded-xl focus:outline-none focus:border-brand-brown"
+                    disabled={!selectedTopicId || foldersLoading}
+                  >
+                    <option value="">（不選）</option>
+                    {subFolders.map((f: any) => (
+                      <option key={f.id} value={String(f.id)}>{String(f.name || '')}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+              <div className="mt-3 grid grid-cols-1 md:grid-cols-3 gap-3 items-end">
+                <div className="md:col-span-2">
+                  <div className="text-sm font-bold text-gray-700 mb-1">標題</div>
+                  <input
+                    value={saveTitle}
+                    onChange={(e) => setSaveTitle(e.target.value)}
+                    className="w-full px-3 py-2 border-2 border-gray-300 rounded-xl focus:outline-none focus:border-brand-brown"
+                    placeholder="例如：水的三種狀態"
+                  />
+                </div>
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => void handleSave()}
+                    className="w-full px-4 py-3 rounded-2xl bg-[#93C47D] border-4 border-brand-brown text-brand-brown font-black shadow-comic active:translate-y-1 active:shadow-none hover:bg-[#86b572]"
+                    disabled={saving}
+                  >
+                    {saving ? '儲存中...' : '儲存'}
+                  </button>
+                </div>
+              </div>
+            </div>
+          ) : null}
+
+          {displayedNote ? (
             <div className="mt-6 space-y-6">
               <div className="bg-white rounded-2xl p-5 shadow-comic border-2 border-brand-brown/10">
                 <div className="flex items-center justify-between gap-3">
@@ -568,8 +944,8 @@ export const AiNotesModal: React.FC<Props> = ({ open, onClose, onExportToSelfStu
                     <button
                       type="button"
                       onClick={() => {
-                        if (!result) return;
-                        const raw = buildExportText(result, { includeEnrichment: true, includeSelfCheck: false });
+                        if (!displayedNote) return;
+                        const raw = buildExportText(displayedNote, { includeEnrichment: true, includeSelfCheck: false });
                         // StudyPractice 自定義內容限制 2000 字
                         const limit = 2000;
                         const content = raw.length > limit ? `${raw.slice(0, Math.max(0, limit - 18))}\n\n（內容已截短以配合出題限制）` : raw;
@@ -592,21 +968,34 @@ export const AiNotesModal: React.FC<Props> = ({ open, onClose, onExportToSelfStu
                       type="button"
                       onClick={() => void handleDownloadMindmap()}
                       className="px-3 py-2 rounded-xl border-2 border-gray-300 bg-white text-gray-700 font-bold hover:bg-gray-50 inline-flex items-center gap-2"
-                      disabled={!result.mindmap}
+                      disabled={!displayedNote.mindmap}
                     >
                       <Download className="w-4 h-4" />
                       下載思維圖圖片
                     </button>
                   </div>
                 </div>
-                <div className="mt-2 text-xl font-black text-[#2F2A26]">{result.topic}</div>
+                <div className="mt-2 text-xl font-black text-[#2F2A26]">{displayedNote.topic}</div>
+                {tab === 'library' && displayedNoteMeta ? (
+                  <div className="mt-2 text-sm text-gray-600 font-bold">
+                    {getFolderPathText(displayedNoteMeta.folderSnapshot) || '未分類'} ｜ {displayedNoteMeta.createdAt ? new Date(displayedNoteMeta.createdAt).toLocaleString('zh-HK') : ''}
+                    <span className="ml-2">｜</span>
+                    <button
+                      type="button"
+                      onClick={() => void handleDeleteNote(String(displayedNoteMeta.id))}
+                      className="ml-2 underline text-red-600 hover:text-red-700"
+                    >
+                      刪除
+                    </button>
+                  </div>
+                ) : null}
               </div>
 
               <div className="bg-white rounded-2xl p-5 shadow-comic border-2 border-brand-brown/10">
                 <div className="font-black text-brand-brown text-lg mb-3">需要修正 / 需要核對</div>
-                {Array.isArray(result.corrections) && result.corrections.length > 0 ? (
+                {Array.isArray(displayedNote.corrections) && displayedNote.corrections.length > 0 ? (
                   <div className="space-y-3">
-                    {result.corrections.slice(0, 12).map((c, idx) => (
+                    {displayedNote.corrections.slice(0, 12).map((c, idx) => (
                       <div key={idx} className="bg-brand-cream rounded-2xl p-4 border-2 border-[#E6D2B5]">
                         <div className="text-sm font-black text-[#5E4C40] mb-1">
                           {c.needsVerification ? '（需要查證）' : '（建議更正）'} {c.claim}
@@ -624,15 +1013,15 @@ export const AiNotesModal: React.FC<Props> = ({ open, onClose, onExportToSelfStu
               <div className="bg-white rounded-2xl p-5 shadow-comic border-2 border-brand-brown/10">
                 <div className="font-black text-brand-brown text-lg mb-3">整理筆記</div>
                 <div className="bg-white rounded-2xl border-2 border-gray-100 p-4">
-                  <div dangerouslySetInnerHTML={{ __html: markdownToSafeHtml(result.notesMarkdown) }} />
+                  <div dangerouslySetInnerHTML={{ __html: markdownToSafeHtml(displayedNote.notesMarkdown) }} />
                 </div>
               </div>
 
               <div className="bg-white rounded-2xl p-5 shadow-comic border-2 border-brand-brown/10">
                 <div className="font-black text-brand-brown text-lg mb-3">知識增潤</div>
-                {Array.isArray(result.enrichment) && result.enrichment.length > 0 ? (
+                {Array.isArray(displayedNote.enrichment) && displayedNote.enrichment.length > 0 ? (
                   <ul className="list-disc pl-6 space-y-2 text-gray-700 font-bold">
-                    {result.enrichment.slice(0, 5).map((e, idx) => (
+                    {displayedNote.enrichment.slice(0, 5).map((e, idx) => (
                       <li key={idx}>{e}</li>
                     ))}
                   </ul>
@@ -643,9 +1032,9 @@ export const AiNotesModal: React.FC<Props> = ({ open, onClose, onExportToSelfStu
 
               <div className="bg-white rounded-2xl p-5 shadow-comic border-2 border-brand-brown/10">
                 <div className="font-black text-brand-brown text-lg mb-3">自我檢查題</div>
-                {Array.isArray(result.selfCheck) && result.selfCheck.length > 0 ? (
+                {Array.isArray(displayedNote.selfCheck) && displayedNote.selfCheck.length > 0 ? (
                   <div className="space-y-3">
-                    {result.selfCheck.slice(0, 5).map((q, idx) => (
+                    {displayedNote.selfCheck.slice(0, 5).map((q, idx) => (
                       <div key={idx} className="bg-brand-cream rounded-2xl p-4 border-2 border-[#E6D2B5]">
                         <div className="font-black text-[#2F2A26]">{idx + 1}. {q.question}</div>
                         <div className="text-sm text-gray-700 mt-2">
@@ -737,13 +1126,13 @@ export const AiNotesModal: React.FC<Props> = ({ open, onClose, onExportToSelfStu
                         transformOrigin: '0 0'
                       }}
                     >
-                      <MindmapTree mindmap={result.mindmap} svgRef={mindmapSvgRef} dataAttr="ai-notes" />
+                      <MindmapTree mindmap={displayedNote.mindmap} svgRef={mindmapSvgRef} dataAttr={tab === 'library' ? 'ai-notes-lib' : 'ai-notes'} />
                     </div>
                   </div>
 
                   {/* Full-size SVG for export (not affected by zoom/pan) */}
                   <div className="hidden">
-                    <MindmapTree mindmap={result.mindmap} svgRef={mindmapExportSvgRef} dataAttr="ai-notes-export" />
+                    <MindmapTree mindmap={displayedNote.mindmap} svgRef={mindmapExportSvgRef} dataAttr={tab === 'library' ? 'ai-notes-lib-export' : 'ai-notes-export'} />
                   </div>
                 </div>
               </div>
