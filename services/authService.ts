@@ -1205,6 +1205,18 @@ class AuthService {
     return this.handleResponse(response);
   }
 
+  async saveNoteSubmissionSnapshot(noteId: string, studentId: string, snapshot: any): Promise<{ message: string; submission: any }> {
+    const response = await fetch(
+      `${this.API_BASE}/notes/${encodeURIComponent(noteId)}/submissions/${encodeURIComponent(studentId)}/snapshot`,
+      {
+        method: 'PUT',
+        headers: this.getAuthHeaders(),
+        body: JSON.stringify({ snapshot })
+      }
+    );
+    return this.handleResponse(response);
+  }
+
   async saveNoteAnnotations(
     noteId: string,
     studentId: string,

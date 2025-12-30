@@ -495,6 +495,7 @@ const NoteEditorModal = React.forwardRef<NoteEditorHandle, Props>(
   const [submittedAt, setSubmittedAt] = useState<string | null>(null);
   const [resubmitOpen, setResubmitOpen] = useState(false);
   const [canEdit, setCanEdit] = useState(true);
+  const [gradingPromptOpen, setGradingPromptOpen] = useState(false);
   const [fullscreen, setFullscreen] = useState(false);
   const [annotationMode, setAnnotationMode] = useState(false);
   const [annotationsVisible, setAnnotationsVisible] = useState(true);
@@ -575,9 +576,21 @@ const NoteEditorModal = React.forwardRef<NoteEditorHandle, Props>(
       if (mode === 'teacher') {
         const isAnnotation = layer === 'annotation';
         o.visible = !isAnnotation || annotationsVisible;
-        const selectable = annotationMode && isAnnotation;
-        o.selectable = selectable;
-        o.evented = selectable;
+        const editable = annotationMode && (!isAnnotation || annotationsVisible);
+        o.selectable = editable;
+        o.evented = editable;
+        if (editable) {
+          (o as any).hasControls = true;
+          (o as any).hasBorders = true;
+          (o as any).lockMovementX = false;
+          (o as any).lockMovementY = false;
+          (o as any).lockScalingX = false;
+          (o as any).lockScalingY = false;
+          (o as any).lockRotation = false;
+          if ((o as any).type === 'textbox' || (o as any).type === 'i-text' || (o as any).type === 'text') {
+            (o as any).editable = true;
+          }
+        }
         continue;
       }
 
@@ -634,6 +647,34 @@ const NoteEditorModal = React.forwardRef<NoteEditorHandle, Props>(
 
   const saveCanvasToDoc = () => {
     if (mode === 'teacher') return;
+    const canvas = fabricRef.current;
+    if (!canvas) return;
+    const { h: pageH } = pageSizeRef.current;
+    const pageCountNow = docRef.current.pages.length;
+    const json = canvas.toJSON(['lpediaLocked', 'lpediaLayer', 'crossOrigin', 'lpediaPaper', 'lpediaPageIndex']);
+    const objects = Array.isArray((json as any).objects) ? (json as any).objects : [];
+
+    const pages = Array.from({ length: pageCountNow }, () => ({ ...emptyPage(), objects: [] as any[] }));
+    for (const o of objects) {
+      if (o?.lpediaPaper || String(o?.lpediaLayer || '') === 'paper') continue;
+      const layer = String(o?.lpediaLayer || 'base');
+      if (layer === 'annotation') continue;
+      const rawTop = Number(o?.top) || 0;
+      const explicitIdx = Number(o?.lpediaPageIndex);
+      const idx = Number.isFinite(explicitIdx)
+        ? clamp(explicitIdx, 0, pageCountNow - 1)
+        : getPageIndexFromY(rawTop, pageH, pageCountNow);
+      const offsetY = getPageOffsetY(idx, pageH);
+      const normalized = { ...o, top: rawTop - offsetY, lpediaLayer: layer, lpediaPageIndex: idx };
+      pages[idx].objects.push(normalized);
+    }
+
+    docRef.current.pages = pages.map((p) => stripPaperFromCanvasJson(p));
+    docRef.current.currentPage = clamp(docRef.current.currentPage ?? 0, 0, docRef.current.pages.length - 1);
+  };
+
+  const saveCanvasBaseToDocForTeacher = () => {
+    if (mode !== 'teacher') return;
     const canvas = fabricRef.current;
     if (!canvas) return;
     const { h: pageH } = pageSizeRef.current;
@@ -770,6 +811,39 @@ const NoteEditorModal = React.forwardRef<NoteEditorHandle, Props>(
     }
     ann.pages = pages.map((p) => stripPaperFromCanvasJson(p));
     ann.currentPage = clamp(ann.currentPage ?? 0, 0, ann.pages.length - 1);
+  };
+
+  const saveGrading = async (needsRevision: boolean) => {
+    if (!canAnnotate) return;
+    const nid = String(noteId || '').trim();
+    if (!nid) return;
+    const sid = String(studentId || '').trim();
+    if (!sid) return;
+    setLoading(true);
+    setError('');
+    try {
+      const canvas = fabricRef.current;
+      if (!canvas) throw new Error('畫布未就緒');
+      if (!annotationDocRef.current) {
+        annotationDocRef.current = {
+          format: 'fabric-v1',
+          version: 1,
+          currentPage: docRef.current.currentPage,
+          pages: docRef.current.pages.map(() => emptyPage())
+        };
+      }
+      // Save any teacher edits to student's base content and grading annotations.
+      saveCanvasBaseToDocForTeacher();
+      saveCanvasAnnotationsToRef();
+      await authService.saveNoteSubmissionSnapshot(nid, sid, docRef.current);
+      await authService.saveNoteAnnotations(nid, sid, annotationDocRef.current, { needsRevision });
+      alert('已保存批改');
+      setAnnotationMode(false);
+    } catch (e: any) {
+      setError(e?.message || '保存失敗');
+    } finally {
+      setLoading(false);
+    }
   };
 
   const reloadCanvas = async (opts?: { fit?: boolean; pageW?: number; pageH?: number }) => {
@@ -1030,9 +1104,9 @@ const NoteEditorModal = React.forwardRef<NoteEditorHandle, Props>(
       if ((o as any).lpediaPaper) return false;
       const locked = Boolean((o as any).lpediaLocked);
       const layer = String((o as any).lpediaLayer || 'base');
-      if (mode === 'student') return !locked && !submittedAt;
+      if (mode === 'student') return !locked && (!submittedAt || resubmitOpen);
       if (mode === 'template') return canTemplateEdit;
-      if (mode === 'teacher') return annotationMode && layer === 'annotation';
+      if (mode === 'teacher') return annotationMode;
       return false;
     });
     deletable.forEach((o) => canvas.remove(o));
@@ -1048,10 +1122,9 @@ const NoteEditorModal = React.forwardRef<NoteEditorHandle, Props>(
     const obj = canvas.getActiveObject();
     if (!obj) return;
     const locked = Boolean((obj as any).lpediaLocked);
-    const layer = String((obj as any).lpediaLayer || 'base');
-    if (mode === 'student' && (locked || submittedAt)) return;
+    if (mode === 'student' && (locked || (submittedAt && !resubmitOpen))) return;
     if ((mode === 'template' || mode === 'draft') && !canTemplateEdit) return;
-    if (mode === 'teacher' && (!annotationMode || layer !== 'annotation')) return;
+    if (mode === 'teacher' && !annotationMode) return;
     bringToFrontCompat(canvas, obj);
     canvas.requestRenderAll();
     setLayersVersion((v) => v + 1);
@@ -1064,10 +1137,9 @@ const NoteEditorModal = React.forwardRef<NoteEditorHandle, Props>(
     const obj = canvas.getActiveObject();
     if (!obj) return;
     const locked = Boolean((obj as any).lpediaLocked);
-    const layer = String((obj as any).lpediaLayer || 'base');
-    if (mode === 'student' && (locked || submittedAt)) return;
+    if (mode === 'student' && (locked || (submittedAt && !resubmitOpen))) return;
     if ((mode === 'template' || mode === 'draft') && !canTemplateEdit) return;
-    if (mode === 'teacher' && (!annotationMode || layer !== 'annotation')) return;
+    if (mode === 'teacher' && !annotationMode) return;
     sendToBackAbovePaper(canvas, obj);
     canvas.requestRenderAll();
     setLayersVersion((v) => v + 1);
@@ -1080,10 +1152,9 @@ const NoteEditorModal = React.forwardRef<NoteEditorHandle, Props>(
     const obj = canvas.getActiveObject();
     if (!obj) return;
     const locked = Boolean((obj as any).lpediaLocked);
-    const layer = String((obj as any).lpediaLayer || 'base');
-    if (mode === 'student' && (locked || submittedAt)) return;
+    if (mode === 'student' && (locked || (submittedAt && !resubmitOpen))) return;
     if ((mode === 'template' || mode === 'draft') && !canTemplateEdit) return;
-    if (mode === 'teacher' && (!annotationMode || layer !== 'annotation')) return;
+    if (mode === 'teacher' && !annotationMode) return;
     (canvas as any).bringObjectForward?.(obj);
     canvas.requestRenderAll();
     setLayersVersion((v) => v + 1);
@@ -1096,10 +1167,9 @@ const NoteEditorModal = React.forwardRef<NoteEditorHandle, Props>(
     const obj = canvas.getActiveObject();
     if (!obj) return;
     const locked = Boolean((obj as any).lpediaLocked);
-    const layer = String((obj as any).lpediaLayer || 'base');
-    if (mode === 'student' && (locked || submittedAt)) return;
+    if (mode === 'student' && (locked || (submittedAt && !resubmitOpen))) return;
     if ((mode === 'template' || mode === 'draft') && !canTemplateEdit) return;
-    if (mode === 'teacher' && (!annotationMode || layer !== 'annotation')) return;
+    if (mode === 'teacher' && !annotationMode) return;
     (canvas as any).sendObjectBackwards?.(obj);
     canvas.requestRenderAll();
     setLayersVersion((v) => v + 1);
@@ -1632,7 +1702,7 @@ const NoteEditorModal = React.forwardRef<NoteEditorHandle, Props>(
     applyPermissionsToObjects(canvas);
     const allowEdit =
       canEdit &&
-      !(mode === 'student' && !!submittedAt) &&
+      !(mode === 'student' && !!submittedAt && !resubmitOpen) &&
       !(mode === 'teacher' && !annotationMode) &&
       !((mode === 'template' || mode === 'draft') && !canTemplateEdit);
 
@@ -1647,7 +1717,7 @@ const NoteEditorModal = React.forwardRef<NoteEditorHandle, Props>(
     }
     canvas.requestRenderAll();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [annotationMode, annotationsVisible, tool, canEdit, submittedAt, penColor, penWidth]);
+  }, [annotationMode, annotationsVisible, tool, canEdit, submittedAt, resubmitOpen, penColor, penWidth]);
 
   useEffect(() => {
     if (!open) return;
@@ -1702,7 +1772,7 @@ const NoteEditorModal = React.forwardRef<NoteEditorHandle, Props>(
 
   const canEditOnCanvas =
     canEdit &&
-    !(mode === 'student' && !!submittedAt) &&
+    !(mode === 'student' && !!submittedAt && !resubmitOpen) &&
     !(mode === 'teacher' && !annotationMode) &&
     !((mode === 'template' || mode === 'draft') && !canTemplateEdit);
 
@@ -1759,6 +1829,51 @@ const NoteEditorModal = React.forwardRef<NoteEditorHandle, Props>(
 
   return (
     <div className={`fixed inset-0 bg-black bg-opacity-50 z-[80] flex items-center justify-center ${fullscreen ? 'p-0' : 'p-4'}`}>
+      {gradingPromptOpen && mode === 'teacher' && (
+        <div className="fixed inset-0 z-[90] flex items-center justify-center bg-black/40 p-4">
+          <div className="w-full max-w-xl rounded-3xl border-4 border-brand-brown bg-white shadow-comic overflow-hidden">
+            <div className="p-4 bg-[#C0E2BE] border-b-4 border-brand-brown flex items-center justify-between">
+              <div className="font-black text-brand-brown">學生需要做改正嗎？</div>
+              <button
+                type="button"
+                className="w-10 h-10 rounded-full bg-white border-2 border-brand-brown hover:bg-gray-100 flex items-center justify-center"
+                onClick={() => setGradingPromptOpen(false)}
+                disabled={loading}
+              >
+                <X className="w-6 h-6 text-brand-brown" />
+              </button>
+            </div>
+            <div className="p-6 space-y-4 text-brand-brown font-bold">
+              <div>選擇「需要」：學生端會顯示「待修正」，狀態變未完成，並重新開放編輯後再交回。</div>
+              <div>選擇「不需要」：任務真正完成（學生只能查看批改）。</div>
+              <div className="flex gap-3 justify-end pt-2">
+                <button
+                  type="button"
+                  className="px-4 py-2 rounded-2xl border-4 border-brand-brown bg-white text-brand-brown font-black shadow-comic hover:bg-gray-50"
+                  onClick={() => {
+                    setGradingPromptOpen(false);
+                    void saveGrading(false);
+                  }}
+                  disabled={loading}
+                >
+                  不需要
+                </button>
+                <button
+                  type="button"
+                  className="px-4 py-2 rounded-2xl border-4 border-blue-700 bg-blue-600 text-white font-black shadow-comic hover:bg-blue-700"
+                  onClick={() => {
+                    setGradingPromptOpen(false);
+                    void saveGrading(true);
+                  }}
+                  disabled={loading}
+                >
+                  需要
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
       <div className={`bg-white border-4 border-brand-brown w-full overflow-hidden shadow-comic flex flex-col ${fullscreen ? 'max-w-none h-full rounded-none' : 'max-w-6xl h-[90vh] rounded-3xl'}`}>
         <div className="p-4 border-b-4 border-brand-brown bg-[#C0E2BE] flex items-center justify-between gap-3">
           <div className="min-w-0">
@@ -1922,7 +2037,12 @@ const NoteEditorModal = React.forwardRef<NoteEditorHandle, Props>(
                 className="p-1 rounded-lg hover:bg-gray-100"
                 onClick={insertTextBox}
                 title="插入文字框"
-                disabled={loading || !canEdit || (mode === 'student' && !!submittedAt) || (mode === 'teacher' && !annotationMode)}
+                disabled={
+                  loading ||
+                  !canEdit ||
+                  (mode === 'student' && !!submittedAt && !resubmitOpen) ||
+                  (mode === 'teacher' && !annotationMode)
+                }
               >
                 <Type className="w-4 h-4" />
               </button>
@@ -1931,7 +2051,12 @@ const NoteEditorModal = React.forwardRef<NoteEditorHandle, Props>(
                 className="p-1 rounded-lg hover:bg-gray-100"
                 onClick={() => fileInputRef.current?.click()}
                 title="插入圖片"
-                disabled={loading || !canEdit || (mode === 'student' && !!submittedAt) || (mode === 'teacher' && !annotationMode)}
+                disabled={
+                  loading ||
+                  !canEdit ||
+                  (mode === 'student' && !!submittedAt && !resubmitOpen) ||
+                  (mode === 'teacher' && !annotationMode)
+                }
               >
                 <ImageIcon className="w-4 h-4" />
               </button>
@@ -2158,44 +2283,16 @@ const NoteEditorModal = React.forwardRef<NoteEditorHandle, Props>(
                   }}
                   className="px-3 py-2 rounded-2xl border-4 border-brand-brown bg-white text-brand-brown font-black shadow-comic hover:bg-gray-50 flex items-center gap-2"
                   disabled={loading || !canAnnotate}
-                  title="批改模式（只會保存批改層，不會改動學生內容）"
+                  title="批改模式（可批註，也可直接修改學生內容；按「保存批改」才會保存）"
                 >
                   <Lock className="w-4 h-4" />
                   {annotationMode ? '退出批改' : '批改模式'}
                 </button>
                 <button
                   type="button"
-                  onClick={async () => {
+                  onClick={() => {
                     if (!canAnnotate) return;
-                    const nid = String(noteId || '').trim();
-                    if (!nid) return;
-                    const sid = String(studentId || '').trim();
-                    if (!sid) return;
-                    setLoading(true);
-                    setError('');
-	                  try {
-	                    const canvas = fabricRef.current;
-	                    if (!canvas) throw new Error('畫布未就緒');
-	                    if (!annotationDocRef.current) {
-	                      annotationDocRef.current = {
-	                        format: 'fabric-v1',
-	                        version: 1,
-	                        currentPage: docRef.current.currentPage,
-	                        pages: docRef.current.pages.map(() => emptyPage())
-	                      };
-	                    }
-		                    const needRevision = window.confirm(
-		                      '需要學生做改正嗎？\n\n確定：需要（學生端會顯示「待修正」，狀態變未完成，並可再修改交回）\n取消：不需要（任務真正完成）'
-		                    );
-		                    saveCanvasAnnotationsToRef();
-		                    await authService.saveNoteAnnotations(nid, sid, annotationDocRef.current, { needsRevision: needRevision });
-		                    alert('已保存批改');
-		                    setAnnotationMode(false);
-		                  } catch (e: any) {
-                      setError(e?.message || '保存失敗');
-                    } finally {
-                      setLoading(false);
-                    }
+                    setGradingPromptOpen(true);
                   }}
                   className="px-3 py-2 rounded-2xl border-4 border-brand-brown bg-white text-brand-brown font-black shadow-comic hover:bg-gray-50 flex items-center gap-2"
                   disabled={loading || !canAnnotate}
