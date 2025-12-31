@@ -1306,15 +1306,6 @@ class AuthService {
     return this.handleResponse(response);
   }
 
-  async createMyTopicFolder(payload: { parentId: string; name: string }): Promise<{ folder: any }> {
-    const response = await fetch(`${this.API_BASE}/class-folders/me/topics`, {
-      method: 'POST',
-      headers: this.getAuthHeaders(),
-      body: JSON.stringify(payload || {})
-    });
-    return this.handleResponse(response);
-  }
-
   // === AI筆記（儲存/資料夾）===
   async listMyAiNotes(params?: { folderId?: string | null }): Promise<{ notes: any[] }> {
     const search = new URLSearchParams();

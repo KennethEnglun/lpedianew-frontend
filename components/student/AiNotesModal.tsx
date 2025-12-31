@@ -612,23 +612,6 @@ export const AiNotesModal: React.FC<Props> = ({ open, onClose, onExportToSelfStu
     return names.join(' / ');
   };
 
-  const handleCreateTopic = async () => {
-    if (!selectedStageId) return alert('請先選擇學段');
-    const name = prompt('輸入新課題名稱', '');
-    if (!name || !name.trim()) return;
-    try {
-      await authService.createMyTopicFolder({ parentId: selectedStageId, name: name.trim() });
-      const refreshed = await authService.getMyClassFolders();
-      const nextFolders = Array.isArray(refreshed?.folders) ? refreshed.folders : [];
-      setClassFolders(nextFolders);
-      const topics = nextFolders.filter((f: any) => f && Number(f.level) === 2 && !f.archivedAt && String(f.parentId || '') === String(selectedStageId));
-      const found = topics.find((t: any) => String(t.name || '').trim() === name.trim());
-      if (found?.id) setSelectedTopicId(String(found.id));
-    } catch (e) {
-      alert(e instanceof Error ? e.message : '新增課題失敗');
-    }
-  };
-
   const handleSave = async () => {
     if (!generatedResult) return;
     const folderId = selectedSubfolderId || selectedTopicId || null;
@@ -800,14 +783,6 @@ export const AiNotesModal: React.FC<Props> = ({ open, onClose, onExportToSelfStu
                     <div className="flex gap-2">
                       <button
                         type="button"
-                        onClick={() => void handleCreateTopic()}
-                        className="flex-1 px-3 py-2 rounded-xl border-2 border-gray-300 bg-white text-gray-700 font-bold hover:bg-gray-50"
-                        disabled={!selectedStageId || foldersLoading}
-                      >
-                        新增課題
-                      </button>
-                      <button
-                        type="button"
                         onClick={() => void loadMyNotes({ folderId: selectedSubfolderId || selectedTopicId || null })}
                         className="px-3 py-2 rounded-xl border-2 border-gray-300 bg-white text-gray-700 font-bold hover:bg-gray-50"
                         disabled={myNotesLoading}
@@ -885,15 +860,8 @@ export const AiNotesModal: React.FC<Props> = ({ open, onClose, onExportToSelfStu
                       <option key={f.id} value={String(f.id)}>{String(f.name || '')}</option>
                     ))}
                   </select>
-                  <div className="mt-2">
-                    <button
-                      type="button"
-                      onClick={() => void handleCreateTopic()}
-                      className="px-3 py-2 rounded-xl border-2 border-gray-300 bg-white text-gray-700 font-bold hover:bg-gray-50"
-                      disabled={!selectedStageId || foldersLoading}
-                    >
-                      新增課題
-                    </button>
+                  <div className="mt-2 text-xs text-gray-600 font-bold">
+                    需要新增課題資料夾請聯絡老師。
                   </div>
                 </div>
                 <div>
