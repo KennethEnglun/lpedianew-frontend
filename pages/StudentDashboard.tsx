@@ -921,23 +921,23 @@ const StudentDashboard: React.FC = () => {
       {/* Main Container */}
       <main className="max-w-[1200px] mx-auto grid grid-cols-1 lg:grid-cols-12 gap-8 pb-10">
         {/* Left Sidebar */}
-        <aside className="lg:col-span-4 cartoon-card px-6 pt-2 pb-6 flex-shrink-0 flex flex-col min-h-fit">
+        <aside className="lg:col-span-4 cartoon-card px-5 pt-3 pb-5 flex-shrink-0 flex flex-col min-h-fit">
           {/* Logo Section */}
-          <div className="text-center -mt-2 -mb-12">
+          <div className="text-center mt-1 mb-2">
             <img
               src="/lpsparklogo.png"
               alt="LP科樂園 Logo"
-              className="h-64 mx-auto block object-contain drop-shadow-sm hover:scale-105 transition-transform duration-300"
+              className="h-48 mx-auto block object-contain drop-shadow-sm hover:scale-105 transition-transform duration-300"
             />
           </div>
 
           {/* Student Info Section */}
-          <div className="text-center mb-6 bg-white/60 rounded-xl p-4 border-2 border-[#E6D2B5]">
+          <div className="text-center mb-4 bg-white/60 rounded-xl p-3 border-2 border-[#E6D2B5]">
             <div className="space-y-1">
-              <div className="text-lg font-bold text-[#5E4C40]">
+              <div className="text-base font-bold text-[#5E4C40]">
                 {user?.profile?.name || user?.username || '學生姓名'}
               </div>
-              <div className="text-sm font-medium text-[#8D6E63]">
+              <div className="text-xs font-medium text-[#8D6E63]">
                 班級：{user?.profile?.class || '未設定'}
               </div>
               <div className="text-xs text-[#A0806B] font-mono">
@@ -947,7 +947,7 @@ const StudentDashboard: React.FC = () => {
           </div>
 
 
-          <nav className="flex-1 space-y-3 overflow-y-auto">
+          <nav className="flex-1 space-y-2 overflow-y-auto">
             <button
               type="button"
               onClick={(e) => {
