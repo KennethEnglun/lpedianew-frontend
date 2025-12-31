@@ -3063,6 +3063,7 @@ const TeacherDashboard: React.FC = () => {
               backgroundSize: 'cover',
               backgroundRepeat: 'no-repeat',
               backgroundPosition: 'center',
+              backgroundColor: '#FEF7EC'
             }}
           >
             <div className="p-6">
@@ -3082,7 +3083,7 @@ const TeacherDashboard: React.FC = () => {
               </div>
 
               {/* User Profile Section */}
-              <div className="scale-[0.7] origin-top">
+              <div className="w-full">
                 <div className="text-center mb-6">
                   <div className="text-lg font-bold text-brand-brown">{user?.profile?.name || '教師'}</div>
                   <div className="text-sm text-gray-600">{user?.username}</div>
@@ -3092,7 +3093,7 @@ const TeacherDashboard: React.FC = () => {
                   <h2 className="text-xl font-bold text-brand-brown">教師工具包</h2>
                 </div>
 
-                <nav className="space-y-3">
+                <nav className="space-y-3 px-1">
                   <Button
                     fullWidth
                     className="bg-[#D2EFFF] hover:bg-[#BCE0FF]"
@@ -3180,12 +3181,13 @@ const TeacherDashboard: React.FC = () => {
 
       {/* Sidebar */}
       <aside
-        className="hidden lg:flex relative z-10 w-full lg:w-80 min-h-fit my-0 lg:my-auto ml-0 rounded-b-[3rem] lg:rounded-b-none lg:rounded-r-[3rem] border-4 lg:border-l-0 border-brand-brown shadow-2xl flex-col p-6"
+        className="hidden lg:flex relative z-10 w-full lg:w-80 max-h-[calc(100vh-1.5rem)] my-0 lg:my-3 ml-0 rounded-b-[3rem] lg:rounded-b-none lg:rounded-r-[3rem] border-4 lg:border-l-0 border-brand-brown shadow-2xl flex-col px-6 pt-5 pb-4 overflow-hidden"
         style={{
           backgroundImage: "url('/stubg.png')",
           backgroundSize: 'cover',
           backgroundRepeat: 'no-repeat',
           backgroundPosition: 'center',
+          backgroundColor: '#FEF7EC'
         }}
       >
         <div className="flex items-center justify-center mb-0">
@@ -3196,7 +3198,7 @@ const TeacherDashboard: React.FC = () => {
           />
         </div>
 
-        <div className="scale-[0.7] origin-top">
+        <div className="w-full min-h-0">
           {/* User Profile Section */}
           <div className="text-center mb-6">
             <div className="text-lg font-bold text-brand-brown">
@@ -3211,7 +3213,7 @@ const TeacherDashboard: React.FC = () => {
             <h2 className="text-2xl font-bold text-brand-brown">教師工具包</h2>
           </div>
 
-          <nav className="flex-1 space-y-4 px-2">
+          <nav className="flex-1 space-y-4 px-1 overflow-y-auto">
           <Button
             fullWidth
             className="bg-[#D2EFFF] hover:bg-[#BCE0FF] text-lg"
