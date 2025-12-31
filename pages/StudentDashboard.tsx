@@ -921,19 +921,19 @@ const StudentDashboard: React.FC = () => {
       {/* Main Container */}
       <main className="max-w-[1200px] mx-auto grid grid-cols-1 lg:grid-cols-12 gap-8 pb-10">
         {/* Left Sidebar */}
-        <aside className="lg:col-span-4 cartoon-card px-5 pt-3 pb-5 flex-shrink-0 flex flex-col min-h-fit">
+        <aside className="lg:col-span-4 cartoon-card px-5 pt-2 pb-4 flex-shrink-0 flex flex-col min-h-fit">
           {/* Logo Section */}
-          <div className="text-center mt-1 mb-2">
+          <div className="text-center mt-0.5 mb-1">
             <img
               src="/lpsparklogo.png"
               alt="LP科樂園 Logo"
-              className="h-48 mx-auto block object-contain drop-shadow-sm hover:scale-105 transition-transform duration-300"
+              className="h-40 mx-auto block object-contain drop-shadow-sm hover:scale-105 transition-transform duration-300"
             />
           </div>
 
           {/* Student Info Section */}
-          <div className="text-center mb-4 bg-white/60 rounded-xl p-3 border-2 border-[#E6D2B5]">
-            <div className="space-y-1">
+          <div className="text-center mb-3 bg-white/60 rounded-xl p-2 border-2 border-[#E6D2B5]">
+            <div className="space-y-0.5 leading-tight">
               <div className="text-base font-bold text-[#5E4C40]">
                 {user?.profile?.name || user?.username || '學生姓名'}
               </div>
@@ -999,7 +999,7 @@ const StudentDashboard: React.FC = () => {
                 setShowSelfStudyHub(true);
               }}
               className={`w-full flex items-center gap-3 px-4 py-2 rounded-2xl border-4 transition-all duration-150 border-[#E6D2B5] hover:bg-white hover:-translate-y-1 shadow-sm ${
-                activeTab === 'practice' ? 'bg-white ring-2 ring-blue-300' : 'bg-[#FFF3E0]'
+                activeTab === 'practice' ? 'bg-white border-[#7DBAF5]' : 'bg-[#FFF3E0]'
               }`}
               title="自學天地"
             >
