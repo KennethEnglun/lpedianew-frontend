@@ -1,5 +1,5 @@
 import React, { useMemo, useState, useEffect, useRef, useCallback } from 'react';
-import { Settings, LogOut, MessageSquare, HelpCircle, Bot, RefreshCw, X, Eye, EyeOff, Code2, Volume2, CheckCircle2, Star, Award, ClipboardList, BookOpen, Brain } from 'lucide-react';
+import { Settings, LogOut, MessageSquare, HelpCircle, Bot, RefreshCw, X, Eye, EyeOff, Code2, Volume2, CheckCircle2, Star, Award, ClipboardList, BookOpen, Brain, BarChart3 } from 'lucide-react';
 import { Subject, SUBJECT_CONFIG, Task } from '../types';
 import { DEFAULT_SUBJECT, SINGLE_SUBJECT_MODE, VISIBLE_SUBJECTS } from '../platform';
 import { useNavigate } from 'react-router-dom';
@@ -18,6 +18,7 @@ import { StudentQuizModal } from '../components/student/StudentQuizModal';
 import { StudentDiscussionModal } from '../components/student/StudentDiscussionModal';
 import NoteEditorModal from '../components/NoteEditorModal';
 import { AiNotesModal } from '../components/student/AiNotesModal';
+import { ChartGeneratorModal } from '../components/ChartGeneratorModal';
 import { aiAnalyticsService } from '../services/aiAnalyticsService';
 import type { StudyAnalytics, StudyScope } from '../types/study';
 
@@ -27,6 +28,7 @@ const StudentDashboard: React.FC = () => {
   const [showUiSettings, setShowUiSettings] = useState(false);
   const [showAiChat, setShowAiChat] = useState(false);
   const [showAiNotes, setShowAiNotes] = useState(false);
+  const [showChartGenerator, setShowChartGenerator] = useState(false);
   const [showBotTaskChat, setShowBotTaskChat] = useState(false);
   const [showAppStudio, setShowAppStudio] = useState(false);
   const [showStudyPractice, setShowStudyPractice] = useState(false);
@@ -979,6 +981,20 @@ const StudentDashboard: React.FC = () => {
               onClick={(e) => {
                 e.preventDefault();
                 e.stopPropagation();
+                setShowChartGenerator(true);
+              }}
+              className="w-[calc(100%-10px)] flex items-center gap-3 px-4 py-2 rounded-2xl border-4 transition-all duration-150 border-[#E6D2B5] bg-[#FFF3E0] hover:bg-white hover:-translate-y-1 shadow-sm"
+              title="圖表生成器"
+            >
+              <BarChart3 className="w-6 h-6 text-[#5E4C40]" />
+              <span className="text-lg font-bold text-[#5E4C40] flex-1 text-left">圖表生成器</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
                 setActiveTab('practice');
                 setShowSelfStudyHub(true);
               }}
@@ -1403,6 +1419,11 @@ const StudentDashboard: React.FC = () => {
         open={showAiNotes}
         onClose={() => setShowAiNotes(false)}
         onExportToSelfStudy={handleExportAiNotesToSelfStudy}
+      />
+      <ChartGeneratorModal
+        open={showChartGenerator}
+        onClose={() => setShowChartGenerator(false)}
+        mode="student"
       />
       <AppStudioModal
         open={showAppStudio}

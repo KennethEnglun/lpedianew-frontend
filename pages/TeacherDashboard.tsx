@@ -7,6 +7,7 @@ import AiQuestionGeneratorModal from '../components/AiQuestionGeneratorModal';
 import UiSettingsModal from '../components/UiSettingsModal';
 import AiChatModal from '../components/AiChatModal';
 import AppStudioModal from '../components/AppStudioModal';
+import { ChartGeneratorModal } from '../components/ChartGeneratorModal';
 import ClassFolderManagerModal from '../components/ClassFolderManagerModal';
 import TemplateLibraryModal from '../components/TemplateLibraryModal';
 import CreateTaskModal from '../components/CreateTaskModal';
@@ -55,6 +56,7 @@ const TeacherDashboard: React.FC = () => {
   const [showUiSettings, setShowUiSettings] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [showAiChat, setShowAiChat] = useState(false);
+  const [showChartGenerator, setShowChartGenerator] = useState(false);
   const [showAppStudio, setShowAppStudio] = useState(false);
 
   const [teacherSettingsDraft, setTeacherSettingsDraft] = useState<{
@@ -2706,6 +2708,11 @@ const TeacherDashboard: React.FC = () => {
         open={showAiChat}
         onClose={() => setShowAiChat(false)}
       />
+      <ChartGeneratorModal
+        open={showChartGenerator}
+        onClose={() => setShowChartGenerator(false)}
+        mode="teacher"
+      />
       <AppStudioModal
         open={showAppStudio}
         onClose={() => setShowAppStudio(false)}
@@ -3129,6 +3136,16 @@ const TeacherDashboard: React.FC = () => {
                   </Button>
                   <Button
                     fullWidth
+                    className="bg-[#FFF3E0] hover:bg-[#FFE3C2]"
+                    onClick={() => {
+                      setShowChartGenerator(true);
+                      closeSidebar();
+                    }}
+                  >
+                    圖表生成器
+                  </Button>
+                  <Button
+                    fullWidth
                     className="bg-[#D2EFFF] hover:bg-[#BCE0FF]"
                     onClick={async () => {
                       if (availableSubjects.length === 0 || availableClasses.length === 0) {
@@ -3227,6 +3244,17 @@ const TeacherDashboard: React.FC = () => {
           </Button>
           <Button fullWidth className="bg-[#C0E2BE] hover:bg-[#A9D8A7] text-lg" onClick={openAssignmentManagement}>
             作業管理
+          </Button>
+          <Button
+            fullWidth
+            className="bg-[#FFF3E0] hover:bg-[#FFE3C2] text-lg"
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              setShowChartGenerator(true);
+            }}
+          >
+            圖表生成器
           </Button>
           <Button
             fullWidth

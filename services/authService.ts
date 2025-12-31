@@ -1358,6 +1358,38 @@ class AuthService {
     return this.handleResponse(response);
   }
 
+  // === 圖表生成器（儲存/資料夾）===
+  async listMyCharts(): Promise<{ charts: any[] }> {
+    const response = await fetch(`${this.API_BASE}/charts/me`, {
+      headers: this.getAuthHeaders()
+    });
+    return this.handleResponse(response);
+  }
+
+  async createMyChart(payload: { folderId?: string | null; title?: string; chartSpec: any }): Promise<{ chart: any }> {
+    const response = await fetch(`${this.API_BASE}/charts/me`, {
+      method: 'POST',
+      headers: this.getAuthHeaders(),
+      body: JSON.stringify(payload || {})
+    });
+    return this.handleResponse(response);
+  }
+
+  async deleteMyChart(chartId: string): Promise<{ deleted: boolean }> {
+    const response = await fetch(`${this.API_BASE}/charts/me/${encodeURIComponent(chartId)}`, {
+      method: 'DELETE',
+      headers: this.getAuthHeaders()
+    });
+    return this.handleResponse(response);
+  }
+
+  async listStudentCharts(studentId: string): Promise<{ charts: any[] }> {
+    const response = await fetch(`${this.API_BASE}/charts/teacher/${encodeURIComponent(studentId)}`, {
+      headers: this.getAuthHeaders()
+    });
+    return this.handleResponse(response);
+  }
+
   // === 小測驗相關API ===
 
   // 創建小測驗（教師專用）
