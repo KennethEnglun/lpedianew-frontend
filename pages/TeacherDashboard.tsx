@@ -3071,7 +3071,7 @@ const TeacherDashboard: React.FC = () => {
                 <img
                   src="/lpsparklogo.png"
                   alt="LP科樂園 Logo"
-                  className="h-[120px] w-auto mx-auto object-contain drop-shadow-sm hover:scale-105 transition-transform duration-300"
+                  className="h-[104px] w-auto mx-auto object-contain drop-shadow-sm hover:scale-105 transition-transform duration-300"
                 />
                 <button
                   onClick={closeSidebar}
@@ -3082,14 +3082,8 @@ const TeacherDashboard: React.FC = () => {
                 </button>
               </div>
 
-              {/* User Profile Section */}
               <div className="w-full">
-                <div className="text-center mb-6">
-                  <div className="text-lg font-bold text-brand-brown">{user?.profile?.name || '教師'}</div>
-                  <div className="text-sm text-gray-600">{user?.username}</div>
-                </div>
-
-                <div className="text-center mb-6 border-b-4 border-brand-brown pb-3 mx-2">
+                <div className="text-center mb-4 border-b-4 border-brand-brown pb-3 mx-2">
                   <h2 className="text-xl font-bold text-brand-brown">教師工具包</h2>
                 </div>
 
@@ -3194,26 +3188,16 @@ const TeacherDashboard: React.FC = () => {
           <img
             src="/lpsparklogo.png"
             alt="LP科樂園 Logo"
-            className="h-[168px] w-auto mx-auto object-contain drop-shadow-sm hover:scale-105 transition-transform duration-300"
+            className="h-[132px] w-auto mx-auto object-contain drop-shadow-sm hover:scale-105 transition-transform duration-300"
           />
         </div>
 
         <div className="w-full min-h-0">
-          {/* User Profile Section */}
-          <div className="text-center mb-6">
-            <div className="text-lg font-bold text-brand-brown">
-              {user?.profile?.name || '教師'}
-            </div>
-            <div className="text-sm text-gray-600">
-              {user?.username}
-            </div>
-          </div>
-
-          <div className="text-center mb-8 border-b-4 border-brand-brown pb-4 mx-4">
+          <div className="text-center mb-5 border-b-4 border-brand-brown pb-3 mx-3">
             <h2 className="text-2xl font-bold text-brand-brown">教師工具包</h2>
           </div>
 
-          <nav className="flex-1 space-y-4 px-1 overflow-y-auto">
+          <nav className="flex-1 space-y-3 px-1 overflow-y-auto">
           <Button
             fullWidth
             className="bg-[#D2EFFF] hover:bg-[#BCE0FF] text-lg"
