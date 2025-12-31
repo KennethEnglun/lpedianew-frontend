@@ -955,7 +955,7 @@ const StudentDashboard: React.FC = () => {
                 e.stopPropagation();
                 setShowAiChat(true);
               }}
-              className="w-[calc(100%-10px)] flex items-center gap-3 px-4 py-2 rounded-2xl border-4 transition-all duration-150 border-[#E6D2B5] bg-[#D2EFFF] hover:bg-white hover:-translate-y-1 shadow-sm"
+              className="w-full flex items-center gap-3 px-4 py-2 rounded-2xl border-4 transition-all duration-150 border-[#E6D2B5] bg-[#D2EFFF] hover:bg-white hover:-translate-y-1 shadow-sm"
               title="AI對話"
             >
               <Bot className="w-6 h-6 text-[#5E4C40]" />
@@ -969,7 +969,7 @@ const StudentDashboard: React.FC = () => {
                 e.stopPropagation();
                 setShowAiNotes(true);
               }}
-              className="w-[calc(100%-10px)] flex items-center gap-3 px-4 py-2 rounded-2xl border-4 transition-all duration-150 border-[#E6D2B5] bg-[#F3E8FF] hover:bg-white hover:-translate-y-1 shadow-sm"
+              className="w-full flex items-center gap-3 px-4 py-2 rounded-2xl border-4 transition-all duration-150 border-[#E6D2B5] bg-[#F3E8FF] hover:bg-white hover:-translate-y-1 shadow-sm"
               title="AI筆記"
             >
               <BookOpen className="w-6 h-6 text-[#5E4C40]" />
@@ -983,7 +983,7 @@ const StudentDashboard: React.FC = () => {
                 e.stopPropagation();
                 setShowChartGenerator(true);
               }}
-              className="w-[calc(100%-10px)] flex items-center gap-3 px-4 py-2 rounded-2xl border-4 transition-all duration-150 border-[#E6D2B5] bg-[#FFF3E0] hover:bg-white hover:-translate-y-1 shadow-sm"
+              className="w-full flex items-center gap-3 px-4 py-2 rounded-2xl border-4 transition-all duration-150 border-[#E6D2B5] bg-[#FFF3E0] hover:bg-white hover:-translate-y-1 shadow-sm"
               title="圖表生成器"
             >
               <BarChart3 className="w-6 h-6 text-[#5E4C40]" />
@@ -998,7 +998,7 @@ const StudentDashboard: React.FC = () => {
                 setActiveTab('practice');
                 setShowSelfStudyHub(true);
               }}
-              className={`w-[calc(100%-10px)] flex items-center gap-3 px-4 py-2 rounded-2xl border-4 transition-all duration-150 border-[#E6D2B5] hover:bg-white hover:-translate-y-1 shadow-sm ${
+              className={`w-full flex items-center gap-3 px-4 py-2 rounded-2xl border-4 transition-all duration-150 border-[#E6D2B5] hover:bg-white hover:-translate-y-1 shadow-sm ${
                 activeTab === 'practice' ? 'bg-white ring-2 ring-blue-300' : 'bg-[#FFF3E0]'
               }`}
               title="自學天地"
@@ -1014,7 +1014,7 @@ const StudentDashboard: React.FC = () => {
                 e.stopPropagation();
                 setShowAppStudio(true);
               }}
-              className="w-[calc(100%-10px)] flex items-center gap-3 px-4 py-2 rounded-2xl border-4 transition-all duration-150 border-[#E6D2B5] bg-[#E8F5E9] hover:bg-white hover:-translate-y-1 shadow-sm"
+              className="w-full flex items-center gap-3 px-4 py-2 rounded-2xl border-4 transition-all duration-150 border-[#E6D2B5] bg-[#E8F5E9] hover:bg-white hover:-translate-y-1 shadow-sm"
               title="小程式工作坊"
             >
               <Code2 className="w-6 h-6 text-[#5E4C40]" />
@@ -1028,7 +1028,7 @@ const StudentDashboard: React.FC = () => {
                 e.stopPropagation();
                 setShowTaskView(true);
               }}
-              className="w-[calc(100%-10px)] flex items-center gap-3 px-4 py-2 rounded-2xl border-4 transition-all duration-150 border-[#E6D2B5] bg-[#B5F8CE] hover:bg-white hover:-translate-y-1 shadow-sm"
+              className="w-full flex items-center gap-3 px-4 py-2 rounded-2xl border-4 transition-all duration-150 border-[#E6D2B5] bg-[#B5F8CE] hover:bg-white hover:-translate-y-1 shadow-sm"
             >
               <ClipboardList className="w-6 h-6 text-[#5E4C40]" />
               <span className="text-lg font-bold text-[#5E4C40] flex-1 text-left">我的任務</span>
