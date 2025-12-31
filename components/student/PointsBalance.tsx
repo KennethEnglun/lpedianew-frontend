@@ -35,6 +35,14 @@ export default function PointsBalance(props: PointsBalanceProps) {
         return '🎨';
       case 'admin_adjust':
         return '⚙️';
+      case 'task_completion':
+        return '✅';
+      case 'quiz_score':
+        return '🧪';
+      case 'contest_score':
+        return '🏁';
+      case 'self_study_score':
+        return '📚';
       default:
         return '📝';
     }
@@ -48,6 +56,14 @@ export default function PointsBalance(props: PointsBalanceProps) {
         return `圖片生成: ${transaction.metadata?.imagePrompt?.substring(0, 30) || ''}...`;
       case 'admin_adjust':
         return transaction.description || '管理員調整點數';
+      case 'task_completion':
+        return transaction.description || '完成任務';
+      case 'quiz_score':
+        return transaction.description || '小測驗得分';
+      case 'contest_score':
+        return transaction.description || '問答比賽得分';
+      case 'self_study_score':
+        return transaction.description || '自學天地完成';
       default:
         return transaction.description || '未知操作';
     }
@@ -60,7 +76,7 @@ export default function PointsBalance(props: PointsBalanceProps) {
         <div className="flex items-center justify-between mb-2">
           <div className="flex items-center gap-2">
             <Coins className="w-4 h-4 text-yellow-600" />
-            <span className="font-bold text-[#5D4037] text-sm">圖片生成點數</span>
+            <span className="font-bold text-[#5D4037] text-sm">我的點數</span>
           </div>
           {onRefresh && (
             <Button

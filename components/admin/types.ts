@@ -27,7 +27,7 @@ export type SidebarItem = { key: AdminSection; label: string; icon: React.ReactN
 export interface PointTransaction {
   id: string;
   userId: string;
-  type: 'admin_grant' | 'image_generation' | 'admin_adjust';
+  type: 'admin_grant' | 'image_generation' | 'admin_adjust' | 'task_completion' | 'quiz_score' | 'contest_score' | 'self_study_score';
   amount: number;  // 正數=獲得，負數=消耗
   balance: number; // 交易後餘額
   description?: string;
@@ -37,6 +37,9 @@ export interface PointTransaction {
     imagePrompt?: string;  // 如果是圖片生成，記錄prompt
     imageId?: string;      // 生成的圖片ID
     batchId?: string;      // 批次操作ID
+    dayKey?: string;
+    rawScore?: number;
+    multiplier?: number;
   };
 }
 

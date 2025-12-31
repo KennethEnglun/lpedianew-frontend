@@ -15,6 +15,7 @@ import type {
 } from '../../types/study';
 import { useAuth } from '../../contexts/AuthContext';
 import { questionGenerator } from '../../services/questionGenerator';
+import { authService } from '../../services/authService';
 import { validateStudyContent, studyCardStorage, studyStorage, generateId } from '../../utils/studyUtils';
 
 // 模态框步骤状态
@@ -24,9 +25,10 @@ interface StudyPracticeModalProps {
   open: boolean;
   onClose: () => void;
   initialScope?: Partial<StudyScope>; // 可選的初始學習範圍
+  onFinished?: () => void; // 完成一次練習後回調（例如刷新點數）
 }
 
-export default function StudyPracticeModal({ open, onClose, initialScope }: StudyPracticeModalProps) {
+export default function StudyPracticeModal({ open, onClose, initialScope, onFinished }: StudyPracticeModalProps) {
   const { user } = useAuth();
 
   // 主要狀態管理
@@ -219,6 +221,12 @@ export default function StudyPracticeModal({ open, onClose, initialScope }: Stud
     if (session.cardId) {
       studyCardStorage.touchCardStudiedAt(user.id, session.cardId, endTime);
     }
+
+    // 提交到後端以獲得「我的獎勵」點數（失敗不阻斷）
+    void authService
+      .submitSelfStudyCompletion({ sessionId: session.id, score: session.score, scope: session.scope })
+      .then(() => onFinished?.())
+      .catch(() => onFinished?.());
 
     setCurrentStep('results');
   };

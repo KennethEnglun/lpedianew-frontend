@@ -67,7 +67,9 @@ const StudentDashboard: React.FC = () => {
         currentPoints: 0,
         totalReceived: 0,
         totalUsed: 0,
-        lastUpdate: new Date().toISOString()
+        lastUpdate: new Date().toISOString(),
+        selfStudyDoubleUsed: 0,
+        selfStudyDoubleRemaining: 3
       };
     }
 
@@ -84,7 +86,9 @@ const StudentDashboard: React.FC = () => {
       currentPoints: 0,
       totalReceived: 0,
       totalUsed: 0,
-      lastUpdate: new Date().toISOString()
+      lastUpdate: new Date().toISOString(),
+      selfStudyDoubleUsed: 0,
+      selfStudyDoubleRemaining: 3
     };
   };
 
@@ -243,66 +247,7 @@ const StudentDashboard: React.FC = () => {
         const transactions = await authService.getPointsHistory();
         setPointsTransactions(transactions);
       } catch (apiError) {
-        console.log('Points API not available, using mock data for testing...');
-
-        // 模擬學生點數數據
-        const mockUserPoints = {
-          currentPoints: 12,
-          totalReceived: 20,
-          totalUsed: 8,
-          lastUpdate: new Date().toISOString()
-        };
-
-        // 模擬交易記錄
-        const mockTransactions = [
-          {
-            id: 'tx1',
-            userId: 'currentUser',
-            type: 'admin_grant',
-            amount: 10,
-            balance: 18,
-            description: '作業表現優秀',
-            adminId: 'teacher1',
-            createdAt: new Date(Date.now() - 86400000).toISOString()
-          },
-          {
-            id: 'tx2',
-            userId: 'currentUser',
-            type: 'image_generation',
-            amount: -1,
-            balance: 15,
-            description: '圖片生成',
-            createdAt: new Date(Date.now() - 3600000).toISOString(),
-            metadata: {
-              imagePrompt: '一片美麗的櫻花林'
-            }
-          },
-          {
-            id: 'tx3',
-            userId: 'currentUser',
-            type: 'admin_grant',
-            amount: 5,
-            balance: 10,
-            description: '每日挑戰完成',
-            adminId: 'teacher1',
-            createdAt: new Date(Date.now() - 172800000).toISOString()
-          },
-          {
-            id: 'tx4',
-            userId: 'currentUser',
-            type: 'image_generation',
-            amount: -1,
-            balance: 12,
-            description: '圖片生成',
-            createdAt: new Date(Date.now() - 7200000).toISOString(),
-            metadata: {
-              imagePrompt: '太空中的星球'
-            }
-          }
-        ];
-
-        setUserPoints(mockUserPoints);
-        setPointsTransactions(mockTransactions);
+        console.log('Points API not available, falling back to local cache...');
       }
     } catch (error) {
       console.error('Failed to load points:', error);
@@ -373,17 +318,12 @@ const StudentDashboard: React.FC = () => {
       try {
         const response = await authService.generateImageWithPoints(imagePrompt);
         if (response.success) {
-          // 更新點數餘額
-          setUserPoints(prev => ({
-            ...prev,
-            currentPoints: response.remainingPoints || 0,
-            totalUsed: prev.totalUsed + 1
-          }));
+          // 更新點數 & 交易記錄（以後端為準）
+          await loadUserPoints();
 
-          // 不重新載入，保持 localStorage 的狀態
-          // await loadUserPoints();
-
-          alert('圖片生成成功！');
+          // 觸發 AI 圖片生成（扣點成功後）
+          setExecuteImagePrompt(imagePrompt + '_' + Date.now());
+          setTimeout(() => setExecuteImagePrompt(''), 1000);
         } else {
           alert(response.error === 'insufficient_points' ? '點數不足' : '生成失敗');
         }
@@ -595,21 +535,16 @@ const StudentDashboard: React.FC = () => {
     void loadStudentTasks();
   }, [showTaskView, tasks.length, loadStudentTasks]);
 
-  // 刷新點數顯示（僅更新時間戳，不覆蓋localStorage數據）
+  // 刷新點數顯示（以後端為準）
   const refreshPoints = () => {
-    setUserPoints(prev => ({
-      ...prev,
-      lastUpdate: new Date().toISOString()
-    }));
+    void loadUserPoints();
   };
 
-
-  // 使用 localStorage，不載入遠端數據
-  // useEffect(() => {
-  //   if (user) {
-  //     loadUserPoints();
-  //   }
-  // }, [user, loadUserPoints]);
+  useEffect(() => {
+    if (user) {
+      void loadUserPoints();
+    }
+  }, [user, loadUserPoints]);
 
   useEffect(() => {
     const loadFoldersData = async () => {
@@ -1382,13 +1317,13 @@ const StudentDashboard: React.FC = () => {
                 <div className="grid grid-cols-2 gap-4 mb-4">
                   <div className="bg-yellow-100 border-2 border-yellow-300 rounded-xl p-3 text-center">
                     <Star className="w-8 h-8 text-yellow-500 mx-auto mb-1" />
-                    <div className="text-lg font-bold text-[#5D4037]">200</div>
-                    <div className="text-xs font-bold text-[#8D6E63]">收集獎勵</div>
+                    <div className="text-lg font-bold text-[#5D4037]">{userPoints.currentPoints || 0}</div>
+                    <div className="text-xs font-bold text-[#8D6E63]">目前點數</div>
                   </div>
                   <div className="bg-blue-100 border-2 border-blue-300 rounded-xl p-3 text-center">
                     <div className="text-2xl mb-1">🏆</div>
-                    <div className="text-lg font-bold text-[#5D4037]">0</div>
-                    <div className="text-xs font-bold text-[#8D6E63]">總獎章</div>
+                    <div className="text-lg font-bold text-[#5D4037]">{userPoints.selfStudyDoubleRemaining ?? 0}</div>
+                    <div className="text-xs font-bold text-[#8D6E63]">自學 2 倍剩餘</div>
                   </div>
                 </div>
 
@@ -1432,7 +1367,12 @@ const StudentDashboard: React.FC = () => {
       <BotTaskChatModal
         open={showBotTaskChat}
         taskId={selectedBotTaskId}
-        onClose={() => { setShowBotTaskChat(false); setSelectedBotTaskId(null); }}
+        onClose={() => {
+          setShowBotTaskChat(false);
+          setSelectedBotTaskId(null);
+          void loadStudentTasks();
+          void loadUserPoints();
+        }}
       />
       <ImageGenerationConfirmModal
         open={showImageConfirm}
@@ -1451,6 +1391,7 @@ const StudentDashboard: React.FC = () => {
           setRetrySessionScope(null); // 關閉時清除重新練習的學習範圍
         }}
         initialScope={retrySessionScope}
+        onFinished={() => loadUserPoints()}
       />
 
       {/* 自學天地（練習 / 記錄 分頁） */}
@@ -1540,28 +1481,40 @@ const StudentDashboard: React.FC = () => {
         open={showQuizModal}
         quizId={selectedQuizId}
         onClose={() => { setShowQuizModal(false); setSelectedQuizId(null); }}
-        onFinished={() => loadStudentTasks()}
+        onFinished={() => {
+          void loadStudentTasks();
+          void loadUserPoints();
+        }}
       />
 
       <StudentDiscussionModal
         open={showDiscussionModal}
         discussionId={selectedDiscussionId}
         onClose={() => { setShowDiscussionModal(false); setSelectedDiscussionId(null); }}
-        onSubmitted={() => loadStudentTasks()}
+        onSubmitted={() => {
+          void loadStudentTasks();
+          void loadUserPoints();
+        }}
       />
 
       <QuizContestModal
         open={showContestModal}
         contest={selectedContest}
         onClose={() => { setShowContestModal(false); setSelectedContest(null); }}
-        onFinished={() => loadStudentTasks()}
+        onFinished={() => {
+          void loadStudentTasks();
+          void loadUserPoints();
+        }}
       />
 
       {showNoteModal && user && (
         <NoteEditorModal
           open={showNoteModal}
           onClose={() => { setShowNoteModal(false); setSelectedNoteId(null); }}
-          onSubmitted={() => loadStudentTasks()}
+          onSubmitted={() => {
+            void loadStudentTasks();
+            void loadUserPoints();
+          }}
           authService={authService}
           mode="student"
           noteId={selectedNoteId || undefined}

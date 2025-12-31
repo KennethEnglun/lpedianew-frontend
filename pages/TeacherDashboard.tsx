@@ -1,5 +1,5 @@
 import React, { useMemo, useRef, useState, useEffect } from 'react';
-import { Menu, Settings, SlidersHorizontal, User, LogOut, MessageSquare, Plus, X, Image, Link, Code, Bold, Italic, Underline, Type, Palette, Upload, Trash, Filter, Eye, EyeOff, HelpCircle, Clock, Bot, BarChart3 } from 'lucide-react';
+import { Menu, Settings, SlidersHorizontal, User, LogOut, MessageSquare, Plus, X, Image, Link, Code, Bold, Italic, Underline, Type, Palette, Upload, Trash, Filter, Eye, EyeOff, HelpCircle, Clock, Bot, BarChart3, Coins } from 'lucide-react';
 import Button from '../components/Button';
 import Select from '../components/Select';
 import Input from '../components/Input';
@@ -234,6 +234,17 @@ const TeacherDashboard: React.FC = () => {
   const [progressFilterSubject, setProgressFilterSubject] = useState('');
   const [progressFilterGroup, setProgressFilterGroup] = useState('');
   const [progressIncludeHidden, setProgressIncludeHidden] = useState(false);
+
+  // 教師加分（我的獎勵）
+  const [showPointsGrantModal, setShowPointsGrantModal] = useState(false);
+  const [pointsGrantLoading, setPointsGrantLoading] = useState(false);
+  const [pointsGrantError, setPointsGrantError] = useState('');
+  const [pointsGrantMode, setPointsGrantMode] = useState<'student' | 'class'>('student');
+  const [pointsGrantStudents, setPointsGrantStudents] = useState<any[]>([]);
+  const [pointsGrantClass, setPointsGrantClass] = useState('');
+  const [pointsGrantStudentId, setPointsGrantStudentId] = useState('');
+  const [pointsGrantAmount, setPointsGrantAmount] = useState<number>(10);
+  const [pointsGrantDescription, setPointsGrantDescription] = useState('');
 
   // 學生詳細任務查看
   const [showStudentTaskModal, setShowStudentTaskModal] = useState(false);
@@ -1383,6 +1394,20 @@ const TeacherDashboard: React.FC = () => {
       await loadFilterOptions();
     }
     await loadStudentProgress();
+  };
+
+  const openPointsGrant = async () => {
+    setShowPointsGrantModal(true);
+    setPointsGrantError('');
+    try {
+      const studentsData = await authService.getStudentRoster({ limit: 2000 });
+      const students = (studentsData.users || []).filter((u: any) => u?.role === 'student');
+      setPointsGrantStudents(students);
+      const defaultClass = String(user?.profile?.homeroomClass || '').trim();
+      if (defaultClass && !pointsGrantClass) setPointsGrantClass(defaultClass);
+    } catch (e: any) {
+      setPointsGrantError(e?.message || '載入學生名單失敗');
+    }
   };
 
   const extractStudentId = (record: any): string | null => {
@@ -3121,6 +3146,17 @@ const TeacherDashboard: React.FC = () => {
                   </Button>
                   <Button
                     fullWidth
+                    className="bg-[#FFF3E0] hover:bg-[#FFE3C2] flex items-center justify-center gap-2"
+                    onClick={async () => {
+                      await openPointsGrant();
+                      closeSidebar();
+                    }}
+                  >
+                    <Coins className="w-5 h-5" />
+                    點數加分
+                  </Button>
+                  <Button
+                    fullWidth
                     className="bg-[#C0E2BE] hover:bg-[#A9D8A7]"
                     onClick={() => {
                       openAssignmentManagement();
@@ -3170,6 +3206,166 @@ const TeacherDashboard: React.FC = () => {
               </div>
             </div>
           </aside>
+        </div>
+      )}
+
+      {/* 點數加分（教師） */}
+      {showPointsGrantModal && (
+        <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl w-full max-w-xl overflow-hidden shadow-comic-xl border-4 border-brand-brown">
+            <div className="bg-[#FFF3E0] border-b-4 border-brand-brown px-6 py-4 flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-full bg-white border-2 border-brand-brown flex items-center justify-center">
+                  <Coins className="w-5 h-5 text-brand-brown" />
+                </div>
+                <div className="text-xl font-black text-brand-brown">點數加分</div>
+              </div>
+              <button
+                onClick={() => setShowPointsGrantModal(false)}
+                className="w-10 h-10 rounded-full bg-white border-2 border-brand-brown hover:bg-gray-100 flex items-center justify-center"
+                aria-label="關閉"
+              >
+                <X className="w-6 h-6 text-brand-brown" />
+              </button>
+            </div>
+
+            <div className="p-6 space-y-4">
+              {pointsGrantError && (
+                <div className="p-3 rounded-2xl border-2 border-red-200 bg-red-50 text-red-700 font-bold">
+                  {pointsGrantError}
+                </div>
+              )}
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <div className="text-sm font-bold text-brand-brown mb-2">模式</div>
+                  <select
+                    className="w-full px-4 py-3 border-4 border-gray-300 rounded-2xl font-bold"
+                    value={pointsGrantMode}
+                    onChange={(e) => setPointsGrantMode(e.target.value as any)}
+                  >
+                    <option value="student">單一學生</option>
+                    <option value="class">整班</option>
+                  </select>
+                </div>
+
+                <div>
+                  <div className="text-sm font-bold text-brand-brown mb-2">班級</div>
+                  <select
+                    className="w-full px-4 py-3 border-4 border-gray-300 rounded-2xl font-bold"
+                    value={pointsGrantClass}
+                    onChange={(e) => setPointsGrantClass(e.target.value)}
+                  >
+                    <option value="">請選擇班級</option>
+                    {Array.from(new Set(pointsGrantStudents.map((s: any) => String(s?.profile?.class || '')).filter(Boolean)))
+                      .sort((a, b) => a.localeCompare(b, 'zh-Hant'))
+                      .map((cls) => (
+                        <option key={cls} value={cls}>{cls}</option>
+                      ))}
+                  </select>
+                </div>
+              </div>
+
+              {pointsGrantMode === 'student' && (
+                <div>
+                  <div className="text-sm font-bold text-brand-brown mb-2">學生</div>
+                  <select
+                    className="w-full px-4 py-3 border-4 border-gray-300 rounded-2xl font-bold"
+                    value={pointsGrantStudentId}
+                    onChange={(e) => setPointsGrantStudentId(e.target.value)}
+                  >
+                    <option value="">請選擇學生</option>
+                    {pointsGrantStudents
+                      .filter((s: any) => !pointsGrantClass || String(s?.profile?.class || '') === pointsGrantClass)
+                      .sort((a: any, b: any) => String(a?.profile?.name || a?.username || '').localeCompare(String(b?.profile?.name || b?.username || ''), 'zh-Hant'))
+                      .map((s: any) => (
+                        <option key={String(s.id)} value={String(s.id)}>
+                          {String(s.profile?.name || s.username || '學生')}（{String(s.profile?.class || '-') }）
+                        </option>
+                      ))}
+                  </select>
+                </div>
+              )}
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <div className="text-sm font-bold text-brand-brown mb-2">加分數量</div>
+                  <Input
+                    type="number"
+                    value={pointsGrantAmount}
+                    onChange={(e) => setPointsGrantAmount(Number((e.target as any).value))}
+                    className="w-full"
+                  />
+                </div>
+                <div>
+                  <div className="text-sm font-bold text-brand-brown mb-2">說明（可選）</div>
+                  <Input
+                    value={pointsGrantDescription}
+                    onChange={(e) => setPointsGrantDescription((e.target as any).value)}
+                    placeholder="例如：課堂表現優秀"
+                    className="w-full"
+                  />
+                </div>
+              </div>
+
+              <div className="flex gap-3 pt-2">
+                <Button
+                  fullWidth
+                  className="bg-white hover:bg-gray-100 text-brand-brown border-4 border-brand-brown"
+                  onClick={() => setShowPointsGrantModal(false)}
+                >
+                  取消
+                </Button>
+                <Button
+                  fullWidth
+                  className="bg-[#93C47D] hover:bg-[#86b572] text-brand-brown border-4 border-brand-brown"
+                  disabled={pointsGrantLoading}
+                  onClick={async () => {
+                    try {
+                      setPointsGrantLoading(true);
+                      setPointsGrantError('');
+                      const amount = Number(pointsGrantAmount);
+                      if (!Number.isFinite(amount) || amount <= 0) {
+                        setPointsGrantError('加分數量必須是正數');
+                        return;
+                      }
+
+                      if (pointsGrantMode === 'student') {
+                        if (!pointsGrantStudentId) {
+                          setPointsGrantError('請先選擇學生');
+                          return;
+                        }
+                        await authService.grantPointsToStudent(pointsGrantStudentId, amount, pointsGrantDescription || undefined);
+                      } else {
+                        if (!pointsGrantClass) {
+                          setPointsGrantError('請先選擇班級');
+                          return;
+                        }
+                        const ids = pointsGrantStudents
+                          .filter((s: any) => String(s?.profile?.class || '') === pointsGrantClass)
+                          .map((s: any) => String(s.id));
+                        if (ids.length === 0) {
+                          setPointsGrantError('此班級沒有學生');
+                          return;
+                        }
+                        await authService.batchGrantPoints(ids, amount, pointsGrantDescription || `全班加分 ${amount}`);
+                      }
+
+                      window.alert('加分成功');
+                      setShowPointsGrantModal(false);
+                      setPointsGrantDescription('');
+                    } catch (e: any) {
+                      setPointsGrantError(e?.message || '加分失敗');
+                    } finally {
+                      setPointsGrantLoading(false);
+                    }
+                  }}
+                >
+                  {pointsGrantLoading ? '處理中...' : '確認加分'}
+                </Button>
+              </div>
+            </div>
+          </div>
         </div>
       )}
 
@@ -3227,6 +3423,14 @@ const TeacherDashboard: React.FC = () => {
             onClick={openStudentProgress}
           >
             學生進度
+          </Button>
+          <Button
+            fullWidth
+            className="bg-[#FFF3E0] hover:bg-[#FFE3C2] text-lg flex items-center justify-center gap-2"
+            onClick={openPointsGrant}
+          >
+            <Coins className="w-5 h-5" />
+            點數加分
           </Button>
           <Button fullWidth className="bg-[#C0E2BE] hover:bg-[#A9D8A7] text-lg" onClick={openAssignmentManagement}>
             作業管理

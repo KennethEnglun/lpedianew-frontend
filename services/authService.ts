@@ -2140,6 +2140,9 @@ class AuthService {
     totalReceived: number;
     totalUsed: number;
     lastUpdate: string;
+    dayKey?: string;
+    selfStudyDoubleUsed?: number;
+    selfStudyDoubleRemaining?: number;
   }> {
     const response = await fetch(`${this.API_BASE}/student/points/balance`, {
       headers: this.getAuthHeaders()
@@ -2165,6 +2168,22 @@ class AuthService {
       method: 'POST',
       headers: this.getAuthHeaders(),
       body: JSON.stringify({ prompt })
+    });
+    return this.handleResponse(response);
+  }
+
+  async submitSelfStudyCompletion(payload: { sessionId: string; score: number; scope?: any }): Promise<{
+    success: boolean;
+    transaction?: any;
+    created?: boolean;
+    dayKey?: string;
+    selfStudyDoubleUsed?: number;
+    selfStudyDoubleRemaining?: number;
+  }> {
+    const response = await fetch(`${this.API_BASE}/student/self-study/complete`, {
+      method: 'POST',
+      headers: this.getAuthHeaders(),
+      body: JSON.stringify(payload || {})
     });
     return this.handleResponse(response);
   }
