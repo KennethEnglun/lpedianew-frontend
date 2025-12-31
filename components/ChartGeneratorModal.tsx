@@ -349,7 +349,11 @@ const defaultSpec = (): ChartSpec => ({
 const getFolderPathText = (snapshot: any | null) => {
   const path = Array.isArray(snapshot?.path) ? snapshot.path : [];
   const names = path.map((p: any) => String(p?.name || '').trim()).filter(Boolean);
-  return names.join(' / ');
+  const tail = names.join(' / ');
+  const grade = String(snapshot?.grade || '').trim();
+  if (grade && tail) return `${grade}年級 / ${tail}`;
+  if (grade) return `${grade}年級`;
+  return tail;
 };
 
 export const ChartGeneratorModal: React.FC<Props> = ({ open, onClose, mode }) => {
@@ -373,7 +377,7 @@ export const ChartGeneratorModal: React.FC<Props> = ({ open, onClose, mode }) =>
   const [previewDragging, setPreviewDragging] = useState(false);
   const dragStartRef = useRef<{ x: number; y: number; ox: number; oy: number } | null>(null);
 
-  // Folders (class folders)
+  // Student folders (class folders)
   const [foldersLoading, setFoldersLoading] = useState(false);
   const [foldersError, setFoldersError] = useState('');
   const [classFolders, setClassFolders] = useState<any[]>([]);
@@ -382,6 +386,12 @@ export const ChartGeneratorModal: React.FC<Props> = ({ open, onClose, mode }) =>
   const [saveSubfolderId, setSaveSubfolderId] = useState('');
   const [filterStageId, setFilterStageId] = useState('');
   const [filterTopicId, setFilterTopicId] = useState('');
+
+  // Teacher private folders (library folders)
+  const teacherGradeOptions = useMemo(() => ['1', '2', '3', '4', '5', '6'], []);
+  const [teacherSaveGrade, setTeacherSaveGrade] = useState('1');
+  const [teacherFolders, setTeacherFolders] = useState<any[]>([]);
+  const [teacherSaveFolderId, setTeacherSaveFolderId] = useState<string | null>(null);
 
   // Save / list
   const [saving, setSaving] = useState(false);
@@ -404,7 +414,35 @@ export const ChartGeneratorModal: React.FC<Props> = ({ open, onClose, mode }) =>
   const subFolders = useMemo(() => classFolders.filter((f: any) => f && Number(f.level) === 3 && !f.archivedAt && String(f.parentId || '') === String(saveTopicId || '')), [classFolders, saveTopicId]);
   const filterTopicFolders = useMemo(() => classFolders.filter((f: any) => f && Number(f.level) === 2 && !f.archivedAt && String(f.parentId || '') === String(filterStageId || '')), [classFolders, filterStageId]);
 
+  const teacherFolderTree = useMemo(() => {
+    const byParent = new Map<string | null, any[]>();
+    for (const f of teacherFolders) {
+      const pid = f?.parentId ? String(f.parentId) : null;
+      if (!byParent.has(pid)) byParent.set(pid, []);
+      byParent.get(pid)!.push(f);
+    }
+    for (const list of byParent.values()) {
+      list.sort((a, b) => {
+        const oa = Number.isFinite(a.order) ? a.order : 0;
+        const ob = Number.isFinite(b.order) ? b.order : 0;
+        if (oa !== ob) return oa - ob;
+        return String(a.name || '').localeCompare(String(b.name || ''), 'zh-Hant');
+      });
+    }
+    const renderNode = (parentId: string | null, depth: number): any[] => {
+      const list = byParent.get(parentId) || [];
+      const out: any[] = [];
+      for (const f of list) {
+        out.push({ folder: f, depth });
+        out.push(...renderNode(String(f.id), depth + 1));
+      }
+      return out;
+    };
+    return renderNode(null, 0);
+  }, [teacherFolders]);
+
   const filteredMyCharts = useMemo(() => {
+    if (isTeacher) return myCharts;
     if (!filterStageId && !filterTopicId) return myCharts;
     return (myCharts || []).filter((c) => {
       const path = Array.isArray(c?.folderSnapshot?.path) ? c.folderSnapshot.path : [];
@@ -412,7 +450,7 @@ export const ChartGeneratorModal: React.FC<Props> = ({ open, onClose, mode }) =>
       const topicOk = !filterTopicId ? true : String(path[1]?.id || '') === String(filterTopicId);
       return stageOk && topicOk;
     });
-  }, [filterStageId, filterTopicId, myCharts]);
+  }, [filterStageId, filterTopicId, isTeacher, myCharts]);
 
   const displayedSpec: ChartSpec | null = useMemo(() => {
     if (tab === 'library') {
@@ -498,7 +536,7 @@ export const ChartGeneratorModal: React.FC<Props> = ({ open, onClose, mode }) =>
     }
   };
 
-  const loadFolders = async () => {
+  const loadStudentFolders = async () => {
     setFoldersLoading(true);
     setFoldersError('');
     try {
@@ -511,6 +549,25 @@ export const ChartGeneratorModal: React.FC<Props> = ({ open, onClose, mode }) =>
       }
     } catch (e) {
       setClassFolders([]);
+      setFoldersError(e instanceof Error ? e.message : '載入資料夾失敗');
+    } finally {
+      setFoldersLoading(false);
+    }
+  };
+
+  const loadTeacherFolders = async (grade: string) => {
+    setFoldersLoading(true);
+    setFoldersError('');
+    try {
+      const g = String(grade || '').trim();
+      if (!g) {
+        setTeacherFolders([]);
+        return;
+      }
+      const resp = await authService.listMyLibraryFolders(g);
+      setTeacherFolders(Array.isArray(resp?.folders) ? resp.folders : []);
+    } catch (e) {
+      setTeacherFolders([]);
       setFoldersError(e instanceof Error ? e.message : '載入資料夾失敗');
     } finally {
       setFoldersLoading(false);
@@ -538,9 +595,8 @@ export const ChartGeneratorModal: React.FC<Props> = ({ open, onClose, mode }) =>
     setError('');
     setSaving(true);
     try {
-      const folderId = saveSubfolderId || saveTopicId || null;
       const payload = {
-        folderId,
+        ...(isTeacher ? { grade: teacherSaveGrade, folderId: teacherSaveFolderId } : { folderId: saveSubfolderId || saveTopicId || null }),
         title: String(spec.title || '').trim() || '我的圖表',
         chartSpec: { ...spec, rows: sanitizeRows(spec.rows) }
       };
@@ -664,11 +720,20 @@ export const ChartGeneratorModal: React.FC<Props> = ({ open, onClose, mode }) =>
 
   useEffect(() => {
     if (!open) return;
-    void loadFolders();
+    if (isTeacher) void loadTeacherFolders(teacherSaveGrade);
+    else void loadStudentFolders();
     void loadMyCharts();
     if (isTeacher) void loadRoster();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
+
+  useEffect(() => {
+    if (!open) return;
+    if (!isTeacher) return;
+    setTeacherSaveFolderId(null);
+    void loadTeacherFolders(teacherSaveGrade);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, isTeacher, teacherSaveGrade]);
 
   useEffect(() => {
     if (!open) return;
@@ -1263,57 +1328,94 @@ export const ChartGeneratorModal: React.FC<Props> = ({ open, onClose, mode }) =>
                       </Button>
                     </div>
 
-                    <div className="mt-4 bg-white rounded-2xl p-5 shadow-comic border-2 border-brand-brown/10">
-                      <div className="font-black text-brand-brown text-lg mb-3">儲存到資料夾</div>
-                      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                        <div>
-                          <div className="text-sm font-bold text-gray-700 mb-1">學段</div>
-                          <select
-                            value={saveStageId}
-                            onChange={(e) => setSaveStageId(e.target.value)}
-                            className="w-full px-3 py-2 border-2 border-gray-300 rounded-xl focus:outline-none focus:border-brand-brown"
-                            disabled={foldersLoading}
-                          >
-                            <option value="">（未分類）</option>
-                            {stageFolders.map((f: any) => (
-                              <option key={f.id} value={String(f.id)}>{String(f.name || '')}</option>
-                            ))}
-                          </select>
-                        </div>
-                        <div>
-                          <div className="text-sm font-bold text-gray-700 mb-1">課題</div>
-                          <select
-                            value={saveTopicId}
-                            onChange={(e) => setSaveTopicId(e.target.value)}
-                            className="w-full px-3 py-2 border-2 border-gray-300 rounded-xl focus:outline-none focus:border-brand-brown"
-                            disabled={!saveStageId || foldersLoading}
-                          >
-                            <option value="">（不選）</option>
-                            {topicFolders.map((f: any) => (
-                              <option key={f.id} value={String(f.id)}>{String(f.name || '')}</option>
-                            ))}
-                          </select>
-                          <div className="mt-2 text-xs text-gray-600 font-bold">需要新增課題資料夾請聯絡老師。</div>
-                        </div>
-                        <div>
-                          <div className="text-sm font-bold text-gray-700 mb-1">子資料夾（可選）</div>
-                          <select
-                            value={saveSubfolderId}
-                            onChange={(e) => setSaveSubfolderId(e.target.value)}
-                            className="w-full px-3 py-2 border-2 border-gray-300 rounded-xl focus:outline-none focus:border-brand-brown"
-                            disabled={!saveTopicId || foldersLoading}
-                          >
-                            <option value="">（不選）</option>
-                            {subFolders.map((f: any) => (
-                              <option key={f.id} value={String(f.id)}>{String(f.name || '')}</option>
-                            ))}
-                          </select>
-                        </div>
-                      </div>
-                      {foldersError ? <div className="mt-2 text-xs text-red-600 font-bold">{foldersError}</div> : null}
-                      <div className="mt-3 flex gap-2">
-                        <button
-                          type="button"
+	                    <div className="mt-4 bg-white rounded-2xl p-5 shadow-comic border-2 border-brand-brown/10">
+	                      <div className="font-black text-brand-brown text-lg mb-3">儲存到資料夾</div>
+	                      {isTeacher ? (
+	                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+	                          <div>
+	                            <div className="text-sm font-bold text-gray-700 mb-1">年級</div>
+	                            <select
+	                              value={teacherSaveGrade}
+	                              onChange={(e) => setTeacherSaveGrade(e.target.value)}
+	                              className="w-full px-3 py-2 border-2 border-gray-300 rounded-xl focus:outline-none focus:border-brand-brown"
+	                              disabled={foldersLoading}
+	                            >
+	                              {teacherGradeOptions.map((g) => (
+	                                <option key={g} value={g}>{g} 年級</option>
+	                              ))}
+	                            </select>
+	                          </div>
+	                          <div>
+	                            <div className="text-sm font-bold text-gray-700 mb-1">教師私人資料夾（可選）</div>
+	                            <select
+	                              value={teacherSaveFolderId || ''}
+	                              onChange={(e) => setTeacherSaveFolderId(e.target.value ? e.target.value : null)}
+	                              className="w-full px-3 py-2 border-2 border-gray-300 rounded-xl focus:outline-none focus:border-brand-brown bg-white"
+	                              disabled={foldersLoading}
+	                            >
+	                              <option value="">（未分類）</option>
+	                              {teacherFolderTree.map((row) => (
+	                                <option key={row.folder.id} value={String(row.folder.id)}>
+	                                  {'　'.repeat(row.depth)}{String(row.folder.name || '')}
+	                                </option>
+	                              ))}
+	                            </select>
+	                            <div className="mt-2 text-xs text-gray-600 font-bold">
+	                              此功能會儲存到你的「教師資料夾（私人）」。如需新增/管理資料夾，請到「教師資料夾」。
+	                            </div>
+	                          </div>
+	                        </div>
+	                      ) : (
+	                        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+	                          <div>
+	                            <div className="text-sm font-bold text-gray-700 mb-1">學段</div>
+	                            <select
+	                              value={saveStageId}
+	                              onChange={(e) => setSaveStageId(e.target.value)}
+	                              className="w-full px-3 py-2 border-2 border-gray-300 rounded-xl focus:outline-none focus:border-brand-brown"
+	                              disabled={foldersLoading}
+	                            >
+	                              <option value="">（未分類）</option>
+	                              {stageFolders.map((f: any) => (
+	                                <option key={f.id} value={String(f.id)}>{String(f.name || '')}</option>
+	                              ))}
+	                            </select>
+	                          </div>
+	                          <div>
+	                            <div className="text-sm font-bold text-gray-700 mb-1">課題</div>
+	                            <select
+	                              value={saveTopicId}
+	                              onChange={(e) => setSaveTopicId(e.target.value)}
+	                              className="w-full px-3 py-2 border-2 border-gray-300 rounded-xl focus:outline-none focus:border-brand-brown"
+	                              disabled={!saveStageId || foldersLoading}
+	                            >
+	                              <option value="">（不選）</option>
+	                              {topicFolders.map((f: any) => (
+	                                <option key={f.id} value={String(f.id)}>{String(f.name || '')}</option>
+	                              ))}
+	                            </select>
+	                            <div className="mt-2 text-xs text-gray-600 font-bold">需要新增課題資料夾請聯絡老師。</div>
+	                          </div>
+	                          <div>
+	                            <div className="text-sm font-bold text-gray-700 mb-1">子資料夾（可選）</div>
+	                            <select
+	                              value={saveSubfolderId}
+	                              onChange={(e) => setSaveSubfolderId(e.target.value)}
+	                              className="w-full px-3 py-2 border-2 border-gray-300 rounded-xl focus:outline-none focus:border-brand-brown"
+	                              disabled={!saveTopicId || foldersLoading}
+	                            >
+	                              <option value="">（不選）</option>
+	                              {subFolders.map((f: any) => (
+	                                <option key={f.id} value={String(f.id)}>{String(f.name || '')}</option>
+	                              ))}
+	                            </select>
+	                          </div>
+	                        </div>
+	                      )}
+	                      {foldersError ? <div className="mt-2 text-xs text-red-600 font-bold">{foldersError}</div> : null}
+	                      <div className="mt-3 flex gap-2">
+	                        <button
+	                          type="button"
                           onClick={() => void handleSave()}
                           className="w-full px-4 py-3 rounded-2xl bg-[#93C47D] border-4 border-brand-brown text-brand-brown font-black shadow-comic active:translate-y-1 active:shadow-none hover:bg-[#86b572] inline-flex items-center justify-center gap-2"
                           disabled={saving}
@@ -1344,31 +1446,39 @@ export const ChartGeneratorModal: React.FC<Props> = ({ open, onClose, mode }) =>
                       </div>
                     ) : null}
 
-                    <div className="text-sm font-black text-[#5E4C40] mb-2">資料夾篩選</div>
-                    <div className="space-y-2">
-                      <select
-                        value={filterStageId}
-                        onChange={(e) => setFilterStageId(e.target.value)}
-                        className="w-full px-3 py-2 border-2 border-gray-300 rounded-xl focus:outline-none focus:border-brand-brown"
-                        disabled={foldersLoading}
-                      >
-                        <option value="">（選擇學段）</option>
-                        {stageFolders.map((f: any) => (
-                          <option key={f.id} value={String(f.id)}>{String(f.name || '')}</option>
-                        ))}
-                      </select>
-                      <select
-                        value={filterTopicId}
-                        onChange={(e) => setFilterTopicId(e.target.value)}
-                        className="w-full px-3 py-2 border-2 border-gray-300 rounded-xl focus:outline-none focus:border-brand-brown"
-                        disabled={!filterStageId || foldersLoading}
-                      >
-                        <option value="">（全部課題）</option>
-                        {filterTopicFolders.map((f: any) => (
-                          <option key={f.id} value={String(f.id)}>{String(f.name || '')}</option>
-                        ))}
-                      </select>
-                    </div>
+	                    {!isTeacher ? (
+	                      <>
+	                        <div className="text-sm font-black text-[#5E4C40] mb-2">資料夾篩選</div>
+	                        <div className="space-y-2">
+	                          <select
+	                            value={filterStageId}
+	                            onChange={(e) => setFilterStageId(e.target.value)}
+	                            className="w-full px-3 py-2 border-2 border-gray-300 rounded-xl focus:outline-none focus:border-brand-brown"
+	                            disabled={foldersLoading}
+	                          >
+	                            <option value="">（選擇學段）</option>
+	                            {stageFolders.map((f: any) => (
+	                              <option key={f.id} value={String(f.id)}>{String(f.name || '')}</option>
+	                            ))}
+	                          </select>
+	                          <select
+	                            value={filterTopicId}
+	                            onChange={(e) => setFilterTopicId(e.target.value)}
+	                            className="w-full px-3 py-2 border-2 border-gray-300 rounded-xl focus:outline-none focus:border-brand-brown"
+	                            disabled={!filterStageId || foldersLoading}
+	                          >
+	                            <option value="">（全部課題）</option>
+	                            {filterTopicFolders.map((f: any) => (
+	                              <option key={f.id} value={String(f.id)}>{String(f.name || '')}</option>
+	                            ))}
+	                          </select>
+	                        </div>
+	                      </>
+	                    ) : (
+	                      <div className="text-xs text-gray-600 font-bold">
+	                        教師圖表會儲存在「教師資料夾（私人）」；如需依資料夾整理/管理，請到「教師資料夾」。
+	                      </div>
+	                    )}
 
                     <div className="mt-4">
                       <div className="text-sm font-black text-[#5E4C40] mb-2">圖表列表</div>

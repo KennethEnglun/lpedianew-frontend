@@ -1366,7 +1366,7 @@ class AuthService {
     return this.handleResponse(response);
   }
 
-  async createMyChart(payload: { folderId?: string | null; title?: string; chartSpec: any }): Promise<{ chart: any }> {
+  async createMyChart(payload: { grade?: string; folderId?: string | null; title?: string; chartSpec: any }): Promise<{ chart: any }> {
     const response = await fetch(`${this.API_BASE}/charts/me`, {
       method: 'POST',
       headers: this.getAuthHeaders(),
