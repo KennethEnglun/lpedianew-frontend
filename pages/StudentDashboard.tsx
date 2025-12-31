@@ -1287,30 +1287,32 @@ const StudentDashboard: React.FC = () => {
               <div className="p-4 bg-white/60 h-full flex flex-col justify-center">
                 {/* Awards section */}
                 <div className="grid grid-cols-4 gap-3 justify-items-center mb-6">
-                  <div className="flex flex-col items-center gap-1 group">
-                    <div className="w-12 h-12 rounded-full flex items-center justify-center group-hover:rotate-12 transition-transform">
-                      <Award className="w-10 h-10 text-yellow-500 drop-shadow-md" />
-                    </div>
-                    <span className="text-xs font-bold text-[#8D6E63] text-center">金獎</span>
-                  </div>
-                  <div className="flex flex-col items-center gap-1 group">
-                    <div className="w-12 h-12 rounded-full flex items-center justify-center group-hover:rotate-12 transition-transform">
-                      <Award className="w-10 h-10 text-blue-500 drop-shadow-md opacity-50 grayscale hover:opacity-100 hover:grayscale-0 transition-all" />
-                    </div>
-                    <span className="text-xs font-bold text-[#8D6E63] text-center">銀獎</span>
-                  </div>
-                  <div className="flex flex-col items-center gap-1 group">
-                    <div className="w-12 h-12 rounded-full flex items-center justify-center group-hover:rotate-12 transition-transform">
-                      <Award className="w-10 h-10 text-purple-500 drop-shadow-md opacity-50 grayscale hover:opacity-100 hover:grayscale-0 transition-all" />
-                    </div>
-                    <span className="text-xs font-bold text-[#8D6E63] text-center">銅獎</span>
-                  </div>
-                  <div className="flex flex-col items-center gap-1 group">
-                    <div className="w-12 h-12 rounded-full flex items-center justify-center group-hover:rotate-12 transition-transform">
-                      <Award className="w-10 h-10 text-red-500 drop-shadow-md opacity-50 grayscale hover:opacity-100 hover:grayscale-0 transition-all" />
-                    </div>
-                    <span className="text-xs font-bold text-[#8D6E63] text-center">特殊</span>
-                  </div>
+                  {(() => {
+                    const pts = Number(userPoints.currentPoints) || 0;
+                    const medals = [
+                      { key: 'bronze', label: '銅獎', min: 100, color: 'text-[#CD7F32]' },
+                      { key: 'silver', label: '銀獎', min: 200, color: 'text-gray-400' },
+                      { key: 'gold', label: '金獎', min: 500, color: 'text-yellow-500' },
+                      { key: 'diamond', label: '鑽石', min: 1000, color: 'text-sky-500' }
+                    ] as const;
+
+                    return medals.map((m) => {
+                      const unlocked = pts >= m.min;
+                      return (
+                        <div key={m.key} className="flex flex-col items-center gap-1 group" title={`${m.label}：${m.min} 分`}>
+                          <div className="w-12 h-12 rounded-full flex items-center justify-center group-hover:rotate-12 transition-transform">
+                            <Award
+                              className={[
+                                'w-10 h-10 drop-shadow-md transition-all',
+                                unlocked ? m.color : 'text-gray-300 opacity-60 grayscale'
+                              ].join(' ')}
+                            />
+                          </div>
+                          <span className="text-xs font-bold text-[#8D6E63] text-center">{m.label}</span>
+                        </div>
+                      );
+                    });
+                  })()}
                 </div>
 
                 {/* Achievement badges */}
