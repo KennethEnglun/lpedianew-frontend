@@ -3076,6 +3076,29 @@ const TeacherDashboard: React.FC = () => {
                                 >
                                   加分
                                 </button>
+                                {user?.role === 'admin' && (
+                                  <button
+                                    onClick={async () => {
+                                      const raw = window.prompt(`設定 ${row.name} 的點數為（目前 ${row.points}）`, String(row.points));
+                                      if (raw === null) return;
+                                      const next = Number(raw);
+                                      if (!Number.isFinite(next) || next < 0) {
+                                        window.alert('點數必須是 0 或以上數字');
+                                        return;
+                                      }
+                                      const desc = window.prompt('改分原因（可留空）', '管理員改分') || undefined;
+                                      try {
+                                        await authService.adjustStudentPoints(String(row.id), Math.floor(next), desc);
+                                        await loadStudentProgress();
+                                      } catch (e: any) {
+                                        window.alert(e?.message || '改分失敗');
+                                      }
+                                    }}
+                                    className="px-3 py-2 bg-white text-brand-brown rounded-lg hover:bg-gray-50 text-sm font-black border-2 border-brand-brown"
+                                  >
+                                    改分
+                                  </button>
+                                )}
                                 <button
                                   onClick={() => viewStudentTasks(row)}
                                   className="px-3 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 text-sm font-bold"
