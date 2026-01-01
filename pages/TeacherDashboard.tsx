@@ -3015,6 +3015,7 @@ const TeacherDashboard: React.FC = () => {
                         <th className="p-4 border-b-4 border-brand-brown text-brand-brown font-black">學生</th>
                         <th className="p-4 border-b-4 border-brand-brown text-brand-brown font-black">班級</th>
                         <th className="p-4 border-b-4 border-brand-brown text-brand-brown font-black">點數</th>
+                        <th className="p-4 border-b-4 border-brand-brown text-brand-brown font-black">獎牌</th>
                         <th className="p-4 border-b-4 border-brand-brown text-brand-brown font-black">收到</th>
                         <th className="p-4 border-b-4 border-brand-brown text-brand-brown font-black">完成</th>
                         <th className="p-4 border-b-4 border-brand-brown text-brand-brown font-black">未完成</th>
@@ -3025,6 +3026,14 @@ const TeacherDashboard: React.FC = () => {
                     <tbody>
                       {progressRows.map((row) => {
                         const pct = row.received > 0 ? Math.round((row.completed / row.received) * 100) : 0;
+                        const medal = (() => {
+                          const pts = Number(row.points) || 0;
+                          if (pts >= 1000) return { label: '鑽石', icon: '💎' };
+                          if (pts >= 500) return { label: '金', icon: '🥇' };
+                          if (pts >= 200) return { label: '銀', icon: '🥈' };
+                          if (pts >= 100) return { label: '銅', icon: '🥉' };
+                          return null;
+                        })();
                         return (
                           <tr key={row.id} className="bg-white odd:bg-[#FEF7EC]">
                             <td className="p-4 border-b-2 border-gray-200">
@@ -3033,6 +3042,16 @@ const TeacherDashboard: React.FC = () => {
                             </td>
                             <td className="p-4 border-b-2 border-gray-200 font-bold text-gray-700">{row.className || '-'}</td>
                             <td className="p-4 border-b-2 border-gray-200 font-black text-brand-brown">{row.points}</td>
+                            <td className="p-4 border-b-2 border-gray-200 font-bold text-gray-700">
+                              {medal ? (
+                                <span className="inline-flex items-center gap-2">
+                                  <span className="text-lg">{medal.icon}</span>
+                                  <span>{medal.label}</span>
+                                </span>
+                              ) : (
+                                <span className="text-gray-400">-</span>
+                              )}
+                            </td>
                             <td className="p-4 border-b-2 border-gray-200 font-bold text-gray-700">{row.received}</td>
                             <td className="p-4 border-b-2 border-gray-200 font-bold text-green-700">{row.completed}</td>
                             <td className="p-4 border-b-2 border-gray-200 font-bold text-red-600">{row.pending}</td>
