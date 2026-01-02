@@ -40,7 +40,7 @@ import { validateEquationAnswerType, validateEquationSteps, validateRationalAgai
 import { parseAndSolveSingleUnknownEquation } from '../services/equationSolver';
 import { Subject, Discussion } from '../types';
 import { DEFAULT_SUBJECT, GROUPS_ENABLED, VISIBLE_SUBJECTS } from '../platform';
-import { compareStudentsByStudentId } from '../utils/studentSort';
+import { compareStudentId, compareStudentsByStudentId } from '../utils/studentSort';
 
 type TowerDefenseQuestionDraft =
   | { type: 'mcq'; prompt: string; options: string[]; correctIndex: number }
@@ -227,6 +227,7 @@ const TeacherDashboard: React.FC = () => {
     id: string;
     name: string;
     username: string;
+    studentId: string;
     className: string;
     points: number;
     received: number;
@@ -887,6 +888,9 @@ const TeacherDashboard: React.FC = () => {
       const isGame = assignment.type === 'game';
       const isBotTask = assignment.type === 'ai-bot';
       const isContest = assignment.type === 'contest';
+      const studentById = new Map<string, any>(
+        allStudents.map((s: any) => [String(s.id), s] as [string, any])
+      );
 
       if (isGame) {
         // 載入遊戲結果
@@ -899,10 +903,6 @@ const TeacherDashboard: React.FC = () => {
           return acc;
         }, {});
 
-        const studentById = new Map<string, any>(
-          allStudents.map((s: any) => [String(s.id), s] as [string, any])
-        );
-
         setSelectedAssignment(assignment);
         setAssignmentResponses(scores.map((s: any) => {
           const student = studentById.get(String(s.studentId || ''));
@@ -911,6 +911,7 @@ const TeacherDashboard: React.FC = () => {
             submittedAt: s.completedAt,
             playedAt: s.completedAt,
             studentUsername: student?.username || s.studentUsername,
+            studentStudentId: student?.profile?.studentId || s.studentStudentId,
             studentClass: student?.profile?.class || s.studentClass,
             attempts: attemptsByStudent[String(s.studentId || '')] || s.attempts
           };
@@ -920,24 +921,80 @@ const TeacherDashboard: React.FC = () => {
         // 載入小測驗結果
         const data = await authService.getQuizResults(assignment.id);
         setSelectedAssignment(assignment);
-        setAssignmentResponses(data.results || []); // 測驗結果
+        const results = Array.isArray(data.results) ? data.results : [];
+        setAssignmentResponses(
+          results.map((r: any) => {
+            const userId = String(r?.studentId || r?.userId || r?.student?.id || r?.user?.id || '');
+            const student = userId ? studentById.get(userId) : null;
+            return {
+              ...r,
+              studentId: userId || r?.studentId,
+              studentName: r?.studentName || student?.profile?.name,
+              studentUsername: r?.studentUsername || student?.username,
+              studentClass: r?.studentClass || student?.profile?.class,
+              studentStudentId: r?.studentStudentId || student?.profile?.studentId
+            };
+          })
+        ); // 測驗結果
         setEditedContent(assignment.description || '小測驗');
       } else if (isContest) {
         // 載入問答比賽結果
         const data = await authService.getContestResults(assignment.id);
         setSelectedAssignment(assignment);
-        setAssignmentResponses(data.attempts || []); // 比賽參賽記錄
+        const attempts = Array.isArray(data.attempts) ? data.attempts : [];
+        setAssignmentResponses(
+          attempts.map((r: any) => {
+            const userId = String(r?.studentId || r?.userId || r?.student?.id || r?.user?.id || '');
+            const student = userId ? studentById.get(userId) : null;
+            return {
+              ...r,
+              studentId: userId || r?.studentId,
+              studentName: r?.studentName || student?.profile?.name,
+              studentUsername: r?.studentUsername || student?.username,
+              studentClass: r?.studentClass || student?.profile?.class,
+              studentStudentId: r?.studentStudentId || student?.profile?.studentId
+            };
+          })
+        ); // 比賽參賽記錄
         setEditedContent(assignment.topic || '問答比賽');
       } else if (isBotTask) {
         const data = await authService.getBotTaskThreads(assignment.id);
         setSelectedAssignment(assignment);
-        setAssignmentResponses(Array.isArray(data.threads) ? data.threads : []);
+        const threads = Array.isArray(data.threads) ? data.threads : [];
+        setAssignmentResponses(
+          threads.map((t: any) => {
+            const userId = String(t?.studentId || t?.userId || t?.student?.id || t?.user?.id || '');
+            const student = userId ? studentById.get(userId) : null;
+            return {
+              ...t,
+              studentId: userId || t?.studentId,
+              studentName: t?.studentName || student?.profile?.name,
+              studentUsername: t?.studentUsername || student?.username,
+              studentClass: t?.studentClass || student?.profile?.class,
+              studentStudentId: t?.studentStudentId || student?.profile?.studentId
+            };
+          })
+        );
         setEditedContent('');
       } else {
         // 載入一般作業回應
         const data = await authService.getAssignmentResponses(assignment.id);
         setSelectedAssignment(assignment);
-        setAssignmentResponses(data.responses || []);
+        const responses = Array.isArray(data.responses) ? data.responses : [];
+        setAssignmentResponses(
+          responses.map((r: any) => {
+            const userId = String(r?.studentId || r?.userId || r?.student?.id || r?.user?.id || '');
+            const student = userId ? studentById.get(userId) : null;
+            return {
+              ...r,
+              studentId: userId || r?.studentId,
+              studentName: r?.studentName || student?.profile?.name,
+              studentUsername: r?.studentUsername || student?.username,
+              studentClass: r?.studentClass || student?.profile?.class,
+              studentStudentId: r?.studentStudentId || student?.profile?.studentId
+            };
+          })
+        );
         setEditedContent(getDisplayContent(assignment.content));
       }
 
@@ -1534,7 +1591,8 @@ const TeacherDashboard: React.FC = () => {
         if (!normalizedSearch) return true;
         const name = String(s?.profile?.name || '').toLowerCase();
         const username = String(s?.username || '').toLowerCase();
-        return name.includes(normalizedSearch) || username.includes(normalizedSearch);
+        const studentId = String(s?.profile?.studentId || '').toLowerCase();
+        return name.includes(normalizedSearch) || username.includes(normalizedSearch) || studentId.includes(normalizedSearch);
       });
 
       const rows = filteredStudents.map((student: any) => {
@@ -1551,13 +1609,14 @@ const TeacherDashboard: React.FC = () => {
           id: student.id,
           name: student?.profile?.name || '學生',
           username: student?.username || '',
+          studentId: student?.profile?.studentId || '',
           className: student?.profile?.class || '',
           points: pointsById.get(String(student.id)) || 0,
           received,
           completed,
           pending
         };
-      }).sort((a, b) => b.pending - a.pending || a.className.localeCompare(b.className) || a.name.localeCompare(b.name));
+      }).sort((a, b) => compareStudentId(a.studentId, b.studentId) || a.className.localeCompare(b.className, 'zh-Hant') || a.name.localeCompare(b.name, 'zh-Hant'));
 
       setProgressRows(rows);
     } catch (error) {
@@ -3043,10 +3102,10 @@ const TeacherDashboard: React.FC = () => {
                         })();
                         return (
                           <tr key={row.id} className="bg-white odd:bg-[#FEF7EC]">
-                            <td className="p-4 border-b-2 border-gray-200">
-                              <div className="font-bold text-brand-brown">{row.name}</div>
-                              <div className="text-sm text-gray-600">{row.username}</div>
-                            </td>
+	                            <td className="p-4 border-b-2 border-gray-200">
+	                              <div className="font-bold text-brand-brown">{row.name}</div>
+	                              <div className="text-sm text-gray-600">學號：{row.studentId || '-'} • {row.username}</div>
+	                            </td>
                             <td className="p-4 border-b-2 border-gray-200 font-bold text-gray-700">{row.className || '-'}</td>
                             <td className="p-4 border-b-2 border-gray-200 font-black text-brand-brown">{row.points}</td>
                             <td className="p-4 border-b-2 border-gray-200 font-bold text-gray-700">
@@ -6317,17 +6376,20 @@ const TeacherDashboard: React.FC = () => {
 	                          <h4 className="text-xl font-bold text-brand-brown">
 	                            學生對話狀況 ({assignmentResponses.length})
 	                          </h4>
-	                          {loading ? (
-	                            <div className="text-center py-8">
-	                              <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-brand-brown mx-auto mb-2"></div>
-	                              <p className="text-brand-brown">載入中...</p>
-	                            </div>
-	                          ) : assignmentResponses.length > 0 ? (
-	                            assignmentResponses.map((row) => (
-	                              <div key={row.studentId} className="border-2 rounded-2xl p-4 bg-gray-50 border-gray-300">
-	                                <div className="flex justify-between items-start">
-	                                  <div className="flex items-center gap-3">
-	                                    <div className="w-8 h-8 rounded-full bg-brand-green-light flex items-center justify-center">
+		                          {loading ? (
+		                            <div className="text-center py-8">
+		                              <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-brand-brown mx-auto mb-2"></div>
+		                              <p className="text-brand-brown">載入中...</p>
+		                            </div>
+		                          ) : assignmentResponses.length > 0 ? (
+		                            assignmentResponses
+		                              .slice()
+		                              .sort((a: any, b: any) => compareStudentId(a?.studentStudentId, b?.studentStudentId))
+		                              .map((row) => (
+		                              <div key={row.studentId} className="border-2 rounded-2xl p-4 bg-gray-50 border-gray-300">
+		                                <div className="flex justify-between items-start">
+		                                  <div className="flex items-center gap-3">
+		                                    <div className="w-8 h-8 rounded-full bg-brand-green-light flex items-center justify-center">
 	                                      <span className="text-white font-bold text-sm">
 	                                        {String(row.studentName || '學').charAt(0)}
 	                                      </span>
@@ -6339,14 +6401,16 @@ const TeacherDashboard: React.FC = () => {
 	                                          <span className="text-xs font-bold px-2 py-1 rounded bg-green-100 text-green-800">已完成</span>
 	                                        ) : (
 	                                          <span className="text-xs font-bold px-2 py-1 rounded bg-gray-200 text-gray-700">未完成</span>
-	                                        )}
-	                                      </p>
-	                                      <p className="text-sm text-gray-600">{row.studentClass} • {row.studentUsername}</p>
-	                                      {row.lastMessageAt && (
-	                                        <p className="text-xs text-gray-500 mt-1">最後訊息：{new Date(row.lastMessageAt).toLocaleString()}</p>
-	                                      )}
-	                                    </div>
-	                                  </div>
+		                                        )}
+		                                      </p>
+		                                      <p className="text-sm text-gray-600">
+		                                        學號：{row.studentStudentId || '-'} • {row.studentClass} • {row.studentUsername}
+		                                      </p>
+		                                      {row.lastMessageAt && (
+		                                        <p className="text-xs text-gray-500 mt-1">最後訊息：{new Date(row.lastMessageAt).toLocaleString()}</p>
+		                                      )}
+		                                    </div>
+		                                  </div>
 	                                  <div className="flex gap-2">
 	                                    <button
 	                                      onClick={() => row.threadId && openBotTaskThreadMessages(selectedAssignment.id, String(row.threadId))}
@@ -6385,26 +6449,31 @@ const TeacherDashboard: React.FC = () => {
 	                              <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-brand-brown mx-auto mb-2"></div>
 	                              <p className="text-brand-brown">載入中...</p>
 	                            </div>
-	                          ) : assignmentResponses.length > 0 ? (
-	                            assignmentResponses.map(response => (
-	                              <div key={response.id} className={`border-2 rounded-2xl p-4 ${selectedAssignment?.type === 'quiz' ? 'bg-yellow-50 border-yellow-200' : selectedAssignment?.type === 'contest' ? 'bg-orange-50 border-orange-200' : 'bg-gray-50 border-gray-300'
-	                                }`}>
-	                                <div className="flex justify-between items-start">
-	                                  <div className="flex-1">
-	                                    <div className="flex items-center gap-3 mb-2">
+		                          ) : assignmentResponses.length > 0 ? (
+		                            assignmentResponses
+		                              .slice()
+		                              .sort((a: any, b: any) => compareStudentId(a?.studentStudentId, b?.studentStudentId))
+		                              .map((response) => (
+		                              <div key={response.id} className={`border-2 rounded-2xl p-4 ${selectedAssignment?.type === 'quiz' ? 'bg-yellow-50 border-yellow-200' : selectedAssignment?.type === 'contest' ? 'bg-orange-50 border-orange-200' : 'bg-gray-50 border-gray-300'
+		                                }`}>
+		                                <div className="flex justify-between items-start">
+		                                  <div className="flex-1">
+		                                    <div className="flex items-center gap-3 mb-2">
 	                                      <div className={`w-8 h-8 rounded-full flex items-center justify-center ${selectedAssignment?.type === 'quiz' ? 'bg-yellow-500' : selectedAssignment?.type === 'contest' ? 'bg-orange-500' : 'bg-brand-green-light'
 	                                        }`}>
 	                                        <span className="text-white font-bold text-sm">
 	                                          {response.studentName?.charAt(0) || '學'}
 	                                        </span>
 	                                      </div>
-	                                      <div>
-	                                        <p className="font-bold text-brand-brown">{response.studentName}</p>
-	                                        <p className="text-sm text-gray-600">{response.studentClass} • {response.studentUsername}</p>
-	                                      </div>
-	                                      {(selectedAssignment?.type === 'quiz' || selectedAssignment?.type === 'contest') && (
-	                                        <div className="ml-auto flex items-center gap-4">
-	                                          <div className={`px-3 py-1 rounded-full text-sm font-bold ${response.score >= 80 ? 'bg-green-100 text-green-700' :
+		                                      <div>
+		                                        <p className="font-bold text-brand-brown">{response.studentName}</p>
+		                                        <p className="text-sm text-gray-600">
+		                                          學號：{response.studentStudentId || '-'} • {response.studentClass} • {response.studentUsername}
+		                                        </p>
+		                                      </div>
+		                                      {(selectedAssignment?.type === 'quiz' || selectedAssignment?.type === 'contest') && (
+		                                        <div className="ml-auto flex items-center gap-4">
+		                                          <div className={`px-3 py-1 rounded-full text-sm font-bold ${response.score >= 80 ? 'bg-green-100 text-green-700' :
 	                                            response.score >= 60 ? 'bg-yellow-100 text-yellow-700' :
 	                                              'bg-red-100 text-red-700'
 	                                            }`}>
