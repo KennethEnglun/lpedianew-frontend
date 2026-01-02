@@ -556,6 +556,18 @@ class AuthService {
     return result.user;
   }
 
+  // 更新自己的密碼（教師/管理員）
+  async updateMyPassword(password: string): Promise<User> {
+    const response = await fetch(`${this.API_BASE}/users/me/password`, {
+      method: 'PUT',
+      headers: this.getAuthHeaders(),
+      body: JSON.stringify({ password })
+    });
+
+    const result = await this.handleResponse<{ user: User }>(response);
+    return result.user;
+  }
+
   // 刪除/停用用戶（管理員專用）
   async deleteUser(userId: string, permanent = false): Promise<void> {
     const response = await fetch(`${this.API_BASE}/users/${userId}`, {

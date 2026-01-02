@@ -7,6 +7,7 @@ import AiQuestionGeneratorModal from '../components/AiQuestionGeneratorModal';
 import UiSettingsModal from '../components/UiSettingsModal';
 import AiChatModal from '../components/AiChatModal';
 import AppStudioModal from '../components/AppStudioModal';
+import AccountDetailsModal from '../components/AccountDetailsModal';
 import { ChartGeneratorModal } from '../components/ChartGeneratorModal';
 import ClassFolderManagerModal from '../components/ClassFolderManagerModal';
 import TemplateLibraryModal from '../components/TemplateLibraryModal';
@@ -58,6 +59,7 @@ const TeacherDashboard: React.FC = () => {
   const [showAiChat, setShowAiChat] = useState(false);
   const [showChartGenerator, setShowChartGenerator] = useState(false);
   const [showAppStudio, setShowAppStudio] = useState(false);
+  const [showAccountDetails, setShowAccountDetails] = useState(false);
 
   const [teacherSettingsDraft, setTeacherSettingsDraft] = useState<{
     homeroomClass: string;
@@ -2675,9 +2677,9 @@ const TeacherDashboard: React.FC = () => {
               <SlidersHorizontal className="text-brand-brown w-5 h-5" />
             </button>
             <button
-              onClick={() => navigate('/')}
+              onClick={() => setShowAccountDetails(true)}
               className="w-10 h-10 bg-white rounded-full border-2 border-brand-brown shadow-comic flex items-center justify-center"
-              title="返回登入"
+              title="帳號詳情"
             >
               <User className="text-brand-brown w-5 h-5" />
             </button>
@@ -2709,8 +2711,9 @@ const TeacherDashboard: React.FC = () => {
           <SlidersHorizontal className="text-brand-brown w-5 h-5 sm:w-6 sm:h-6" />
         </button>
         <button
-          onClick={() => navigate('/')}
+          onClick={() => setShowAccountDetails(true)}
           className="w-10 h-10 sm:w-12 sm:h-12 bg-white rounded-full border-2 border-brand-brown shadow-comic flex items-center justify-center hover:scale-105 transition-transform"
+          title="帳號詳情"
         >
           <User className="text-brand-brown w-5 h-5 sm:w-6 sm:h-6" />
         </button>
@@ -2724,6 +2727,7 @@ const TeacherDashboard: React.FC = () => {
       </header>
 
       <UiSettingsModal open={showUiSettings} onClose={() => setShowUiSettings(false)} />
+      <AccountDetailsModal open={showAccountDetails} onClose={() => setShowAccountDetails(false)} />
       <AiChatModal
         open={showAiChat}
         onClose={() => setShowAiChat(false)}
