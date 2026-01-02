@@ -52,7 +52,8 @@ export class QuestionGeneratorService {
         message: prompt,
         subject: scope.subject, // 添加科目参数
         // 可以创建一个专门的机器人来生成题目，或使用全局聊天
-        botId: undefined // 使用全局聊天
+        botId: undefined, // 使用全局聊天
+        ephemeral: true // 不寫入 AI 對話紀錄（避免污染學生的聊天記錄）
       });
 
       if (!response.assistantMessage?.content) {

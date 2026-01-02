@@ -248,6 +248,7 @@ class AuthService {
     botId?: string;
     taskId?: string;
     message: string;
+    ephemeral?: boolean;
   }): Promise<{
     threadId: string;
     userMessage: any;
@@ -267,6 +268,7 @@ class AuthService {
     botId?: string;
     taskId?: string;
     message: string;
+    ephemeral?: boolean;
   }, options?: { signal?: AbortSignal }): Promise<Response> {
     return fetch(`${this.API_BASE}/chats/send-stream`, {
       method: 'POST',
