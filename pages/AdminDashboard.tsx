@@ -17,6 +17,7 @@ import AdminPointsPanel from '../components/admin/panels/AdminPointsPanel';
 import ModerationLogsPanel from '../components/admin/ModerationLogsPanel';
 import type { AdminSection, AdminUser, SidebarItem, UserRoleFilter, StudentPointsStatus, PointsOverview, PointTransaction } from '../components/admin/types';
 import { VISIBLE_SUBJECTS } from '../platform';
+import { compareStudentId } from '../utils/studentSort';
 
 const AdminDashboard: React.FC = () => {
   const navigate = useNavigate();
@@ -41,6 +42,7 @@ const AdminDashboard: React.FC = () => {
     password: '',
     name: '',
     role: 'student' as 'teacher' | 'student',
+    studentId: '',
     class: '',
     chineseGroup: '',
     englishGroup: '',
@@ -106,6 +108,7 @@ const AdminDashboard: React.FC = () => {
         role: user.role,
         name: user.profile.name,
         class: user.profile.class,
+        studentId: (user.profile as any)?.studentId,
         createdAt: user.lastLogin ? new Date(user.lastLogin).toISOString().split('T')[0] : '2024-01-01',
         lastLogin: user.lastLogin ? new Date(user.lastLogin).toISOString().split('T')[0] : undefined,
         isActive: user.isActive,
@@ -116,6 +119,14 @@ const AdminDashboard: React.FC = () => {
         subjectClasses: (user.profile as any)?.subjectClasses && typeof (user.profile as any).subjectClasses === 'object' ? (user.profile as any).subjectClasses : undefined
       }));
 
+      // 學生名單：依學號排序
+      if (filterRole === 'student') {
+        adminUsers.sort((a, b) => {
+          const byId = compareStudentId(a?.studentId, b?.studentId);
+          if (byId !== 0) return byId;
+          return String(a?.name || '').localeCompare(String(b?.name || ''), 'zh-Hant');
+        });
+      }
       setUsers(adminUsers);
       setUsersError('');
     } catch (err) {
@@ -400,6 +411,7 @@ const AdminDashboard: React.FC = () => {
       password: '',
       name: '',
       role: 'student',
+      studentId: '',
       class: '',
       chineseGroup: '',
       englishGroup: '',
@@ -428,6 +440,7 @@ const AdminDashboard: React.FC = () => {
           name: newUserForm.name,
           ...(newUserForm.role === 'student'
             ? {
+                ...(newUserForm.studentId && { studentId: newUserForm.studentId }),
                 ...(newUserForm.class && { class: newUserForm.class }),
                 ...(newUserForm.chineseGroup && { chineseGroup: newUserForm.chineseGroup }),
                 ...(newUserForm.englishGroup && { englishGroup: newUserForm.englishGroup }),

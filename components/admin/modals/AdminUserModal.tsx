@@ -39,6 +39,7 @@ export default function AdminUserModal(props: {
       role: (user?.role === 'teacher' || user?.role === 'student') ? user.role : 'student',
       isActive: !!user?.isActive,
       name: String(profile.name || ''),
+      studentId: String((profile as any).studentId || ''),
       className: String(profile.class || ''),
       chineseGroup: String(profile.chineseGroup || ''),
       englishGroup: String(profile.englishGroup || ''),
@@ -174,6 +175,14 @@ export default function AdminUserModal(props: {
 
                 {(form.role === 'student' || user.role === 'student') && (
                   <>
+                    <div>
+                      <div className="text-xs font-bold text-gray-600 mb-1">學號</div>
+                      {isEdit ? (
+                        <Input value={form.studentId} onChange={(e) => setForm((s) => ({ ...s, studentId: e.target.value }))} />
+                      ) : (
+                        <div className="font-bold text-gray-800">{String((user.profile as any)?.studentId || '')}</div>
+                      )}
+                    </div>
                     <div>
                       <div className="text-xs font-bold text-gray-600 mb-1">班級</div>
                       {isEdit ? (
@@ -332,7 +341,7 @@ export default function AdminUserModal(props: {
                         const profile = {
                           ...(user.profile || {}),
                           name: form.name,
-                          ...(form.role === 'student' ? { class: form.className, chineseGroup: form.chineseGroup, englishGroup: form.englishGroup, mathGroup: form.mathGroup } : {}),
+                          ...(form.role === 'student' ? { studentId: form.studentId, class: form.className, chineseGroup: form.chineseGroup, englishGroup: form.englishGroup, mathGroup: form.mathGroup } : {}),
                           ...(form.role === 'teacher'
                             ? {
                                 subjectsTaught: Array.isArray(form.subjectsTaught) && form.subjectsTaught.length > 0 ? form.subjectsTaught : availableSubjects,

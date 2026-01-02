@@ -514,6 +514,7 @@ class AuthService {
     profile: {
       name: string;
       class?: string;
+      studentId?: string;
       teacherCode?: string;
       chineseGroup?: string;
       englishGroup?: string;

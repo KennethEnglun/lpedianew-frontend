@@ -40,6 +40,7 @@ import { validateEquationAnswerType, validateEquationSteps, validateRationalAgai
 import { parseAndSolveSingleUnknownEquation } from '../services/equationSolver';
 import { Subject, Discussion } from '../types';
 import { DEFAULT_SUBJECT, GROUPS_ENABLED, VISIBLE_SUBJECTS } from '../platform';
+import { compareStudentsByStudentId } from '../utils/studentSort';
 
 type TowerDefenseQuestionDraft =
   | { type: 'mcq'; prompt: string; options: string[]; correctIndex: number }
@@ -2927,10 +2928,12 @@ const TeacherDashboard: React.FC = () => {
                       <option value="">請選擇學生</option>
                       {pointsGrantStudents
                         .filter((s: any) => !pointsGrantClass || String(s?.profile?.class || '') === pointsGrantClass)
-                        .sort((a: any, b: any) => String(a?.profile?.name || a?.username || '').localeCompare(String(b?.profile?.name || b?.username || ''), 'zh-Hant'))
+                        .sort(compareStudentsByStudentId)
                         .map((s: any) => (
                           <option key={String(s.id)} value={String(s.id)}>
-                            {String(s.profile?.name || s.username || '學生')}
+                            {String(s.profile?.studentId || '').trim()
+                              ? `${String(s.profile?.studentId).trim()} - ${String(s.profile?.name || s.username || '學生')}`
+                              : String(s.profile?.name || s.username || '學生')}
                           </option>
                         ))}
                     </select>

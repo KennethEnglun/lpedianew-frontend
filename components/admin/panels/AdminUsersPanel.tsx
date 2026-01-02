@@ -132,6 +132,7 @@ export default function AdminUsersPanel(props: {
                 <th className="text-left py-3 px-4 font-bold text-gray-700">用戶名</th>
                 <th className="text-left py-3 px-4 font-bold text-gray-700">角色</th>
                 <th className="text-left py-3 px-4 font-bold text-gray-700">姓名</th>
+                <th className="text-left py-3 px-4 font-bold text-gray-700">學號</th>
                 <th className="text-left py-3 px-4 font-bold text-gray-700">班級</th>
                 <th className="text-left py-3 px-4 font-bold text-gray-700">分組 / 任教</th>
                 <th className="text-left py-3 px-4 font-bold text-gray-700">最後登入</th>
@@ -155,6 +156,7 @@ export default function AdminUsersPanel(props: {
                     </span>
                   </td>
                   <td className="py-3 px-4 font-bold">{user.name}</td>
+                  <td className="py-3 px-4 font-mono text-sm">{user.role === 'student' ? (user.studentId || '—') : '—'}</td>
                   <td className="py-3 px-4">{user.class || 'N/A'}</td>
                   <td className="py-3 px-4 text-sm">
                     {user.role === 'student' ? renderStudentGroups(user) : renderTeachingSummary(user)}

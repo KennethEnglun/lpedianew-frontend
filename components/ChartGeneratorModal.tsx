@@ -5,6 +5,7 @@ import Chart from 'chart.js/auto';
 import Button from './Button';
 import { useAuth } from '../contexts/AuthContext';
 import { authService } from '../services/authService';
+import { compareStudentsByStudentId } from '../utils/studentSort';
 
 type RoleMode = 'student' | 'teacher';
 
@@ -630,7 +631,7 @@ export const ChartGeneratorModal: React.FC<Props> = ({ open, onClose, mode }) =>
   const loadRoster = async () => {
     try {
       const resp = await authService.getStudentRoster({ limit: 2000 });
-      const list = (resp?.users || []).filter((u: any) => u && u.role === 'student');
+      const list = (resp?.users || []).filter((u: any) => u && u.role === 'student').sort(compareStudentsByStudentId);
       setStudents(list);
       if (!className && list.length > 0) setClassName(String(list[0]?.profile?.class || '').trim());
     } catch {

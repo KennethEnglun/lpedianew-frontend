@@ -14,6 +14,7 @@ export default function AdminAddUserModal(props: {
     password: string;
     name: string;
     role: 'teacher' | 'student';
+    studentId: string;
     class: string;
     chineseGroup: string;
     englishGroup: string;
@@ -96,6 +97,11 @@ export default function AdminAddUserModal(props: {
 
           {form.role === 'student' && (
             <>
+              <Input
+                placeholder="學號"
+                value={form.studentId}
+                onChange={(e) => setForm({ ...form, studentId: e.target.value })}
+              />
               <Input
                 placeholder="班級"
                 value={form.class}
