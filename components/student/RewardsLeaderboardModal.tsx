@@ -1,5 +1,14 @@
 import React from 'react';
-import { X } from 'lucide-react';
+import { Award, X } from 'lucide-react';
+
+const getMedal = (points: number) => {
+  const p = Number(points) || 0;
+  if (p >= 1000) return { key: 'diamond', label: '鑽石', className: 'text-sky-500' };
+  if (p >= 500) return { key: 'gold', label: '金獎', className: 'text-yellow-500' };
+  if (p >= 200) return { key: 'silver', label: '銀獎', className: 'text-gray-400' };
+  if (p >= 100) return { key: 'bronze', label: '銅獎', className: 'text-[#CD7F32]' };
+  return null;
+};
 
 export function RewardsLeaderboardModal(props: {
   open: boolean;
@@ -66,10 +75,21 @@ export function RewardsLeaderboardModal(props: {
                 <tbody>
                   {rows.map((r, idx) => {
                     const isMe = me && String(r.userId) === me;
+                    const medal = getMedal(r.points);
                     return (
                       <tr key={`${r.userId}-${idx}`} className={isMe ? 'bg-[#D2EFFF]' : idx % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
                         <td className="px-4 py-3 font-black text-brand-brown">{r.rank}</td>
-                        <td className="px-4 py-3 font-bold text-gray-800">{r.name || r.username || '—'}</td>
+                        <td className="px-4 py-3 font-bold text-gray-800">
+                          <span className="inline-flex items-center gap-2">
+                            <span>{r.name || r.username || '—'}</span>
+                            {medal && (
+                              <Award
+                                className={['w-5 h-5 drop-shadow-sm', medal.className].join(' ')}
+                                title={medal.label}
+                              />
+                            )}
+                          </span>
+                        </td>
                         <td className="px-4 py-3 font-bold text-gray-600">{r.className || '—'}</td>
                         <td className="px-4 py-3 font-black text-right text-gray-800">{Number(r.points) || 0}</td>
                       </tr>
@@ -84,4 +104,3 @@ export function RewardsLeaderboardModal(props: {
     </div>
   );
 }
-
