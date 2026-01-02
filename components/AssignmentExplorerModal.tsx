@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Archive, ArchiveRestore, BarChart3, BookOpen, ChevronLeft, FolderInput, Pencil, RefreshCw, Trash2, X } from 'lucide-react';
+import { Archive, ArchiveRestore, BarChart3, BookOpen, ChevronLeft, Copy, FolderInput, Pencil, RefreshCw, Trash2, X } from 'lucide-react';
 import { VISIBLE_SUBJECTS } from '../platform';
 import RichHtmlContent from './RichHtmlContent';
 import NoteCreateModal from './NoteCreateModal';
@@ -153,7 +153,57 @@ const AssignmentExplorerModal: React.FC<Props> = ({ open, onClose, authService, 
   const [scopeCardOpen, setScopeCardOpen] = useState(false);
   const [studentAiNotesOpen, setStudentAiNotesOpen] = useState(false);
 
+  // AI小助手任務：查看學生對話紀錄
+  const [botThreadModalOpen, setBotThreadModalOpen] = useState(false);
+  const [botThreadModalTitle, setBotThreadModalTitle] = useState('');
+  const [botThreadLoading, setBotThreadLoading] = useState(false);
+  const [botThreadError, setBotThreadError] = useState('');
+  const [botThreadMessages, setBotThreadMessages] = useState<any[]>([]);
+
   const canArchive = viewerRole === 'admin';
+
+  const copyText = async (text: string) => {
+    const value = String(text || '');
+    try {
+      if (navigator.clipboard?.writeText) await navigator.clipboard.writeText(value);
+      else {
+        const textarea = document.createElement('textarea');
+        textarea.value = value;
+        textarea.style.position = 'fixed';
+        textarea.style.left = '-9999px';
+        textarea.style.top = '0';
+        document.body.appendChild(textarea);
+        textarea.focus();
+        textarea.select();
+        document.execCommand('copy');
+        document.body.removeChild(textarea);
+      }
+    } catch {
+      // ignore
+    }
+  };
+
+  const openBotThreadMessages = async (taskId: string, threadId: string | null, studentName?: string, studentClass?: string) => {
+    const tid = threadId ? String(threadId) : '';
+    if (!tid) {
+      alert('學生尚未開始對話');
+      return;
+    }
+    try {
+      setBotThreadModalOpen(true);
+      setBotThreadModalTitle(`${studentName || '學生'}${studentClass ? `（${studentClass}）` : ''} 的對話記錄`);
+      setBotThreadLoading(true);
+      setBotThreadError('');
+      setBotThreadMessages([]);
+      const resp = await authService.getBotTaskThreadMessages(String(taskId), tid);
+      setBotThreadMessages(Array.isArray(resp.messages) ? resp.messages : []);
+    } catch (e: any) {
+      setBotThreadError(e?.message || '載入對話失敗');
+      setBotThreadMessages([]);
+    } finally {
+      setBotThreadLoading(false);
+    }
+  };
 
   const load = async (opts?: { keepSelection?: boolean }) => {
     setLoading(true);
@@ -724,7 +774,7 @@ const AssignmentExplorerModal: React.FC<Props> = ({ open, onClose, authService, 
                 {selectedTask.type === 'ai-bot' && (
                   <div className="bg-[#FEF7EC] border-2 border-gray-200 rounded-2xl p-4 space-y-1">
                     <div className="font-bold text-gray-800">AI小助手：{String(taskDetail?.botName || selectedTask?.botName || selectedTask?.title || '')}</div>
-                    <div className="text-sm text-gray-600 font-bold">（對話內容請到學生清單點選對話查看）</div>
+                    <div className="text-sm text-gray-600 font-bold">（在下方學生清單點「查看對話」可查看對話內容）</div>
                   </div>
                 )}
 
@@ -792,9 +842,26 @@ const AssignmentExplorerModal: React.FC<Props> = ({ open, onClose, authService, 
                         }
                         return r.createdAt || '';
                       })();
+                      const canOpenBotChat = selectedTask.type === 'ai-bot' && !!r.threadId;
 
                       return (
-                        <div key={r.id || r.threadId || r.studentId || idx} className="p-3 rounded-2xl border-2 border-gray-200 bg-gray-50">
+                        <div
+                          key={r.id || r.threadId || r.studentId || idx}
+                          className={`p-3 rounded-2xl border-2 border-gray-200 bg-gray-50 ${canOpenBotChat ? 'cursor-pointer hover:border-brand-brown' : ''}`}
+                          role={canOpenBotChat ? 'button' : undefined}
+                          tabIndex={canOpenBotChat ? 0 : undefined}
+                          onClick={() => {
+                            if (!canOpenBotChat) return;
+                            void openBotThreadMessages(String(selectedTask.id), String(r.threadId || ''), name, cls);
+                          }}
+                          onKeyDown={(e) => {
+                            if (!canOpenBotChat) return;
+                            if (e.key === 'Enter' || e.key === ' ') {
+                              e.preventDefault();
+                              void openBotThreadMessages(String(selectedTask.id), String(r.threadId || ''), name, cls);
+                            }
+                          }}
+                        >
                           <div className="flex flex-wrap items-center justify-between gap-2">
                             <div className="font-black text-brand-brown">{name}{cls ? `（${cls}）` : ''}</div>
                             <div className="text-xs text-gray-600 font-bold">{meta}</div>
@@ -927,11 +994,30 @@ const AssignmentExplorerModal: React.FC<Props> = ({ open, onClose, authService, 
 	                              </button>
 	                            </div>
 	                          )}
-	                        </div>
-	                      );
-	                    })}
-	                  </div>
-	                )}
+
+                          {selectedTask.type === 'ai-bot' && (
+                            <div className="mt-3">
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  void openBotThreadMessages(String(selectedTask.id), r.threadId ? String(r.threadId) : null, name, cls);
+                                }}
+                                className={`px-3 py-1 rounded-xl border-2 font-black shadow-comic ${canOpenBotChat
+                                  ? 'border-brand-brown bg-white text-brand-brown hover:bg-gray-50'
+                                  : 'border-gray-300 bg-gray-200 text-gray-500 cursor-not-allowed'
+                                  }`}
+                                disabled={!canOpenBotChat}
+                              >
+                                查看對話
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
             </div>
           ) : !subject ? (
@@ -1081,6 +1167,66 @@ const AssignmentExplorerModal: React.FC<Props> = ({ open, onClose, authService, 
           )}
 	        </div>
 	        </div>
+
+	        {botThreadModalOpen && (
+	          <div className="fixed inset-0 bg-black/50 z-[90] flex items-center justify-center p-4">
+	            <div className="bg-white border-4 border-brand-brown rounded-3xl w-full max-w-3xl max-h-[90vh] shadow-comic overflow-hidden flex flex-col">
+	              <div className="p-6 border-b-4 border-brand-brown bg-[#D2EFFF] flex items-center justify-between gap-4">
+	                <div className="min-w-0">
+	                  <div className="text-2xl font-black text-brand-brown truncate">{botThreadModalTitle || '對話記錄'}</div>
+	                  <div className="text-xs font-bold text-gray-700 mt-1">AI小助手任務對話</div>
+	                </div>
+	                <button
+	                  type="button"
+	                  onClick={() => { setBotThreadModalOpen(false); setBotThreadMessages([]); setBotThreadError(''); }}
+	                  className="w-10 h-10 rounded-full bg-white border-2 border-brand-brown hover:bg-gray-100 flex items-center justify-center flex-shrink-0"
+	                  aria-label="關閉"
+	                >
+	                  <X className="w-6 h-6 text-brand-brown" />
+	                </button>
+	              </div>
+
+	              <div className="p-6 overflow-y-auto flex-1 space-y-3 bg-[#FFF9F0]">
+	                {botThreadLoading ? (
+	                  <div className="text-brand-brown font-bold">載入中...</div>
+	                ) : botThreadError ? (
+	                  <div className="text-red-700 font-bold">{botThreadError}</div>
+	                ) : botThreadMessages.length === 0 ? (
+	                  <div className="text-gray-500 font-bold">（沒有對話內容）</div>
+	                ) : (
+	                  botThreadMessages.map((m: any) => {
+	                    const sender = String(m?.sender || '');
+	                    const isStudent = sender === 'user';
+	                    const ts = m?.createdAt ? new Date(m.createdAt) : null;
+	                    const timeText = ts && !Number.isNaN(ts.getTime()) ? ts.toLocaleString() : '';
+	                    const content = String(m?.content || '');
+	                    return (
+	                      <div key={String(m?.id || `${sender}-${timeText}-${content.slice(0, 16)}`)} className={`flex ${isStudent ? 'justify-end' : 'justify-start'}`}>
+	                        <div className={`max-w-[85%] rounded-2xl border-2 px-4 py-3 ${isStudent ? 'bg-white border-brand-brown text-gray-900' : 'bg-[#E8F4FD] border-blue-300 text-gray-900'}`}>
+	                          <div className="flex items-center justify-between gap-3 mb-1">
+	                            <div className="text-[11px] font-black text-gray-700">{isStudent ? '學生' : 'AI'}</div>
+	                            <div className="flex items-center gap-2">
+	                              {timeText && <div className="text-[11px] font-bold text-gray-600">{timeText}</div>}
+	                              <button
+	                                type="button"
+	                                onClick={() => void copyText(content)}
+	                                className="p-1 rounded-lg border border-gray-200 bg-white hover:bg-gray-50"
+	                                title="複製"
+	                              >
+	                                <Copy className="w-3.5 h-3.5 text-gray-700" />
+	                              </button>
+	                            </div>
+	                          </div>
+	                          <div className="whitespace-pre-wrap break-words font-bold text-gray-900">{content}</div>
+	                        </div>
+	                      </div>
+	                    );
+	                  })
+	                )}
+	              </div>
+	            </div>
+	          </div>
+	        )}
 
 	        <StudentAiNotesModal
 	          open={studentAiNotesOpen}
