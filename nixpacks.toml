@@ -1,0 +1,23 @@
+[phases.setup]
+# Use Node.js 22 (includes npm 11) to avoid npm@10 lockfile parsing issues
+nixPkgs = ['nodejs_22']
+
+[phases.install]
+cmds = [
+  # Railway/Nixpacks sometimes runs with production=true which omits devDependencies (breaks Vite build).
+  # Also, some npm versions fail parsing certain lockfiles in the build environment.
+  # Use an explicit install that includes dev deps and ignores package-lock.json.
+  'npm ci --include=dev || npm install --include=dev --no-package-lock',
+  'npm cache clean --force'
+]
+
+[phases.build]
+cmds = [
+  # Set memory limit and disable some optimizations to avoid build daemon issues
+  'export NODE_OPTIONS="--max-old-space-size=4096"',
+  'npm run build:railway',
+  'echo "Frontend build completed"'
+]
+
+[start]
+cmd = 'serve -s dist -l $PORT'
