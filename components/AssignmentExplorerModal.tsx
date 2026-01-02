@@ -153,6 +153,9 @@ const AssignmentExplorerModal: React.FC<Props> = ({ open, onClose, authService, 
   const [scopeCardOpen, setScopeCardOpen] = useState(false);
   const [studentAiNotesOpen, setStudentAiNotesOpen] = useState(false);
 
+  const [selectMode, setSelectMode] = useState(false);
+  const [selectedTaskKeys, setSelectedTaskKeys] = useState<Set<string>>(new Set());
+
   // AI小助手任務：查看學生對話紀錄
   const [botThreadModalOpen, setBotThreadModalOpen] = useState(false);
   const [botThreadModalTitle, setBotThreadModalTitle] = useState('');
@@ -237,9 +240,17 @@ const AssignmentExplorerModal: React.FC<Props> = ({ open, onClose, authService, 
     setSelectedTask(null);
     setTaskResponses([]);
     setScopeCardOpen(false);
+    setSelectMode(false);
+    setSelectedTaskKeys(new Set());
     void load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
+
+  useEffect(() => {
+    if (!open) return;
+    setSelectMode(false);
+    setSelectedTaskKeys(new Set());
+  }, [open, subject, className, stageId, topicId]);
 
   useEffect(() => {
     if (!open) return;
@@ -468,6 +479,8 @@ const AssignmentExplorerModal: React.FC<Props> = ({ open, onClose, authService, 
     return String(t.teacherId || '') === String(viewerId || '');
   };
 
+  const taskKey = (t: any) => `${String(t?.type || '')}-${String(t?.id || '')}`;
+
   const renameTask = async (t: any) => {
     if (!canDeleteTask(t)) return;
     const current = String(t?.title || '').trim();
@@ -530,6 +543,70 @@ const AssignmentExplorerModal: React.FC<Props> = ({ open, onClose, authService, 
       setTaskResponses([]);
     } catch (e: any) {
       setError(e?.message || '刪除失敗');
+    }
+  };
+
+  const deleteTaskNoConfirm = async (t: any) => {
+    if (!t) return;
+    if (t.type === 'quiz') await authService.deleteQuiz(t.id);
+    else if (t.type === 'game') await authService.deleteGame(t.id);
+    else if (t.type === 'contest') await authService.deleteContest(t.id);
+    else if (t.type === 'ai-bot') await authService.deleteBotTask(t.id);
+    else if (t.type === 'note') await authService.deleteNote(t.id);
+    else await authService.deleteAssignment(t.id);
+  };
+
+  const bulkDeletableTaskKeys = useMemo(() => {
+    if (!topicId) return [];
+    const list = (Array.isArray(tasks) ? tasks : []).filter(Boolean);
+    const filtered = list.filter((t: any) => {
+      if (String(t.subject || '') !== String(subject || '')) return false;
+      const classes = normalizeStringArray(t?.targetClasses);
+      const classCandidate = (classes.length === 1 && classes[0] !== '全部') ? classes[0] : '';
+      if (String(classCandidate) !== String(className || '')) return false;
+      const { stage, topic } = parseFolder(t);
+      if (stageId && String(stage?.id || '') !== String(stageId)) return false;
+      if (topicId && String(topic?.id || '') !== String(topicId)) return false;
+      return true;
+    });
+    return filtered.filter(canDeleteTask).map(taskKey).filter(Boolean);
+  }, [tasks, subject, className, stageId, topicId]);
+
+  const allSelectableSelected = useMemo(() => {
+    if (bulkDeletableTaskKeys.length === 0) return false;
+    return bulkDeletableTaskKeys.every((k) => selectedTaskKeys.has(k));
+  }, [bulkDeletableTaskKeys, selectedTaskKeys]);
+
+  const toggleSelectAllTasks = () => {
+    if (allSelectableSelected) {
+      setSelectedTaskKeys(new Set());
+      return;
+    }
+    setSelectedTaskKeys(new Set(bulkDeletableTaskKeys));
+  };
+
+  const deleteSelectedTasks = async () => {
+    const keys = Array.from(selectedTaskKeys).filter((k) => bulkDeletableTaskKeys.includes(k));
+    if (keys.length === 0) return;
+    if (!window.confirm(`確定要刪除選取的 ${keys.length} 個任務嗎？此操作無法復原！`)) return;
+    setLoading(true);
+    setError('');
+    try {
+      const byKey = new Map<string, any>();
+      (Array.isArray(tasks) ? tasks : []).forEach((t) => byKey.set(taskKey(t), t));
+      for (const k of keys) {
+        const t = byKey.get(k);
+        if (!t) continue;
+        if (!canDeleteTask(t)) continue;
+        await deleteTaskNoConfirm(t);
+      }
+      setSelectedTaskKeys(new Set());
+      setSelectMode(false);
+      await load();
+    } catch (e: any) {
+      setError(e?.message || '刪除失敗');
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -1091,74 +1168,152 @@ const AssignmentExplorerModal: React.FC<Props> = ({ open, onClose, authService, 
                 ))}
               </div>
             </div>
-          ) : (
-            <div>
-              <div className="text-lg font-black text-brand-brown mb-3">任務</div>
-              {topicTasks.length === 0 ? (
-                <div className="text-gray-500 font-bold border-4 border-dashed border-gray-300 rounded-3xl p-8 text-center">
-                  目前沒有任務
-                </div>
-              ) : (
-                <div className="space-y-3">
-                  {topicTasks.map((t) => {
-                    const archived = !!t.archivedAt || t.isActive === false;
-                    const deletable = canDeleteTask(t);
-                    const { sub } = parseFolder(t);
-                    return (
-                      <div
-                        key={`${t.type}-${t.id}`}
-                        className={`bg-white border-4 border-brand-brown rounded-3xl p-4 shadow-comic flex flex-wrap items-center justify-between gap-3 ${archived ? 'opacity-70' : ''}`}
-                      >
-                        <div className="min-w-0">
-                          <div className="text-xl font-black text-brand-brown break-words">
-                            {String(t.title || '')}
-                          </div>
-                          <div className="text-sm text-gray-600 font-bold mt-1">
-                            {getTaskLabel(t)} ・ {String(t.teacherName || '教師')}
-                            {!!sub?.name && <span className="ml-2 text-xs">（子folder：{sub.name}）</span>}
-                          </div>
-                          <div className="text-xs text-gray-600 font-bold mt-1">
-                            回應/結果：{Number(t.responseCount) || 0} ・ 學生：{Number(t.uniqueStudents) || 0}
-                          </div>
-                          {archived && (
-                            <div className="text-xs text-red-700 font-black mt-1">
-                              已封存
-                            </div>
-                          )}
-                        </div>
-                        <div className="flex items-center gap-2">
-                          {canArchive && (
-                            <button
-                              type="button"
-                              onClick={() => void archiveTask(t, archived)}
-                              className="px-3 py-2 rounded-2xl border-4 border-brand-brown bg-gray-100 text-brand-brown font-black shadow-comic hover:bg-gray-200 flex items-center gap-2"
-                              title={archived ? '復原' : '封存'}
-                            >
-                              {archived ? <ArchiveRestore className="w-4 h-4" /> : <Archive className="w-4 h-4" />}
-                              {archived ? '復原' : '封存'}
-                            </button>
-                          )}
-                          {deletable && (
-                            <button
-                              type="button"
-                              onClick={() => void deleteTask(t)}
-                              className="px-3 py-2 rounded-2xl border-4 border-red-300 bg-red-100 text-red-700 font-black shadow-comic hover:bg-red-200 flex items-center gap-2"
-                              title="刪除"
-                            >
-                              <Trash2 className="w-4 h-4" />
-                              刪除
-                            </button>
-                          )}
-                          <button
-                            type="button"
-                            onClick={() => void openTask(t)}
-                            className="px-4 py-2 rounded-2xl border-4 border-brand-brown bg-[#B5F8CE] text-brand-brown font-black shadow-comic hover:bg-[#A1E5B8]"
-                            title="查看學生回應/結果"
-                          >
-                            查看
-                          </button>
-                        </div>
-                      </div>
+	          ) : (
+	            <div>
+	              <div className="flex items-center justify-between gap-2 mb-3">
+	                <div className="text-lg font-black text-brand-brown">任務</div>
+	                {topicId && (
+	                  <div className="flex items-center gap-2">
+	                    {selectMode ? (
+	                      <>
+	                        <button
+	                          type="button"
+	                          onClick={toggleSelectAllTasks}
+	                          disabled={loading || bulkDeletableTaskKeys.length === 0}
+	                          className="px-3 py-2 rounded-2xl border-4 border-brand-brown bg-white text-brand-brown font-black shadow-comic hover:bg-gray-50 disabled:opacity-60"
+	                        >
+	                          {allSelectableSelected ? '取消全選' : '全選'}
+	                        </button>
+	                        <button
+	                          type="button"
+	                          onClick={() => setSelectedTaskKeys(new Set())}
+	                          disabled={loading || selectedTaskKeys.size === 0}
+	                          className="px-3 py-2 rounded-2xl border-4 border-brand-brown bg-white text-brand-brown font-black shadow-comic hover:bg-gray-50 disabled:opacity-60"
+	                        >
+	                          全不選
+	                        </button>
+	                        <button
+	                          type="button"
+	                          onClick={() => void deleteSelectedTasks()}
+	                          disabled={loading || selectedTaskKeys.size === 0}
+	                          className="px-3 py-2 rounded-2xl border-4 border-red-300 bg-red-100 text-red-700 font-black shadow-comic hover:bg-red-200 disabled:opacity-60 flex items-center gap-2"
+	                        >
+	                          <Trash2 className="w-4 h-4" />
+	                          刪除選取（{selectedTaskKeys.size}）
+	                        </button>
+	                        <button
+	                          type="button"
+	                          onClick={() => {
+	                            setSelectMode(false);
+	                            setSelectedTaskKeys(new Set());
+	                          }}
+	                          disabled={loading}
+	                          className="px-3 py-2 rounded-2xl border-4 border-brand-brown bg-gray-100 text-brand-brown font-black shadow-comic hover:bg-gray-200 disabled:opacity-60"
+	                        >
+	                          取消
+	                        </button>
+	                      </>
+	                    ) : (
+	                      <button
+	                        type="button"
+	                        onClick={() => setSelectMode(true)}
+	                        disabled={loading || bulkDeletableTaskKeys.length === 0}
+	                        className="px-3 py-2 rounded-2xl border-4 border-brand-brown bg-gray-100 text-brand-brown font-black shadow-comic hover:bg-gray-200 disabled:opacity-60"
+	                      >
+	                        多選刪除
+	                      </button>
+	                    )}
+	                  </div>
+	                )}
+	              </div>
+	              {topicTasks.length === 0 ? (
+	                <div className="text-gray-500 font-bold border-4 border-dashed border-gray-300 rounded-3xl p-8 text-center">
+	                  目前沒有任務
+	                </div>
+	              ) : (
+	                <div className="space-y-3">
+	                  {topicTasks.map((t) => {
+	                    const archived = !!t.archivedAt || t.isActive === false;
+	                    const deletable = canDeleteTask(t);
+	                    const { sub } = parseFolder(t);
+	                    const key = taskKey(t);
+	                    const isSelected = selectedTaskKeys.has(key);
+	                    return (
+	                      <div
+	                        key={key}
+	                        className={`bg-white border-4 rounded-3xl p-4 shadow-comic flex flex-wrap items-center justify-between gap-3 ${archived ? 'opacity-70' : ''} ${selectMode && isSelected ? 'border-blue-500 bg-blue-50' : 'border-brand-brown'}`}
+	                      >
+	                        <div className="min-w-0 flex items-start gap-3 flex-1">
+	                          {selectMode && (
+	                            <input
+	                              type="checkbox"
+	                              className={`w-5 h-5 mt-1 rounded border-2 border-gray-400 text-blue-600 focus:ring-blue-500 ${!deletable ? 'opacity-50 cursor-not-allowed' : ''}`}
+	                              checked={isSelected}
+	                              disabled={!deletable}
+	                              onChange={(e) => {
+	                                if (!deletable) return;
+	                                setSelectedTaskKeys((prev) => {
+	                                  const next = new Set(prev);
+	                                  if (e.target.checked) next.add(key);
+	                                  else next.delete(key);
+	                                  return next;
+	                                });
+	                              }}
+	                            />
+	                          )}
+	                          <div className="min-w-0">
+	                          <div className="text-xl font-black text-brand-brown break-words">
+	                            {String(t.title || '')}
+	                          </div>
+	                          <div className="text-sm text-gray-600 font-bold mt-1">
+	                            {getTaskLabel(t)} ・ {String(t.teacherName || '教師')}
+	                            {!!sub?.name && <span className="ml-2 text-xs">（子folder：{sub.name}）</span>}
+	                          </div>
+	                          <div className="text-xs text-gray-600 font-bold mt-1">
+	                            回應/結果：{Number(t.responseCount) || 0} ・ 學生：{Number(t.uniqueStudents) || 0}
+	                          </div>
+	                          {archived && (
+	                            <div className="text-xs text-red-700 font-black mt-1">
+	                              已封存
+	                            </div>
+	                          )}
+	                          </div>
+	                        </div>
+	                        <div className="flex items-center gap-2">
+	                          {canArchive && (
+	                            <button
+	                              type="button"
+	                              onClick={() => void archiveTask(t, archived)}
+	                              disabled={selectMode}
+	                              className="px-3 py-2 rounded-2xl border-4 border-brand-brown bg-gray-100 text-brand-brown font-black shadow-comic hover:bg-gray-200 flex items-center gap-2 disabled:opacity-60"
+	                              title={archived ? '復原' : '封存'}
+	                            >
+	                              {archived ? <ArchiveRestore className="w-4 h-4" /> : <Archive className="w-4 h-4" />}
+	                              {archived ? '復原' : '封存'}
+	                            </button>
+	                          )}
+	                          {deletable && !selectMode && (
+	                            <button
+	                              type="button"
+	                              onClick={() => void deleteTask(t)}
+	                              className="px-3 py-2 rounded-2xl border-4 border-red-300 bg-red-100 text-red-700 font-black shadow-comic hover:bg-red-200 flex items-center gap-2"
+	                              title="刪除"
+	                            >
+	                              <Trash2 className="w-4 h-4" />
+	                              刪除
+	                            </button>
+	                          )}
+	                          <button
+	                            type="button"
+	                            onClick={() => void openTask(t)}
+	                            disabled={selectMode}
+	                            className="px-4 py-2 rounded-2xl border-4 border-brand-brown bg-[#B5F8CE] text-brand-brown font-black shadow-comic hover:bg-[#A1E5B8] disabled:opacity-60"
+	                            title="查看學生回應/結果"
+	                          >
+	                            查看
+	                          </button>
+	                        </div>
+	                      </div>
                     );
                   })}
                 </div>

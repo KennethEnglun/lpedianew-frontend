@@ -47,6 +47,9 @@ const DraftLibraryModal: React.FC<Props> = ({ open, onClose, authService, userId
   const [movePickerOpen, setMovePickerOpen] = useState(false);
   const [movingDraft, setMovingDraft] = useState<any | null>(null);
 
+  const [draftSelectMode, setDraftSelectMode] = useState(false);
+  const [selectedDraftIds, setSelectedDraftIds] = useState<Set<string>>(new Set());
+
   const isMy = space === 'my';
   const isStudent = space === 'student';
 
@@ -138,6 +141,64 @@ const DraftLibraryModal: React.FC<Props> = ({ open, onClose, authService, userId
     void reload({ keepFolder: true });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, space, grade, selectedFolderId]);
+
+  useEffect(() => {
+    if (!open) return;
+    setDraftSelectMode(false);
+    setSelectedDraftIds(new Set());
+  }, [open, space, grade, selectedFolderId]);
+
+  useEffect(() => {
+    if (!draftSelectMode) return;
+    const currentIds = new Set(drafts.map((d) => String(d?.id)));
+    setSelectedDraftIds((prev) => {
+      const next = new Set<string>();
+      prev.forEach((id) => {
+        if (currentIds.has(id)) next.add(id);
+      });
+      return next;
+    });
+  }, [draftSelectMode, drafts]);
+
+  const isDraftDeletable = (d: any) => String(d?.ownerTeacherId || '') === String(userId || '');
+
+  const deletableDraftIds = useMemo(
+    () => drafts.filter(isDraftDeletable).map((d) => String(d.id)),
+    [drafts, userId]
+  );
+
+  const allDeletableSelected = useMemo(() => {
+    if (deletableDraftIds.length === 0) return false;
+    return deletableDraftIds.every((id) => selectedDraftIds.has(id));
+  }, [deletableDraftIds, selectedDraftIds]);
+
+  const toggleSelectAllDrafts = () => {
+    if (allDeletableSelected) {
+      setSelectedDraftIds(new Set());
+      return;
+    }
+    setSelectedDraftIds(new Set(deletableDraftIds));
+  };
+
+  const deleteSelectedDrafts = async () => {
+    const ids = Array.from(selectedDraftIds).filter((id) => deletableDraftIds.includes(id));
+    if (ids.length === 0) return;
+    if (!window.confirm(`確定要刪除選取的 ${ids.length} 個草稿嗎？此操作無法復原！`)) return;
+    setLoading(true);
+    setError('');
+    try {
+      for (const id of ids) {
+        await authService.deleteDraft(String(id));
+      }
+      setSelectedDraftIds(new Set());
+      setDraftSelectMode(false);
+      await reload({ keepFolder: true });
+    } catch (e: any) {
+      setError(e?.message || '刪除失敗');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const createLibraryFolder = async (parentId: string | null) => {
     if (!grade) return;
@@ -329,46 +390,122 @@ const DraftLibraryModal: React.FC<Props> = ({ open, onClose, authService, userId
                 </div>
               </div>
 
-              <div className="p-4 rounded-2xl border-2 border-gray-200 bg-white lg:col-span-2">
-                <div className="flex items-center justify-between mb-3">
-                  <div className="font-black text-gray-700">草稿列表</div>
-                  <div className="text-sm text-gray-600 font-bold">共 {drafts.length} 個</div>
-                </div>
+	              <div className="p-4 rounded-2xl border-2 border-gray-200 bg-white lg:col-span-2">
+	                <div className="flex items-center justify-between mb-3">
+	                  <div className="font-black text-gray-700">草稿列表</div>
+	                  <div className="flex items-center gap-2">
+	                    {draftSelectMode ? (
+	                      <>
+	                        <button
+	                          type="button"
+	                          className="px-3 py-1 rounded-xl border-2 border-gray-300 bg-white text-gray-700 font-black hover:border-blue-500 disabled:opacity-60"
+	                          disabled={loading || deletableDraftIds.length === 0}
+	                          onClick={toggleSelectAllDrafts}
+	                        >
+	                          {allDeletableSelected ? '取消全選' : '全選'}
+	                        </button>
+	                        <button
+	                          type="button"
+	                          className="px-3 py-1 rounded-xl border-2 border-gray-300 bg-white text-gray-700 font-black hover:border-blue-500 disabled:opacity-60"
+	                          disabled={loading || selectedDraftIds.size === 0}
+	                          onClick={() => setSelectedDraftIds(new Set())}
+	                        >
+	                          全不選
+	                        </button>
+	                        <button
+	                          type="button"
+	                          className="px-3 py-1 rounded-xl border-2 border-red-300 bg-red-100 text-red-700 font-black hover:bg-red-200 disabled:opacity-60 flex items-center gap-2"
+	                          disabled={loading || selectedDraftIds.size === 0}
+	                          onClick={() => void deleteSelectedDrafts()}
+	                        >
+	                          <Trash2 className="w-4 h-4" />
+	                          刪除選取（{selectedDraftIds.size}）
+	                        </button>
+	                        <button
+	                          type="button"
+	                          className="px-3 py-1 rounded-xl border-2 border-gray-300 bg-white text-gray-700 font-black hover:border-blue-500 disabled:opacity-60"
+	                          disabled={loading}
+	                          onClick={() => {
+	                            setDraftSelectMode(false);
+	                            setSelectedDraftIds(new Set());
+	                          }}
+	                        >
+	                          取消
+	                        </button>
+	                      </>
+	                    ) : (
+	                      <button
+	                        type="button"
+	                        className="px-3 py-1 rounded-xl border-2 border-gray-300 bg-white text-gray-700 font-black hover:border-blue-500 disabled:opacity-60"
+	                        disabled={loading || deletableDraftIds.length === 0}
+	                        onClick={() => setDraftSelectMode(true)}
+	                      >
+	                        多選刪除
+	                      </button>
+	                    )}
+	                    <div className="text-sm text-gray-600 font-bold">共 {drafts.length} 個</div>
+	                  </div>
+	                </div>
 
                 {loading ? (
                   <div className="text-brand-brown font-bold">載入中...</div>
                 ) : drafts.length === 0 ? (
                   <div className="text-gray-500 font-bold">（未有草稿）</div>
                 ) : (
-                  <div className="grid grid-cols-1 gap-3">
-                    {drafts.map((d) => {
-                      const owner = String(d.ownerTeacherId || '');
-                      const isOwner = owner === String(userId || '');
-                      const canEdit = isMy && isOwner;
-                      const canDelete = isOwner;
-                      return (
-                        <div key={d.id} className="p-4 rounded-2xl border-2 border-gray-200 bg-gray-50">
-                          <div className="flex items-start justify-between gap-3">
-                            <div className="min-w-0">
-                              <div className="font-black text-gray-800 truncate">{String(d.title || '')}</div>
-                              <div className="text-sm text-gray-600 font-bold">
-                                <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-[#FDEEAD] border border-brand-brown text-brand-brown font-black text-xs mr-2">
-                                  {toolLabel(d.toolType)}
-                                </span>
-                                科目：{String(d.subject || '')} ｜ 作者：{String(d.ownerTeacherName || d.ownerTeacherId || '')}
-                              </div>
-                              <div className="text-xs text-gray-500 font-bold">
-                                更新：{d.updatedAt ? new Date(d.updatedAt).toLocaleString() : '—'}
-                              </div>
-                            </div>
+	                  <div className="grid grid-cols-1 gap-3">
+	                    {drafts.map((d) => {
+	                      const owner = String(d.ownerTeacherId || '');
+	                      const isOwner = owner === String(userId || '');
+	                      const canEdit = isMy && isOwner;
+	                      const canDelete = isOwner;
+	                      const id = String(d.id);
+	                      const isSelected = selectedDraftIds.has(id);
+	                      return (
+	                        <div
+	                          key={d.id}
+	                          className={`p-4 rounded-2xl border-2 bg-gray-50 ${draftSelectMode && isSelected ? 'border-blue-500 bg-blue-50' : 'border-gray-200'}`}
+	                        >
+	                          <div className="flex items-start justify-between gap-3">
+	                            <div className="flex items-start gap-3 min-w-0">
+	                              {draftSelectMode && (
+	                                <input
+	                                  type="checkbox"
+	                                  className={`w-5 h-5 mt-1 rounded border-2 border-gray-400 text-blue-600 focus:ring-blue-500 ${!canDelete ? 'opacity-50 cursor-not-allowed' : ''}`}
+	                                  checked={isSelected}
+	                                  disabled={!canDelete}
+	                                  onChange={(e) => {
+	                                    if (!canDelete) return;
+	                                    setSelectedDraftIds((prev) => {
+	                                      const next = new Set(prev);
+	                                      if (e.target.checked) next.add(id);
+	                                      else next.delete(id);
+	                                      return next;
+	                                    });
+	                                  }}
+	                                />
+	                              )}
+	                              <div className="min-w-0">
+	                              <div className="font-black text-gray-800 truncate">{String(d.title || '')}</div>
+	                              <div className="text-sm text-gray-600 font-bold">
+	                                <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-[#FDEEAD] border border-brand-brown text-brand-brown font-black text-xs mr-2">
+	                                  {toolLabel(d.toolType)}
+	                                </span>
+	                                科目：{String(d.subject || '')} ｜ 作者：{String(d.ownerTeacherName || d.ownerTeacherId || '')}
+	                              </div>
+	                              <div className="text-xs text-gray-500 font-bold">
+	                                更新：{d.updatedAt ? new Date(d.updatedAt).toLocaleString() : '—'}
+	                              </div>
+	                              </div>
+	                            </div>
 
                             <div className="flex flex-wrap gap-2 justify-end">
-                              <button
-                                onClick={() => onOpenDraft(d)}
-                                className="px-3 py-2 rounded-xl bg-white border-2 border-gray-300 hover:border-blue-500 font-black text-gray-700"
-                              >
-                                開啟
-                              </button>
+	                              <button
+	                                onClick={() => onOpenDraft(d)}
+	                                className="px-3 py-2 rounded-xl bg-white border-2 border-gray-300 hover:border-blue-500 font-black text-gray-700"
+	                                disabled={draftSelectMode}
+	                              >
+	                                開啟
+	                              </button>
 
                               {space === 'shared' && !isOwner && (
                                 <button
