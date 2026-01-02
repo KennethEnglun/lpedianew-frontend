@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { BookOpen, Download, Hand, Maximize2, LocateFixed, RefreshCw, X, ZoomIn, ZoomOut } from 'lucide-react';
 import { MindmapTree, type MindmapGraph } from './student/MindmapTree';
-import { compareStudentsByStudentId } from '../utils/studentSort';
+import { compareStudentsByGradeClassStudentId } from '../utils/studentSort';
 
 type AiNoteRecord = {
   id: string;
@@ -444,7 +444,7 @@ export const StudentAiNotesModal: React.FC<Props> = ({ open, onClose, authServic
   const loadRoster = async () => {
     try {
       const resp = await authService.getStudentRoster({ limit: 2000 });
-      const list = (resp?.users || []).filter((u: any) => u && u.role === 'student').sort(compareStudentsByStudentId);
+      const list = (resp?.users || []).filter((u: any) => u && u.role === 'student').sort(compareStudentsByGradeClassStudentId);
       setStudents(list);
       if (!className && list.length > 0) {
         const firstClass = String(list[0]?.profile?.class || '').trim();

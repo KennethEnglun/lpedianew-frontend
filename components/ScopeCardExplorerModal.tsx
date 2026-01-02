@@ -4,7 +4,7 @@ import { BarChart3, X, Users, User } from 'lucide-react';
 import { authService } from '../services/authService';
 import type { StudyAnalytics } from '../types/study';
 import { StudyAnalyticsModal } from './student/StudyAnalyticsModal';
-import { compareStudentsByStudentId } from '../utils/studentSort';
+import { compareStudentsByGradeClassStudentId } from '../utils/studentSort';
 
 type ScopeCard = {
   cardId: string;
@@ -99,7 +99,7 @@ export const ScopeCardExplorerModal: React.FC<ScopeCardExplorerModalProps> = ({ 
     try {
       const roster = await authService.getStudentRoster({ class: card.className, limit: 2000 });
       const list = (roster.users || []).filter((u: any) => u?.role === 'student') as any;
-      setStudents(list.sort(compareStudentsByStudentId));
+      setStudents(list.sort(compareStudentsByGradeClassStudentId));
     } catch (e) {
       setError(e instanceof Error ? e.message : '載入學生名單失敗');
     } finally {

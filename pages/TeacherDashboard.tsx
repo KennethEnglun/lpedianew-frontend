@@ -40,7 +40,7 @@ import { validateEquationAnswerType, validateEquationSteps, validateRationalAgai
 import { parseAndSolveSingleUnknownEquation } from '../services/equationSolver';
 import { Subject, Discussion } from '../types';
 import { DEFAULT_SUBJECT, GROUPS_ENABLED, VISIBLE_SUBJECTS } from '../platform';
-import { compareStudentId, compareStudentsByStudentId } from '../utils/studentSort';
+import { compareClassCode, compareStudentId, compareStudentMetaByGradeClassStudentId, compareStudentsByGradeClassStudentId } from '../utils/studentSort';
 
 type TowerDefenseQuestionDraft =
   | { type: 'mcq'; prompt: string; options: string[]; correctIndex: number }
@@ -1616,7 +1616,7 @@ const TeacherDashboard: React.FC = () => {
           completed,
           pending
         };
-      }).sort((a, b) => compareStudentId(a.studentId, b.studentId) || a.className.localeCompare(b.className, 'zh-Hant') || a.name.localeCompare(b.name, 'zh-Hant'));
+      }).sort((a, b) => compareClassCode(a.className, b.className) || compareStudentId(a.studentId, b.studentId) || a.name.localeCompare(b.name, 'zh-Hant'));
 
       setProgressRows(rows);
     } catch (error) {
@@ -2985,13 +2985,13 @@ const TeacherDashboard: React.FC = () => {
                       disabled={pointsGrantMode !== 'student'}
                     >
                       <option value="">請選擇學生</option>
-                      {pointsGrantStudents
-                        .filter((s: any) => !pointsGrantClass || String(s?.profile?.class || '') === pointsGrantClass)
-                        .sort(compareStudentsByStudentId)
-                        .map((s: any) => (
-                          <option key={String(s.id)} value={String(s.id)}>
-                            {String(s.profile?.studentId || '').trim()
-                              ? `${String(s.profile?.studentId).trim()} - ${String(s.profile?.name || s.username || '學生')}`
+	                      {pointsGrantStudents
+	                        .filter((s: any) => !pointsGrantClass || String(s?.profile?.class || '') === pointsGrantClass)
+	                        .sort(compareStudentsByGradeClassStudentId)
+	                        .map((s: any) => (
+	                          <option key={String(s.id)} value={String(s.id)}>
+	                            {String(s.profile?.studentId || '').trim()
+	                              ? `${String(s.profile?.studentId).trim()} - ${String(s.profile?.name || s.username || '學生')}`
                               : String(s.profile?.name || s.username || '學生')}
                           </option>
                         ))}
@@ -3075,20 +3075,21 @@ const TeacherDashboard: React.FC = () => {
                 </div>
               ) : progressRows.length > 0 ? (
                 <div className="overflow-x-auto">
-                  <table className="w-full border-4 border-brand-brown rounded-3xl overflow-hidden">
-                    <thead className="bg-white">
-                      <tr className="text-left">
-                        <th className="p-4 border-b-4 border-brand-brown text-brand-brown font-black">學生</th>
-                        <th className="p-4 border-b-4 border-brand-brown text-brand-brown font-black">班級</th>
-                        <th className="p-4 border-b-4 border-brand-brown text-brand-brown font-black">點數</th>
-                        <th className="p-4 border-b-4 border-brand-brown text-brand-brown font-black">獎牌</th>
-                        <th className="p-4 border-b-4 border-brand-brown text-brand-brown font-black">收到</th>
-                        <th className="p-4 border-b-4 border-brand-brown text-brand-brown font-black">完成</th>
-                        <th className="p-4 border-b-4 border-brand-brown text-brand-brown font-black">未完成</th>
-                        <th className="p-4 border-b-4 border-brand-brown text-brand-brown font-black">完成率</th>
-                        <th className="p-4 border-b-4 border-brand-brown text-brand-brown font-black">操作</th>
-                      </tr>
-                    </thead>
+	                  <table className="w-full border-4 border-brand-brown rounded-3xl overflow-hidden">
+	                    <thead className="bg-white">
+	                      <tr className="text-left">
+	                        <th className="p-4 border-b-4 border-brand-brown text-brand-brown font-black">學生</th>
+	                        <th className="p-4 border-b-4 border-brand-brown text-brand-brown font-black">班級</th>
+	                        <th className="p-4 border-b-4 border-brand-brown text-brand-brown font-black">學號</th>
+	                        <th className="p-4 border-b-4 border-brand-brown text-brand-brown font-black">點數</th>
+	                        <th className="p-4 border-b-4 border-brand-brown text-brand-brown font-black">獎牌</th>
+	                        <th className="p-4 border-b-4 border-brand-brown text-brand-brown font-black">收到</th>
+	                        <th className="p-4 border-b-4 border-brand-brown text-brand-brown font-black">完成</th>
+	                        <th className="p-4 border-b-4 border-brand-brown text-brand-brown font-black">未完成</th>
+	                        <th className="p-4 border-b-4 border-brand-brown text-brand-brown font-black">完成率</th>
+	                        <th className="p-4 border-b-4 border-brand-brown text-brand-brown font-black">操作</th>
+	                      </tr>
+	                    </thead>
                     <tbody>
                       {progressRows.map((row) => {
                         const pct = row.received > 0 ? Math.round((row.completed / row.received) * 100) : 0;
@@ -3101,17 +3102,18 @@ const TeacherDashboard: React.FC = () => {
                           return null;
                         })();
                         return (
-                          <tr key={row.id} className="bg-white odd:bg-[#FEF7EC]">
+	                          <tr key={row.id} className="bg-white odd:bg-[#FEF7EC]">
 	                            <td className="p-4 border-b-2 border-gray-200">
 	                              <div className="font-bold text-brand-brown">{row.name}</div>
-	                              <div className="text-sm text-gray-600">學號：{row.studentId || '-'} • {row.username}</div>
+	                              <div className="text-sm text-gray-600">{row.username}</div>
 	                            </td>
-                            <td className="p-4 border-b-2 border-gray-200 font-bold text-gray-700">{row.className || '-'}</td>
-                            <td className="p-4 border-b-2 border-gray-200 font-black text-brand-brown">{row.points}</td>
-                            <td className="p-4 border-b-2 border-gray-200 font-bold text-gray-700">
-                              {medal ? (
-                                <span className="inline-flex items-center gap-2">
-                                  <span className="text-lg">{medal.icon}</span>
+	                            <td className="p-4 border-b-2 border-gray-200 font-bold text-gray-700">{row.className || '-'}</td>
+	                            <td className="p-4 border-b-2 border-gray-200 font-bold text-gray-700">{row.studentId || '-'}</td>
+	                            <td className="p-4 border-b-2 border-gray-200 font-black text-brand-brown">{row.points}</td>
+	                            <td className="p-4 border-b-2 border-gray-200 font-bold text-gray-700">
+	                              {medal ? (
+	                                <span className="inline-flex items-center gap-2">
+	                                  <span className="text-lg">{medal.icon}</span>
                                   <span>{medal.label}</span>
                                 </span>
                               ) : (
@@ -6351,18 +6353,21 @@ const TeacherDashboard: React.FC = () => {
                                 </div>
                               </div>
 
-                              {notCompletedStudents.length > 0 && (
-                                <div className="bg-white p-4 rounded-xl border-2 border-red-100">
-                                  <h5 className="font-bold text-red-600 mb-2">⚠️ 未完成名單</h5>
-                                  <div className="flex flex-wrap gap-2">
-                                    {notCompletedStudents.map(s => (
-                                      <span key={s.id} className="px-3 py-1 bg-red-50 text-red-700 rounded-lg text-sm border border-red-100">
-                                        {s.profile?.name} ({s.profile?.class})
-                                      </span>
-                                    ))}
-                                  </div>
-                                </div>
-                              )}
+	                              {notCompletedStudents.length > 0 && (
+	                                <div className="bg-white p-4 rounded-xl border-2 border-red-100">
+	                                  <h5 className="font-bold text-red-600 mb-2">⚠️ 未完成名單</h5>
+	                                  <div className="flex flex-wrap gap-2">
+	                                    {notCompletedStudents
+	                                      .slice()
+	                                      .sort(compareStudentsByGradeClassStudentId)
+	                                      .map((s: any) => (
+	                                      <span key={s.id} className="px-3 py-1 bg-red-50 text-red-700 rounded-lg text-sm border border-red-100">
+	                                        {s.profile?.name} ({s.profile?.class} {s.profile?.studentId || ''})
+	                                      </span>
+	                                    ))}
+	                                  </div>
+	                                </div>
+	                              )}
                             </div>
                           );
                         })()}
@@ -6382,52 +6387,59 @@ const TeacherDashboard: React.FC = () => {
 		                              <p className="text-brand-brown">載入中...</p>
 		                            </div>
 		                          ) : assignmentResponses.length > 0 ? (
-		                            assignmentResponses
-		                              .slice()
-		                              .sort((a: any, b: any) => compareStudentId(a?.studentStudentId, b?.studentStudentId))
-		                              .map((row) => (
-		                              <div key={row.studentId} className="border-2 rounded-2xl p-4 bg-gray-50 border-gray-300">
-		                                <div className="flex justify-between items-start">
-		                                  <div className="flex items-center gap-3">
-		                                    <div className="w-8 h-8 rounded-full bg-brand-green-light flex items-center justify-center">
-	                                      <span className="text-white font-bold text-sm">
-	                                        {String(row.studentName || '學').charAt(0)}
-	                                      </span>
-	                                    </div>
-	                                    <div>
-	                                      <p className="font-bold text-brand-brown flex items-center gap-2">
-	                                        {row.studentName}
-	                                        {row.completed ? (
-	                                          <span className="text-xs font-bold px-2 py-1 rounded bg-green-100 text-green-800">已完成</span>
-	                                        ) : (
-	                                          <span className="text-xs font-bold px-2 py-1 rounded bg-gray-200 text-gray-700">未完成</span>
-		                                        )}
-		                                      </p>
-		                                      <p className="text-sm text-gray-600">
-		                                        學號：{row.studentStudentId || '-'} • {row.studentClass} • {row.studentUsername}
-		                                      </p>
-		                                      {row.lastMessageAt && (
-		                                        <p className="text-xs text-gray-500 mt-1">最後訊息：{new Date(row.lastMessageAt).toLocaleString()}</p>
-		                                      )}
+		                            <div className="space-y-2">
+		                              <div className="hidden md:grid grid-cols-[minmax(0,2fr)_minmax(0,0.8fr)_minmax(0,0.8fr)_minmax(0,1.4fr)_auto] gap-3 px-4 py-2 text-sm font-bold text-gray-600">
+		                                <div>學生</div>
+		                                <div>班級</div>
+		                                <div>學號</div>
+		                                <div>最後訊息</div>
+		                                <div className="text-right">操作</div>
+		                              </div>
+		                              {assignmentResponses
+		                                .slice()
+		                                .sort(compareStudentMetaByGradeClassStudentId)
+		                                .map((row) => (
+		                                  <div key={row.studentId} className="border-2 rounded-2xl p-4 bg-gray-50 border-gray-300">
+		                                    <div className="grid grid-cols-1 md:grid-cols-[minmax(0,2fr)_minmax(0,0.8fr)_minmax(0,0.8fr)_minmax(0,1.4fr)_auto] gap-3 items-center">
+		                                      <div className="flex items-center gap-3">
+		                                        <div className="w-8 h-8 rounded-full bg-brand-green-light flex items-center justify-center">
+		                                          <span className="text-white font-bold text-sm">{String(row.studentName || '學').charAt(0)}</span>
+		                                        </div>
+		                                        <div>
+		                                          <p className="font-bold text-brand-brown flex items-center gap-2">
+		                                            {row.studentName}
+		                                            {row.completed ? (
+		                                              <span className="text-xs font-bold px-2 py-1 rounded bg-green-100 text-green-800">已完成</span>
+		                                            ) : (
+		                                              <span className="text-xs font-bold px-2 py-1 rounded bg-gray-200 text-gray-700">未完成</span>
+		                                            )}
+		                                          </p>
+		                                          <p className="text-xs text-gray-500">{row.studentUsername}</p>
+		                                        </div>
+		                                      </div>
+		                                      <div className="font-bold text-gray-700">{row.studentClass || '-'}</div>
+		                                      <div className="font-bold text-gray-700">{row.studentStudentId || '-'}</div>
+		                                      <div className="text-sm text-gray-600">
+		                                        {row.lastMessageAt ? new Date(row.lastMessageAt).toLocaleString() : '—'}
+		                                      </div>
+		                                      <div className="flex justify-end">
+		                                        <button
+		                                          onClick={() => row.threadId && openBotTaskThreadMessages(selectedAssignment.id, String(row.threadId))}
+		                                          disabled={!row.threadId}
+		                                          className={`px-4 py-2 rounded-xl font-bold border-2 ${row.threadId ? 'bg-blue-100 text-blue-700 hover:bg-blue-200 border-blue-200' : 'bg-gray-100 text-gray-400 border-gray-200 cursor-not-allowed'}`}
+		                                        >
+		                                          查看對話
+		                                        </button>
+		                                      </div>
 		                                    </div>
 		                                  </div>
-	                                  <div className="flex gap-2">
-	                                    <button
-	                                      onClick={() => row.threadId && openBotTaskThreadMessages(selectedAssignment.id, String(row.threadId))}
-	                                      disabled={!row.threadId}
-	                                      className={`px-4 py-2 rounded-xl font-bold border-2 ${row.threadId ? 'bg-blue-100 text-blue-700 hover:bg-blue-200 border-blue-200' : 'bg-gray-100 text-gray-400 border-gray-200 cursor-not-allowed'}`}
-	                                    >
-	                                      查看對話
-	                                    </button>
-	                                  </div>
-	                                </div>
-	                              </div>
-	                            ))
-	                          ) : (
-	                            <div className="text-center py-8 text-gray-400 font-bold border-4 border-dashed border-gray-300 rounded-2xl">
-	                              目前沒有學生對話紀錄 💬
-	                            </div>
-	                          )}
+		                                ))}
+		                            </div>
+		                          ) : (
+		                            <div className="text-center py-8 text-gray-400 font-bold border-4 border-dashed border-gray-300 rounded-2xl">
+		                              目前沒有學生對話紀錄 💬
+		                            </div>
+		                          )}
 	                        </>
 	                      ) : (
 	                        <>
@@ -6450,51 +6462,64 @@ const TeacherDashboard: React.FC = () => {
 	                              <p className="text-brand-brown">載入中...</p>
 	                            </div>
 		                          ) : assignmentResponses.length > 0 ? (
-		                            assignmentResponses
-		                              .slice()
-		                              .sort((a: any, b: any) => compareStudentId(a?.studentStudentId, b?.studentStudentId))
-		                              .map((response) => (
+		                            <div className="space-y-2">
+		                              <div className="hidden md:grid grid-cols-[minmax(0,2fr)_minmax(0,0.8fr)_minmax(0,0.8fr)_minmax(0,2fr)] gap-3 px-4 py-2 text-sm font-bold text-gray-600">
+		                                <div>學生</div>
+		                                <div>班級</div>
+		                                <div>學號</div>
+		                                <div className="text-right">
+		                                  {(selectedAssignment?.type === 'quiz' || selectedAssignment?.type === 'contest') ? '結果' : ''}
+		                                </div>
+		                              </div>
+		                              {assignmentResponses
+		                                .slice()
+		                                .sort(compareStudentMetaByGradeClassStudentId)
+		                                .map((response) => (
 		                              <div key={response.id} className={`border-2 rounded-2xl p-4 ${selectedAssignment?.type === 'quiz' ? 'bg-yellow-50 border-yellow-200' : selectedAssignment?.type === 'contest' ? 'bg-orange-50 border-orange-200' : 'bg-gray-50 border-gray-300'
 		                                }`}>
 		                                <div className="flex justify-between items-start">
 		                                  <div className="flex-1">
-		                                    <div className="flex items-center gap-3 mb-2">
-	                                      <div className={`w-8 h-8 rounded-full flex items-center justify-center ${selectedAssignment?.type === 'quiz' ? 'bg-yellow-500' : selectedAssignment?.type === 'contest' ? 'bg-orange-500' : 'bg-brand-green-light'
-	                                        }`}>
-	                                        <span className="text-white font-bold text-sm">
-	                                          {response.studentName?.charAt(0) || '學'}
-	                                        </span>
-	                                      </div>
-		                                      <div>
-		                                        <p className="font-bold text-brand-brown">{response.studentName}</p>
-		                                        <p className="text-sm text-gray-600">
-		                                          學號：{response.studentStudentId || '-'} • {response.studentClass} • {response.studentUsername}
-		                                        </p>
+		                                    <div className="grid grid-cols-1 md:grid-cols-[minmax(0,2fr)_minmax(0,0.8fr)_minmax(0,0.8fr)_minmax(0,2fr)] gap-3 items-start mb-2">
+		                                      <div className="flex items-center gap-3">
+		                                        <div className={`w-8 h-8 rounded-full flex items-center justify-center ${selectedAssignment?.type === 'quiz' ? 'bg-yellow-500' : selectedAssignment?.type === 'contest' ? 'bg-orange-500' : 'bg-brand-green-light'
+		                                          }`}>
+		                                          <span className="text-white font-bold text-sm">
+		                                            {response.studentName?.charAt(0) || '學'}
+		                                          </span>
+		                                        </div>
+		                                        <div>
+		                                          <p className="font-bold text-brand-brown">{response.studentName}</p>
+		                                          <p className="text-xs text-gray-500">{response.studentUsername}</p>
+		                                        </div>
 		                                      </div>
-		                                      {(selectedAssignment?.type === 'quiz' || selectedAssignment?.type === 'contest') && (
-		                                        <div className="ml-auto flex items-center gap-4">
-		                                          <div className={`px-3 py-1 rounded-full text-sm font-bold ${response.score >= 80 ? 'bg-green-100 text-green-700' :
-	                                            response.score >= 60 ? 'bg-yellow-100 text-yellow-700' :
-	                                              'bg-red-100 text-red-700'
-	                                            }`}>
-	                                            {Math.round(response.score)}%
-	                                          </div>
-	                                          <div className="text-sm text-gray-500">
-	                                            {response.correctAnswers}/{response.totalQuestions} 正確
-	                                          </div>
-	                                          {selectedAssignment?.type === 'contest' && (
-	                                            <div className="text-sm text-gray-500">
-	                                              🏁 第 {response.attempt} 次參賽
-	                                            </div>
-	                                          )}
-	                                        </div>
-	                                      )}
-	                                    </div>
-	
-	                                    {selectedAssignment?.type === 'quiz' || selectedAssignment?.type === 'game' || selectedAssignment?.type === 'contest' ? (
-	                                      <>
-	                                        <div className="bg-white p-3 rounded-xl border border-gray-200">
-	                                          <div className="grid grid-cols-2 gap-4 text-sm">
+		                                      <div className="font-bold text-gray-700">{response.studentClass || '-'}</div>
+		                                      <div className="font-bold text-gray-700">{response.studentStudentId || '-'}</div>
+		                                      <div className="flex items-center gap-4 justify-end">
+		                                        {(selectedAssignment?.type === 'quiz' || selectedAssignment?.type === 'contest') && (
+		                                          <>
+		                                            <div className={`px-3 py-1 rounded-full text-sm font-bold ${response.score >= 80 ? 'bg-green-100 text-green-700' :
+		                                              response.score >= 60 ? 'bg-yellow-100 text-yellow-700' :
+		                                                'bg-red-100 text-red-700'
+		                                              }`}>
+		                                              {Math.round(response.score)}%
+		                                            </div>
+		                                            <div className="text-sm text-gray-500">
+		                                              {response.correctAnswers}/{response.totalQuestions} 正確
+		                                            </div>
+		                                            {selectedAssignment?.type === 'contest' && (
+		                                              <div className="text-sm text-gray-500">
+		                                                🏁 第 {response.attempt} 次參賽
+		                                              </div>
+		                                            )}
+		                                          </>
+		                                        )}
+		                                      </div>
+		                                    </div>
+		
+		                                    {selectedAssignment?.type === 'quiz' || selectedAssignment?.type === 'game' || selectedAssignment?.type === 'contest' ? (
+		                                      <>
+		                                        <div className="bg-white p-3 rounded-xl border border-gray-200">
+		                                          <div className="grid grid-cols-2 gap-4 text-sm">
 	                                            <div>
 	                                              <span className="font-medium text-gray-600">得分:</span>
 	                                              <span className="ml-2 font-bold">{Math.round(response.score)}%</span>
@@ -6566,23 +6591,24 @@ const TeacherDashboard: React.FC = () => {
 	                                      </p>
 	                                    )}
 	                                  </div>
-	                                  {selectedAssignment?.type === 'assignment' && !(selectedAssignment as any).isShared && (
-	                                    <button
-	                                      onClick={() => handleDeleteResponse(response.id)}
-	                                      className="ml-4 p-2 bg-red-100 text-red-700 rounded-lg hover:bg-red-200"
-	                                      title="刪除此回應"
-	                                    >
-	                                      <Trash className="w-4 h-4" />
-	                                    </button>
-	                                  )}
-	                                </div>
-	                              </div>
-	                            ))
-	                          ) : (
-	                            <div className="text-center py-8 text-gray-400 font-bold border-4 border-dashed border-gray-300 rounded-2xl">
-	                              {selectedAssignment?.type === 'quiz' ? '目前沒有測驗結果 📊' : '目前沒有學生回應 💭'}
-	                            </div>
-	                          )}
+		                                  {selectedAssignment?.type === 'assignment' && !(selectedAssignment as any).isShared && (
+		                                    <button
+		                                      onClick={() => handleDeleteResponse(response.id)}
+		                                      className="ml-4 p-2 bg-red-100 text-red-700 rounded-lg hover:bg-red-200"
+		                                      title="刪除此回應"
+		                                    >
+		                                      <Trash className="w-4 h-4" />
+		                                    </button>
+		                                  )}
+		                                </div>
+		                              </div>
+			                            ))}
+		                            </div>
+		                          ) : (
+		                            <div className="text-center py-8 text-gray-400 font-bold border-4 border-dashed border-gray-300 rounded-2xl">
+		                              {selectedAssignment?.type === 'quiz' ? '目前沒有測驗結果 📊' : '目前沒有學生回應 💭'}
+		                            </div>
+		                          )}
 	                        </>
 	                      )}
 	                    </div>
