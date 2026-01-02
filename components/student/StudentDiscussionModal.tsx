@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { X, Send, MessageSquare, Users } from 'lucide-react';
 import { authService } from '../../services/authService';
+import RichHtmlContent from '../RichHtmlContent';
 
 type Props = {
   open: boolean;
@@ -40,11 +41,9 @@ const renderContent = (content: DiscussionContent[]) => {
         }
         if (b.type === 'html') {
           return (
-            <div
-              key={idx}
-              className="bg-white rounded-2xl border-2 border-brand-brown/20 p-3 prose max-w-none"
-              dangerouslySetInnerHTML={{ __html: String(b.value || '') }}
-            />
+            <div key={idx} className="bg-white rounded-2xl border-2 border-brand-brown/20 p-3">
+              <RichHtmlContent html={String(b.value || '')} />
+            </div>
           );
         }
         return (
@@ -210,4 +209,3 @@ export function StudentDiscussionModal({ open, discussionId, onClose, onSubmitte
     </div>
   );
 }
-

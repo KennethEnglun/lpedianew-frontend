@@ -12,6 +12,7 @@ export function looksLikeExecutableHtml(input: string): boolean {
   if (!text) return false;
   if (text.length < 60) return false;
 
+  if (text.includes('<iframe')) return true;
   if (text.startsWith('<!doctype html')) return true;
   if (text.includes('<html')) return true;
   if (text.includes('<head')) return true;
