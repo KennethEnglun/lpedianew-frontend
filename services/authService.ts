@@ -2193,7 +2193,13 @@ class AuthService {
     return result.transactions || [];
   }
 
-  async submitRewardsSelfStudyCompletion(payload: { sessionId: string; score: number; scope?: any }): Promise<{
+  async submitRewardsSelfStudyCompletion(payload: {
+    sessionId: string;
+    correctCount: number;
+    questionCount: number;
+    score?: number;
+    scope?: any;
+  }): Promise<{
     success: boolean;
     transaction?: any;
     created?: boolean;
