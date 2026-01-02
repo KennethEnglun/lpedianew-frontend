@@ -1458,6 +1458,7 @@ const StudentDashboard: React.FC = () => {
         pointsTransactions={pointsTransactions}
         onRefreshPoints={refreshPoints}
         executeImageGeneration={executeImagePrompt}
+        subject={selectedSubject}
       />
       <AiNotesModal
         open={showAiNotes}

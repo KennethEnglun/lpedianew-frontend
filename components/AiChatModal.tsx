@@ -1,9 +1,11 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Bot, Check, Copy, Folder, FolderPlus, Image as ImageIcon, Pencil, Search, Trash2, X } from 'lucide-react';
+import { Bot, Check, Copy, Folder, FolderPlus, Image as ImageIcon, Pencil, Search, Send, Trash2, X } from 'lucide-react';
 import Button from './Button';
 import Input from './Input';
 import { useAuth } from '../contexts/AuthContext';
 import { authService } from '../services/authService';
+import { DEFAULT_SUBJECT, GROUPS_ENABLED, VISIBLE_SUBJECTS } from '../platform';
+import ClassFolderSelectInline from './ClassFolderSelectInline';
 import { moderateContent, hasContentModerationBypass, logModerationAttempt, RiskLevel, type ModerationResult } from '../utils/contentModeration';
 import ContentModerationModal from './student/ContentModerationModal';
 
@@ -154,9 +156,15 @@ const AiChatModal: React.FC<{
   pointsTransactions?: any[];
   onRefreshPoints?: () => void;
   executeImageGeneration?: string; // 如果有提示詞，直接執行生成
-}> = ({ open, onClose, onImageGeneration, userPoints = 0, userPointsInfo, pointsTransactions = [], onRefreshPoints, executeImageGeneration }) => {
+  subject?: string; // 學生端需要科目（後端會用科目做權限/可見性判斷）
+}> = ({ open, onClose, onImageGeneration, userPoints = 0, userPointsInfo, pointsTransactions = [], onRefreshPoints, executeImageGeneration, subject }) => {
   const { user } = useAuth();
   const isTeacher = user?.role === 'teacher' || user?.role === 'admin';
+  const effectiveStudentSubject = useMemo(() => {
+    if (user?.role !== 'student') return '';
+    const s = String(subject || '').trim();
+    return s || String(DEFAULT_SUBJECT || '科學');
+  }, [subject, user?.role]);
 
   const [tab, setTab] = useState<'my' | 'students'>('my');
 
@@ -188,6 +196,21 @@ const AiChatModal: React.FC<{
   const [editingBotId, setEditingBotId] = useState<string | null>(null);
   const [editingBotName, setEditingBotName] = useState('');
   const [editingBotPrompt, setEditingBotPrompt] = useState('');
+
+  // Teacher: dispatch AI小助手任務
+  const [showBotDispatch, setShowBotDispatch] = useState(false);
+  const [dispatchBot, setDispatchBot] = useState<{ id: string; name: string } | null>(null);
+  const [dispatchForm, setDispatchForm] = useState<{ subject: string; targetClasses: string[]; targetGroups: string[] }>({
+    subject: String(DEFAULT_SUBJECT || '科學'),
+    targetClasses: [],
+    targetGroups: []
+  });
+  const [dispatchAvailableClasses, setDispatchAvailableClasses] = useState<string[]>([]);
+  const [dispatchAvailableGroups, setDispatchAvailableGroups] = useState<string[]>([]);
+  const [dispatchClassFolderId, setDispatchClassFolderId] = useState('');
+  const [dispatchLoading, setDispatchLoading] = useState(false);
+  const [dispatchSubmitting, setDispatchSubmitting] = useState(false);
+  const [dispatchError, setDispatchError] = useState('');
 
   // Image generation
   const [imagePrompt, setImagePrompt] = useState('');
@@ -279,7 +302,7 @@ const AiChatModal: React.FC<{
 
       const threadsResp = isTeacher
         ? await authService.getMyChatThreads(mySidebarView === 'chat' ? { botId: 'all' } : (nextBotId === 'global' ? undefined : { botId: nextBotId }))
-        : await authService.getMyChatThreads();
+        : await authService.getMyChatThreads({ subject: effectiveStudentSubject });
       const threads = Array.isArray(threadsResp.threads) ? threadsResp.threads : [];
       setMyThreads(threads);
       const selected = threads.find((t: any) => t?.id === myThreadId) || threads[0] || null;
@@ -349,7 +372,8 @@ const AiChatModal: React.FC<{
       setMyError('');
       setMyMessages([]);
       const resp = await authService.createMyChatThread({
-        ...(isTeacher && effectiveTeacherBotId !== 'global' ? { botId: effectiveTeacherBotId } : null)
+        ...(isTeacher && effectiveTeacherBotId !== 'global' ? { botId: effectiveTeacherBotId } : null),
+        ...(!isTeacher ? { subject: effectiveStudentSubject } : null)
       });
       const thread = resp?.thread;
       if (thread?.id) {
@@ -389,7 +413,7 @@ const AiChatModal: React.FC<{
     if (tab === 'my') loadMyChat(effectiveTeacherBotId);
     else loadTeacherThreads('');
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, tab, effectiveTeacherBotId]);
+  }, [open, tab, effectiveTeacherBotId, effectiveStudentSubject]);
 
   const openTeacherThread = async (threadId: string) => {
     try {
@@ -677,6 +701,72 @@ const AiChatModal: React.FC<{
     setMyBots((prev) => prev.filter((b) => String(b?.id) !== String(botId)));
   };
 
+  const resolveTeacherDefaultSubject = () => {
+    const taught = Array.isArray(user?.profile?.subjectsTaught) ? user?.profile?.subjectsTaught : [];
+    const visible = new Set((VISIBLE_SUBJECTS || []).map((s) => String(s)));
+    const fromTaught = taught.map((s: any) => String(s || '').trim()).find((s: string) => s && visible.has(s));
+    return String(fromTaught || VISIBLE_SUBJECTS?.[0] || DEFAULT_SUBJECT || '科學');
+  };
+
+  const loadDispatchClassesAndGroups = async (subject: string) => {
+    try {
+      setDispatchLoading(true);
+      setDispatchError('');
+      const resp = await authService.getAvailableClasses(subject);
+      setDispatchAvailableClasses(Array.isArray(resp?.classes) ? resp.classes : []);
+      setDispatchAvailableGroups(Array.isArray(resp?.groups) ? resp.groups : []);
+    } catch (e) {
+      const message = e instanceof Error ? e.message : '載入班級失敗';
+      setDispatchError(message);
+      setDispatchAvailableClasses([]);
+      setDispatchAvailableGroups([]);
+    } finally {
+      setDispatchLoading(false);
+    }
+  };
+
+  const openBotDispatch = (bot: any) => {
+    const botId = String(bot?.id || '').trim();
+    if (!botId) return;
+    const subject = resolveTeacherDefaultSubject();
+    setDispatchBot({ id: botId, name: String(bot?.name || 'AI小助手') });
+    setDispatchForm({ subject, targetClasses: [], targetGroups: [] });
+    setDispatchClassFolderId('');
+    setDispatchError('');
+    setShowBotDispatch(true);
+    void loadDispatchClassesAndGroups(subject);
+  };
+
+  const submitBotDispatch = async () => {
+    if (!dispatchBot?.id) return;
+    if (!dispatchForm.subject) return alert('請選擇科目');
+    if (dispatchForm.targetClasses.length !== 1) return alert('請只選擇 1 個班級（資料夾屬於單一班別）');
+    if (!dispatchClassFolderId) return alert('請選擇資料夾（學段→課題→子folder可選）');
+    if (!GROUPS_ENABLED && dispatchForm.targetGroups.length > 0) return alert('分組功能暫時停用');
+
+    try {
+      setDispatchSubmitting(true);
+      setDispatchError('');
+      await authService.createBotTask({
+        botId: dispatchBot.id,
+        subject: dispatchForm.subject,
+        targetClasses: dispatchForm.targetClasses,
+        targetGroups: GROUPS_ENABLED ? dispatchForm.targetGroups : [],
+        classFolderId: dispatchClassFolderId
+      });
+      alert('AI小助手任務已派發！');
+      setShowBotDispatch(false);
+      setDispatchBot(null);
+      setDispatchClassFolderId('');
+    } catch (e) {
+      const message = e instanceof Error ? e.message : '派發失敗';
+      setDispatchError(message);
+      alert('派發失敗：' + message);
+    } finally {
+      setDispatchSubmitting(false);
+    }
+  };
+
   const send = async () => {
     if (!draft.trim()) return;
     try {
@@ -706,7 +796,7 @@ const AiChatModal: React.FC<{
       const streamResp = await authService.sendChatMessageStream(
         {
           threadId: myThreadId,
-          subject: user?.profile?.class || '一般', // 添加科目參數
+          ...(!isTeacher ? { subject: effectiveStudentSubject } : null),
           ...(isTeacher && effectiveTeacherBotId !== 'global' ? { botId: effectiveTeacherBotId } : null),
           message: text
         },
@@ -715,7 +805,7 @@ const AiChatModal: React.FC<{
       if (!streamResp.ok || !streamResp.body) {
         const fallback = await authService.sendChatMessage({
           threadId: myThreadId,
-          subject: user?.profile?.class || '一般', // 添加科目參數
+          ...(!isTeacher ? { subject: effectiveStudentSubject } : null),
           ...(isTeacher && effectiveTeacherBotId !== 'global' ? { botId: effectiveTeacherBotId } : null),
           message: text
         });
@@ -767,7 +857,7 @@ const AiChatModal: React.FC<{
       try {
         const threadsResp = isTeacher
           ? await authService.getMyChatThreads(mySidebarView === 'chat' ? { botId: 'all' } : (effectiveTeacherBotId === 'global' ? undefined : { botId: effectiveTeacherBotId }))
-          : await authService.getMyChatThreads();
+          : await authService.getMyChatThreads({ subject: effectiveStudentSubject });
         const threads = Array.isArray(threadsResp.threads) ? threadsResp.threads : [];
         setMyThreads(threads);
       } catch {
@@ -1003,6 +1093,14 @@ const AiChatModal: React.FC<{
 
                           {editingBotId !== String(b.id) && (
                             <>
+                              <button
+                                type="button"
+                                onClick={(e) => { e.stopPropagation(); openBotDispatch(b); }}
+                                className="opacity-100 md:opacity-0 md:group-hover:opacity-100 p-1 rounded hover:bg-gray-100"
+                                title="派發"
+                              >
+                                <Send className="w-4 h-4 text-gray-700" />
+                              </button>
                               <button
                                 type="button"
                                 onClick={(e) => { e.stopPropagation(); startEditBot(b); }}
@@ -1536,6 +1634,156 @@ const AiChatModal: React.FC<{
 	          </div>
 		      </div>
 		    </div>
+
+      {/* 派發 AI小助手任務 */}
+      {showBotDispatch && dispatchBot && (
+        <div className="fixed inset-0 bg-black/50 z-[9998] flex items-center justify-center p-4">
+          <div className="bg-white border-4 border-brand-brown rounded-3xl w-full max-w-2xl max-h-[90vh] shadow-comic overflow-y-auto">
+            <div className="p-6 border-b-4 border-brand-brown bg-[#D2EFFF] flex items-center justify-between">
+              <h2 className="text-2xl font-black text-brand-brown flex items-center gap-2">
+                <Bot className="w-6 h-6" />
+                派發 AI小助手任務
+              </h2>
+              <button
+                onClick={() => { setShowBotDispatch(false); setDispatchBot(null); }}
+                className="w-10 h-10 rounded-full bg-white border-2 border-brand-brown hover:bg-gray-100 flex items-center justify-center"
+              >
+                <X className="w-6 h-6 text-brand-brown" />
+              </button>
+            </div>
+
+            <div className="p-6 space-y-4">
+              {dispatchError && <div className="text-sm font-bold text-red-600">{dispatchError}</div>}
+
+              <div className="p-4 bg-gray-50 border-2 border-gray-200 rounded-2xl">
+                <div className="text-xs font-black text-gray-600 mb-1">AI小助手</div>
+                <div className="font-black text-brand-brown">{dispatchBot.name}</div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-bold text-brand-brown mb-2">科目</label>
+                  <select
+                    value={dispatchForm.subject}
+                    onChange={(e) => {
+                      const newSubject = e.target.value;
+                      setDispatchForm((prev) => ({ ...prev, subject: newSubject, targetClasses: [], targetGroups: [] }));
+                      setDispatchClassFolderId('');
+                      void loadDispatchClassesAndGroups(newSubject);
+                    }}
+                    className="w-full px-4 py-2 border-4 border-brand-brown rounded-2xl bg-white font-bold"
+                  >
+                    {VISIBLE_SUBJECTS.map((s) => (
+                      <option key={String(s)} value={String(s)}>{String(s)}</option>
+                    ))}
+                  </select>
+                </div>
+                <div className="p-4 bg-gray-50 border-2 border-gray-200 rounded-2xl text-sm text-gray-700 font-bold flex items-center">
+                  選好科目後，請選擇要派發的班級及資料夾
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-bold text-brand-brown mb-2">派發至班級（只可選 1 個）</label>
+                {dispatchLoading ? (
+                  <div className="text-sm font-bold text-gray-600">載入班級中…</div>
+                ) : (
+                  <div className="flex flex-wrap gap-2">
+                    {dispatchAvailableClasses.map((className) => {
+                      const selected = dispatchForm.targetClasses.includes(className);
+                      return (
+                        <button
+                          key={className}
+                          type="button"
+                          onClick={() => {
+                            setDispatchForm((prev) => ({
+                              ...prev,
+                              targetClasses: selected ? [] : [className]
+                            }));
+                            setDispatchClassFolderId('');
+                          }}
+                          className={`px-4 py-2 rounded-2xl border-2 font-bold transition-colors ${selected
+                            ? 'bg-[#D2EFFF] border-brand-brown text-brand-brown'
+                            : 'bg-white border-gray-300 text-gray-600 hover:border-brand-brown'
+                            }`}
+                        >
+                          {className}
+                        </button>
+                      );
+                    })}
+                    {dispatchAvailableClasses.length === 0 && (
+                      <div className="text-sm font-bold text-gray-500">（沒有可派發的班級）</div>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              {dispatchForm.targetClasses.length === 1 ? (
+                <ClassFolderSelectInline
+                  authService={authService}
+                  className={dispatchForm.targetClasses[0]}
+                  value={dispatchClassFolderId}
+                  onChange={setDispatchClassFolderId}
+                />
+              ) : (
+                <div className="p-4 bg-gray-50 border-2 border-gray-200 rounded-2xl text-sm text-gray-700 font-bold">
+                  請先選擇 1 個班級，才可選擇資料夾（資料夾屬於單一班別）。
+                </div>
+              )}
+
+              {GROUPS_ENABLED && dispatchAvailableGroups.length > 0 && (
+                <div>
+                  <label className="block text-sm font-bold text-brand-brown mb-2">
+                    選擇分組 ({dispatchForm.subject})
+                  </label>
+                  <div className="flex flex-wrap gap-2">
+                    {dispatchAvailableGroups.map((groupName) => (
+                      <button
+                        key={groupName}
+                        type="button"
+                        onClick={() => {
+                          setDispatchForm((prev) => ({
+                            ...prev,
+                            targetGroups: prev.targetGroups.includes(groupName)
+                              ? prev.targetGroups.filter((g) => g !== groupName)
+                              : [...prev.targetGroups, groupName]
+                          }));
+                        }}
+                        className={`px-4 py-2 rounded-2xl border-2 font-bold transition-colors ${dispatchForm.targetGroups.includes(groupName)
+                          ? 'bg-[#E8F4FD] border-blue-500 text-blue-600'
+                          : 'bg-white border-gray-300 text-gray-600 hover:border-blue-500'
+                          }`}
+                      >
+                        {groupName}
+                      </button>
+                    ))}
+                  </div>
+                  <p className="text-xs text-gray-500 mt-1">
+                    選擇分組會精確派發給該分組的學生
+                  </p>
+                </div>
+              )}
+
+              <div className="flex gap-4 pt-2">
+                <Button
+                  className="flex-1 bg-gray-300 text-gray-700 hover:bg-gray-400"
+                  onClick={() => { setShowBotDispatch(false); setDispatchBot(null); }}
+                  disabled={dispatchSubmitting}
+                >
+                  取消
+                </Button>
+                <Button
+                  className="flex-1 bg-[#D2EFFF] text-brand-brown hover:bg-[#BCE0FF] border-brand-brown"
+                  onClick={submitBotDispatch}
+                  disabled={dispatchSubmitting}
+                >
+                  {dispatchSubmitting ? '派發中...' : '派發'}
+                </Button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* 內容審核對話框 */}
       {showModerationModal && currentModerationResult && (
