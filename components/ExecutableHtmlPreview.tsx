@@ -4,6 +4,45 @@ import { buildPreviewSrcDoc, decodeBase64ToUtf8 } from '../services/htmlPreview'
 
 type Tab = 'preview' | 'code';
 
+type ExtractedIframe = {
+  src: string;
+  title?: string;
+  allow?: string;
+  referrerPolicy?: React.HTMLAttributeReferrerPolicy;
+};
+
+function extractEmbeddableIframe(rawHtml: string): ExtractedIframe | null {
+  if (typeof DOMParser === 'undefined') return null;
+  const trimmed = String(rawHtml || '').trim();
+  if (!trimmed) return null;
+
+  let doc: Document;
+  try {
+    doc = new DOMParser().parseFromString(trimmed, 'text/html');
+  } catch {
+    return null;
+  }
+
+  const iframes = Array.from(doc.querySelectorAll('iframe'));
+  if (iframes.length !== 1) return null;
+  if (doc.querySelectorAll('script').length > 0) return null;
+
+  const iframe = iframes[0];
+  const src = String(iframe.getAttribute('src') || '').trim();
+  if (!src) return null;
+  if (!/^https?:\/\//i.test(src)) return null;
+
+  const visibleText = String(doc.body?.textContent || '').replace(/\s+/g, '').trim();
+  if (visibleText) return null;
+
+  const allow = String(iframe.getAttribute('allow') || '').trim() || undefined;
+  const title = String(iframe.getAttribute('title') || '').trim() || undefined;
+  const rp = String(iframe.getAttribute('referrerpolicy') || '').trim().toLowerCase();
+  const referrerPolicy = (rp || undefined) as React.HTMLAttributeReferrerPolicy | undefined;
+
+  return { src, title, allow, referrerPolicy };
+}
+
 export default function ExecutableHtmlPreview({
   encodedHtml,
   defaultTab = 'preview',
@@ -27,6 +66,7 @@ export default function ExecutableHtmlPreview({
     }
   }, [encodedHtml]);
 
+  const extractedIframe = useMemo(() => extractEmbeddableIframe(rawHtml), [rawHtml]);
   const srcDoc = useMemo(() => buildPreviewSrcDoc(rawHtml), [rawHtml]);
 
   useEffect(() => {
@@ -138,16 +178,34 @@ export default function ExecutableHtmlPreview({
     return (
       <div className="bg-black" style={{ height: bodyHeight }}>
         {shouldLoad ? (
-          <iframe
-            key={reloadNonce}
-            title="Executable HTML Preview"
-            sandbox="allow-scripts allow-forms allow-modals"
-            referrerPolicy="no-referrer"
-            srcDoc={srcDoc}
-            style={{ width: '100%', height: '100%' }}
-            className="block w-full"
-            loading="lazy"
-          />
+          extractedIframe ? (
+            <iframe
+              key={reloadNonce}
+              title={extractedIframe.title || 'Embedded Preview'}
+              sandbox="allow-scripts allow-same-origin allow-forms allow-modals allow-popups allow-popups-to-escape-sandbox allow-presentation"
+              referrerPolicy={extractedIframe.referrerPolicy || 'strict-origin-when-cross-origin'}
+              src={extractedIframe.src}
+              allow={
+                extractedIframe.allow ||
+                'accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share; fullscreen'
+              }
+              allowFullScreen
+              style={{ width: '100%', height: '100%' }}
+              className="block w-full"
+              loading="lazy"
+            />
+          ) : (
+            <iframe
+              key={reloadNonce}
+              title="Executable HTML Preview"
+              sandbox="allow-scripts allow-forms allow-modals"
+              referrerPolicy="no-referrer"
+              srcDoc={srcDoc}
+              style={{ width: '100%', height: '100%' }}
+              className="block w-full"
+              loading="lazy"
+            />
+          )
         ) : (
           <div className="w-full h-full flex items-center justify-center text-sm text-gray-200">
             預覽載入中…
