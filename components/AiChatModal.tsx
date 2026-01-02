@@ -559,6 +559,8 @@ const AiChatModal: React.FC<{
         return '🧪';
       case 'contest_score':
         return '🏁';
+      case 'game_score':
+        return '🎮';
       case 'self_study_score':
         return '📚';
       default:
@@ -580,6 +582,8 @@ const AiChatModal: React.FC<{
         return transaction.description || '小測驗得分';
       case 'contest_score':
         return transaction.description || '問答比賽得分';
+      case 'game_score':
+        return transaction.description || '遊戲得分';
       case 'self_study_score':
         return transaction.description || '自學天地完成';
       default:

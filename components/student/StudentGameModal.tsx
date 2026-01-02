@@ -199,7 +199,7 @@ export function StudentGameModal(props: {
             const timeSpent = startedAtMs ? Math.round((Date.now() - startedAtMs) / 1000) : 0;
             void submitScore({
               score: Math.round(Number(score) || 0),
-              correctAnswers: 0,
+              correctAnswers: mazeQuestions.length,
               totalQuestions: mazeQuestions.length,
               timeSpent,
               details: { type: 'maze' }
@@ -282,4 +282,3 @@ export function StudentGameModal(props: {
     </div>
   );
 }
-
