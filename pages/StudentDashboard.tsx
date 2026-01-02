@@ -20,6 +20,7 @@ import NoteEditorModal from '../components/NoteEditorModal';
 import { AiNotesModal } from '../components/student/AiNotesModal';
 import { ChartGeneratorModal } from '../components/ChartGeneratorModal';
 import { StudentGameModal } from '../components/student/StudentGameModal';
+import { RewardsLeaderboardModal } from '../components/student/RewardsLeaderboardModal';
 import { aiAnalyticsService } from '../services/aiAnalyticsService';
 import type { StudyAnalytics, StudyScope } from '../types/study';
 
@@ -140,6 +141,10 @@ const StudentDashboard: React.FC = () => {
   };
 
   const [rewardsTransactions, setRewardsTransactions] = useState(loadRewardsTransactionsFromStorage);
+  const [showRewardsLeaderboard, setShowRewardsLeaderboard] = useState(false);
+  const [rewardsLeaderboardLoading, setRewardsLeaderboardLoading] = useState(false);
+  const [rewardsLeaderboardError, setRewardsLeaderboardError] = useState('');
+  const [rewardsLeaderboardData, setRewardsLeaderboardData] = useState<any | null>(null);
 
   // 從 localStorage 載入交易記錄
   const loadTransactionsFromStorage = () => {
@@ -324,6 +329,21 @@ const StudentDashboard: React.FC = () => {
       setRewardsTransactions(tx);
     } catch (error) {
       console.error('Failed to load rewards:', error);
+    }
+  }, []);
+
+  const openRewardsLeaderboard = useCallback(async () => {
+    setShowRewardsLeaderboard(true);
+    setRewardsLeaderboardError('');
+    setRewardsLeaderboardLoading(true);
+    try {
+      const data = await authService.getRewardsLeaderboard();
+      setRewardsLeaderboardData(data);
+    } catch (e: any) {
+      setRewardsLeaderboardError(e?.message || '載入排行榜失敗');
+      setRewardsLeaderboardData(null);
+    } finally {
+      setRewardsLeaderboardLoading(false);
     }
   }, []);
 
@@ -1386,6 +1406,7 @@ const StudentDashboard: React.FC = () => {
                             />
                           </div>
                           <span className="text-xs font-bold text-[#8D6E63] text-center">{m.label}</span>
+                          <span className="text-[10px] font-black text-[#8D6E63]/80 text-center">{m.min} 分</span>
                         </div>
                       );
                     });
@@ -1408,6 +1429,13 @@ const StudentDashboard: React.FC = () => {
 
                 <div className="text-center">
                   <div className="text-sm font-bold text-[#8D6E63]">繼續努力獲得更多獎勵！</div>
+                  <button
+                    type="button"
+                    onClick={() => void openRewardsLeaderboard()}
+                    className="mt-3 px-4 py-2 rounded-2xl bg-[#D2EFFF] border-4 border-[#5D4037] text-[#5D4037] font-black hover:bg-white shadow-comic active:translate-y-1 active:shadow-none"
+                  >
+                    查看同級排行榜
+                  </button>
                 </div>
               </div>
             </div>
@@ -1594,6 +1622,14 @@ const StudentDashboard: React.FC = () => {
           void loadStudentTasks();
           void loadRewardsPoints();
         }}
+      />
+
+      <RewardsLeaderboardModal
+        open={showRewardsLeaderboard}
+        onClose={() => setShowRewardsLeaderboard(false)}
+        loading={rewardsLeaderboardLoading}
+        error={rewardsLeaderboardError}
+        data={rewardsLeaderboardData}
       />
 
       {showNoteModal && user && (

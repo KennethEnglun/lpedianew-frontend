@@ -2193,6 +2193,18 @@ class AuthService {
     return result.transactions || [];
   }
 
+  async getRewardsLeaderboard(): Promise<{
+    gradeKey: string | null;
+    meUserId: string;
+    myRank: number | null;
+    students: Array<{ userId: string; name: string; username: string; className: string; points: number; rank: number }>;
+  }> {
+    const response = await fetch(`${this.API_BASE}/student/rewards/leaderboard`, {
+      headers: this.getAuthHeaders()
+    });
+    return this.handleResponse(response);
+  }
+
   async submitRewardsSelfStudyCompletion(payload: {
     sessionId: string;
     correctCount: number;
