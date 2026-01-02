@@ -67,6 +67,7 @@ export function StudentGameModal(props: {
 
   const title = String(game?.title || '遊戲');
   const gameType = String(game?.gameType || '');
+  const fullscreen = gameType === 'tower-defense';
 
   const mazeQuestions = useMemo(() => {
     if (gameType !== 'maze') return [];
@@ -233,8 +234,8 @@ export function StudentGameModal(props: {
   if (!open || !gameId) return null;
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-80 z-50 flex items-center justify-center p-4">
-      <div className="bg-[#2D2D2D] border-4 border-[#4A4A4A] rounded-3xl w-full max-w-5xl h-[90vh] flex flex-col shadow-2xl overflow-hidden relative">
+    <div className={`fixed inset-0 bg-black bg-opacity-80 z-50 flex ${fullscreen ? 'items-stretch justify-stretch p-0' : 'items-center justify-center p-4'}`}>
+      <div className={`bg-[#2D2D2D] border-4 border-[#4A4A4A] ${fullscreen ? 'rounded-none w-full h-full max-w-none' : 'rounded-3xl w-full max-w-5xl h-[90vh]'} flex flex-col shadow-2xl overflow-hidden relative`}>
         <div className="bg-[#1A1A1A] p-4 flex justify-between items-center border-b-2 border-[#4A4A4A]">
           <div className="min-w-0">
             <h2 className="text-2xl font-black text-white tracking-widest truncate">{title}</h2>
@@ -252,7 +253,7 @@ export function StudentGameModal(props: {
           </div>
         </div>
 
-        <div className="flex-1 bg-[#222] p-6 overflow-y-auto relative">
+        <div className={`flex-1 bg-[#222] ${fullscreen ? 'p-3' : 'p-6'} overflow-y-auto relative`}>
           {error && (
             <div className="mb-4 bg-red-50 border-2 border-red-200 rounded-2xl p-4 text-red-800 font-bold">
               {error}

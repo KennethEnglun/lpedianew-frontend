@@ -1841,7 +1841,9 @@ export const TowerDefenseGame: React.FC<Props> = ({ gameId, questions, subject, 
 	      spawnParticles(160, 120, 18, '#F8E2B5');
 	      startShake(1.4, 0.08);
 	    } else {
+	      setScore(v => Math.max(0, v - 50));
 	      spawnParticles(160, 120, 12, '#F8C5C5');
+	      startShake(2.2, 0.12);
 	    }
 
 	    const energyDelta = isCorrect ? (currentQuestion.kind === 'match' ? 12 : 10) : -5;
@@ -1873,7 +1875,7 @@ export const TowerDefenseGame: React.FC<Props> = ({ gameId, questions, subject, 
 	      isCorrect,
 	      correctIndex: currentCorrectIndex,
 	      correctText,
-	      effectText: isCorrect ? '✅ 正確！' : `❌ 錯誤（正確：${correctText}）`
+	      effectText: isCorrect ? '✅ 正確！' : `❌ 錯誤 -50分（正確：${correctText}）`
 	    });
 
 	    questionTimeoutRef.current = window.setTimeout(() => {
@@ -2619,7 +2621,7 @@ export const TowerDefenseGame: React.FC<Props> = ({ gameId, questions, subject, 
     const timeSpent = endReason === 'time'
       ? durationSecondsRef.current
       : Math.round((Date.now() - startTimeRef.current.getTime()) / 1000);
-    const finalScore = Math.round(score + wave * 12 + correctAnswers * 4);
+    const finalScore = Math.max(0, Math.round(score + wave * 12 + correctAnswers * 4));
     onComplete({
       success,
       score: finalScore,
