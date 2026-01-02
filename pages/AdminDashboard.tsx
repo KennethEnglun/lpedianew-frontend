@@ -271,12 +271,6 @@ const AdminDashboard: React.FC = () => {
     }
   }, [activeSection, loadPointsData]);
 
-  useEffect(() => {
-    if (activeSection === 'rewards') {
-      void loadRewardsData();
-    }
-  }, [activeSection, loadRewardsData]);
-
   const classOptions = useMemo(() => {
     const set = new Set<string>();
     for (const u of users) {
@@ -602,6 +596,12 @@ const AdminDashboard: React.FC = () => {
       setRewardsLoading(false);
     }
   }, []);
+
+  useEffect(() => {
+    if (activeSection === 'rewards') {
+      void loadRewardsData();
+    }
+  }, [activeSection, loadRewardsData]);
 
   const handleBatchGrantPoints = useCallback(async (studentIds: string[], amount: number, description?: string) => {
     try {
