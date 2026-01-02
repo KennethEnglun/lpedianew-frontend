@@ -19,6 +19,7 @@ import { StudentDiscussionModal } from '../components/student/StudentDiscussionM
 import NoteEditorModal from '../components/NoteEditorModal';
 import { AiNotesModal } from '../components/student/AiNotesModal';
 import { ChartGeneratorModal } from '../components/ChartGeneratorModal';
+import { StudentGameModal } from '../components/student/StudentGameModal';
 import { aiAnalyticsService } from '../services/aiAnalyticsService';
 import type { StudyAnalytics, StudyScope } from '../types/study';
 
@@ -58,6 +59,8 @@ const StudentDashboard: React.FC = () => {
   const [selectedContest, setSelectedContest] = useState<any | null>(null);
   const [showNoteModal, setShowNoteModal] = useState(false);
   const [selectedNoteId, setSelectedNoteId] = useState<string | null>(null);
+  const [showGameModal, setShowGameModal] = useState(false);
+  const [selectedGameId, setSelectedGameId] = useState<string | null>(null);
 
   // 圖片生成點數（獨立於獎勵積分）
   const loadImagePointsFromStorage = () => {
@@ -1270,6 +1273,9 @@ const StudentDashboard: React.FC = () => {
                                             if (task.type === 'ai-bot') {
                                               setSelectedBotTaskId(String(task.id));
                                               setShowBotTaskChat(true);
+                                            } else if (task.type === 'game') {
+                                              setSelectedGameId(String(task.id));
+                                              setShowGameModal(true);
                                             } else if (task.type === 'contest') {
                                               setSelectedContest(task);
                                               setShowContestModal(true);
@@ -1574,6 +1580,16 @@ const StudentDashboard: React.FC = () => {
         open={showContestModal}
         contest={selectedContest}
         onClose={() => { setShowContestModal(false); setSelectedContest(null); }}
+        onFinished={() => {
+          void loadStudentTasks();
+          void loadRewardsPoints();
+        }}
+      />
+
+      <StudentGameModal
+        open={showGameModal}
+        gameId={selectedGameId}
+        onClose={() => { setShowGameModal(false); setSelectedGameId(null); }}
         onFinished={() => {
           void loadStudentTasks();
           void loadRewardsPoints();
