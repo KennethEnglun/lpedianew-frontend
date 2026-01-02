@@ -59,17 +59,14 @@ const StudentDashboard: React.FC = () => {
   const [showNoteModal, setShowNoteModal] = useState(false);
   const [selectedNoteId, setSelectedNoteId] = useState<string | null>(null);
 
-  // 點數系統狀態
-  // 從 localStorage 載入點數，如果沒有則使用預設值
-  const loadUserPointsFromStorage = () => {
+  // 圖片生成點數（獨立於獎勵積分）
+  const loadImagePointsFromStorage = () => {
     if (!user?.id) {
       return {
         currentPoints: 0,
         totalReceived: 0,
         totalUsed: 0,
-        lastUpdate: new Date().toISOString(),
-        selfStudyDoubleUsed: 0,
-        selfStudyDoubleRemaining: 3
+        lastUpdate: new Date().toISOString()
       };
     }
 
@@ -86,13 +83,60 @@ const StudentDashboard: React.FC = () => {
       currentPoints: 0,
       totalReceived: 0,
       totalUsed: 0,
+      lastUpdate: new Date().toISOString()
+    };
+  };
+
+  const [userPoints, setUserPoints] = useState(loadImagePointsFromStorage);
+
+  // 獎勵積分（我的獎勵）
+  const loadRewardsFromStorage = () => {
+    if (!user?.id) {
+      return {
+        currentPoints: 0,
+        totalReceived: 0,
+        totalUsed: 0,
+        lastUpdate: new Date().toISOString(),
+        selfStudyDoubleUsed: 0,
+        selfStudyDoubleRemaining: 3
+      };
+    }
+    const key = `rewards_${user.id}`;
+    const saved = localStorage.getItem(key);
+    if (saved) {
+      try {
+        return JSON.parse(saved);
+      } catch (e) {
+        console.error('Failed to parse saved rewards:', e);
+      }
+    }
+    return {
+      currentPoints: 0,
+      totalReceived: 0,
+      totalUsed: 0,
       lastUpdate: new Date().toISOString(),
       selfStudyDoubleUsed: 0,
       selfStudyDoubleRemaining: 3
     };
   };
 
-  const [userPoints, setUserPoints] = useState(loadUserPointsFromStorage);
+  const [rewardsPoints, setRewardsPoints] = useState(loadRewardsFromStorage);
+
+  const loadRewardsTransactionsFromStorage = () => {
+    if (!user?.id) return [];
+    const key = `rewardsTransactions_${user.id}`;
+    const saved = localStorage.getItem(key);
+    if (saved) {
+      try {
+        return JSON.parse(saved);
+      } catch (e) {
+        console.error('Failed to parse saved rewards transactions:', e);
+      }
+    }
+    return [];
+  };
+
+  const [rewardsTransactions, setRewardsTransactions] = useState(loadRewardsTransactionsFromStorage);
 
   // 從 localStorage 載入交易記錄
   const loadTransactionsFromStorage = () => {
@@ -125,6 +169,13 @@ const StudentDashboard: React.FC = () => {
     }
   }, [userPoints, user?.id]);
 
+  // 保存獎勵積分到 localStorage
+  useEffect(() => {
+    if (user?.id) {
+      localStorage.setItem(`rewards_${user.id}`, JSON.stringify(rewardsPoints));
+    }
+  }, [rewardsPoints, user?.id]);
+
   // 保存交易記錄到 localStorage
   useEffect(() => {
     if (user?.id) {
@@ -133,11 +184,19 @@ const StudentDashboard: React.FC = () => {
     }
   }, [pointsTransactions, user?.id]);
 
+  useEffect(() => {
+    if (user?.id) {
+      localStorage.setItem(`rewardsTransactions_${user.id}`, JSON.stringify(rewardsTransactions));
+    }
+  }, [rewardsTransactions, user?.id]);
+
   // 當用戶變更時重新載入點數數據
   useEffect(() => {
     if (user?.id) {
-      setUserPoints(loadUserPointsFromStorage());
+      setUserPoints(loadImagePointsFromStorage());
       setPointsTransactions(loadTransactionsFromStorage());
+      setRewardsPoints(loadRewardsFromStorage());
+      setRewardsTransactions(loadRewardsTransactionsFromStorage());
     }
   }, [user?.id]);
 
@@ -251,6 +310,17 @@ const StudentDashboard: React.FC = () => {
       }
     } catch (error) {
       console.error('Failed to load points:', error);
+    }
+  }, []);
+
+  const loadRewardsPoints = useCallback(async () => {
+    try {
+      const response = await authService.getRewardsBalance();
+      setRewardsPoints(response);
+      const tx = await authService.getRewardsHistory();
+      setRewardsTransactions(tx);
+    } catch (error) {
+      console.error('Failed to load rewards:', error);
     }
   }, []);
 
@@ -543,8 +613,9 @@ const StudentDashboard: React.FC = () => {
   useEffect(() => {
     if (user) {
       void loadUserPoints();
+      void loadRewardsPoints();
     }
-  }, [user, loadUserPoints]);
+  }, [user, loadUserPoints, loadRewardsPoints]);
 
   useEffect(() => {
     const loadFoldersData = async () => {
@@ -1288,7 +1359,7 @@ const StudentDashboard: React.FC = () => {
                 {/* Awards section */}
                 <div className="grid grid-cols-4 gap-3 justify-items-center mb-6">
                   {(() => {
-                    const pts = Number(userPoints.currentPoints) || 0;
+                    const pts = Number(rewardsPoints.currentPoints) || 0;
                     const medals = [
                       { key: 'bronze', label: '銅獎', min: 100, color: 'text-[#CD7F32]' },
                       { key: 'silver', label: '銀獎', min: 200, color: 'text-gray-400' },
@@ -1319,12 +1390,12 @@ const StudentDashboard: React.FC = () => {
                 <div className="grid grid-cols-2 gap-4 mb-4">
                   <div className="bg-yellow-100 border-2 border-yellow-300 rounded-xl p-3 text-center">
                     <Star className="w-8 h-8 text-yellow-500 mx-auto mb-1" />
-                    <div className="text-lg font-bold text-[#5D4037]">{userPoints.currentPoints || 0}</div>
-                    <div className="text-xs font-bold text-[#8D6E63]">目前點數</div>
+                    <div className="text-lg font-bold text-[#5D4037]">{rewardsPoints.currentPoints || 0}</div>
+                    <div className="text-xs font-bold text-[#8D6E63]">獎勵積分</div>
                   </div>
                   <div className="bg-blue-100 border-2 border-blue-300 rounded-xl p-3 text-center">
                     <div className="text-2xl mb-1">🏆</div>
-                    <div className="text-lg font-bold text-[#5D4037]">{userPoints.selfStudyDoubleRemaining ?? 0}</div>
+                    <div className="text-lg font-bold text-[#5D4037]">{rewardsPoints.selfStudyDoubleRemaining ?? 0}</div>
                     <div className="text-xs font-bold text-[#8D6E63]">自學 2 倍剩餘</div>
                   </div>
                 </div>
@@ -1373,7 +1444,7 @@ const StudentDashboard: React.FC = () => {
           setShowBotTaskChat(false);
           setSelectedBotTaskId(null);
           void loadStudentTasks();
-          void loadUserPoints();
+          void loadRewardsPoints();
         }}
       />
       <ImageGenerationConfirmModal
@@ -1393,7 +1464,7 @@ const StudentDashboard: React.FC = () => {
           setRetrySessionScope(null); // 關閉時清除重新練習的學習範圍
         }}
         initialScope={retrySessionScope}
-        onFinished={() => loadUserPoints()}
+        onFinished={() => loadRewardsPoints()}
       />
 
       {/* 自學天地（練習 / 記錄 分頁） */}
@@ -1485,7 +1556,7 @@ const StudentDashboard: React.FC = () => {
         onClose={() => { setShowQuizModal(false); setSelectedQuizId(null); }}
         onFinished={() => {
           void loadStudentTasks();
-          void loadUserPoints();
+          void loadRewardsPoints();
         }}
       />
 
@@ -1495,7 +1566,7 @@ const StudentDashboard: React.FC = () => {
         onClose={() => { setShowDiscussionModal(false); setSelectedDiscussionId(null); }}
         onSubmitted={() => {
           void loadStudentTasks();
-          void loadUserPoints();
+          void loadRewardsPoints();
         }}
       />
 
@@ -1505,7 +1576,7 @@ const StudentDashboard: React.FC = () => {
         onClose={() => { setShowContestModal(false); setSelectedContest(null); }}
         onFinished={() => {
           void loadStudentTasks();
-          void loadUserPoints();
+          void loadRewardsPoints();
         }}
       />
 
@@ -1515,7 +1586,7 @@ const StudentDashboard: React.FC = () => {
           onClose={() => { setShowNoteModal(false); setSelectedNoteId(null); }}
           onSubmitted={() => {
             void loadStudentTasks();
-            void loadUserPoints();
+            void loadRewardsPoints();
           }}
           authService={authService}
           mode="student"

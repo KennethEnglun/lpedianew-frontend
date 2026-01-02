@@ -76,7 +76,7 @@ export default function PointsBalance(props: PointsBalanceProps) {
         <div className="flex items-center justify-between mb-2">
           <div className="flex items-center gap-2">
             <Coins className="w-4 h-4 text-yellow-600" />
-            <span className="font-bold text-[#5D4037] text-sm">我的點數</span>
+            <span className="font-bold text-[#5D4037] text-sm">圖片生成點數</span>
           </div>
           {onRefresh && (
             <Button

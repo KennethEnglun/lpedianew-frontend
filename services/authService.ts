@@ -2134,15 +2134,12 @@ class AuthService {
 
   // === 點數系統相關API ===
 
-  // Student端點數方法
+  // Student端圖片生成點數方法
   async getUserPoints(): Promise<{
     currentPoints: number;
     totalReceived: number;
     totalUsed: number;
     lastUpdate: string;
-    dayKey?: string;
-    selfStudyDoubleUsed?: number;
-    selfStudyDoubleRemaining?: number;
   }> {
     const response = await fetch(`${this.API_BASE}/student/points/balance`, {
       headers: this.getAuthHeaders()
@@ -2172,7 +2169,31 @@ class AuthService {
     return this.handleResponse(response);
   }
 
-  async submitSelfStudyCompletion(payload: { sessionId: string; score: number; scope?: any }): Promise<{
+  // Student端獎勵積分方法
+  async getRewardsBalance(): Promise<{
+    currentPoints: number;
+    totalReceived: number;
+    totalUsed: number;
+    lastUpdate: string;
+    dayKey?: string;
+    selfStudyDoubleUsed?: number;
+    selfStudyDoubleRemaining?: number;
+  }> {
+    const response = await fetch(`${this.API_BASE}/student/rewards/balance`, {
+      headers: this.getAuthHeaders()
+    });
+    return this.handleResponse(response);
+  }
+
+  async getRewardsHistory(limit: number = 50): Promise<any[]> {
+    const response = await fetch(`${this.API_BASE}/student/rewards/history?limit=${limit}`, {
+      headers: this.getAuthHeaders()
+    });
+    const result = await this.handleResponse<{ transactions: any[] }>(response);
+    return result.transactions || [];
+  }
+
+  async submitRewardsSelfStudyCompletion(payload: { sessionId: string; score: number; scope?: any }): Promise<{
     success: boolean;
     transaction?: any;
     created?: boolean;
@@ -2180,10 +2201,45 @@ class AuthService {
     selfStudyDoubleUsed?: number;
     selfStudyDoubleRemaining?: number;
   }> {
-    const response = await fetch(`${this.API_BASE}/student/self-study/complete`, {
+    const response = await fetch(`${this.API_BASE}/student/rewards/self-study/complete`, {
       method: 'POST',
       headers: this.getAuthHeaders(),
       body: JSON.stringify(payload || {})
+    });
+    return this.handleResponse(response);
+  }
+
+  // Teacher/Admin 端獎勵積分管理
+  async getStudentsRewards(): Promise<{ students: any[] }> {
+    const response = await fetch(`${this.API_BASE}/admin/students/rewards`, {
+      headers: this.getAuthHeaders()
+    });
+    return this.handleResponse(response);
+  }
+
+  async grantRewardsToStudent(userId: string, amount: number, description?: string): Promise<{ transaction: any; newBalance: number }> {
+    const response = await fetch(`${this.API_BASE}/admin/students/${userId}/rewards/grant`, {
+      method: 'POST',
+      headers: this.getAuthHeaders(),
+      body: JSON.stringify({ amount, description })
+    });
+    return this.handleResponse(response);
+  }
+
+  async batchGrantRewards(studentIds: string[], amount: number, description?: string): Promise<{ transactions: any[]; affectedStudents: number }> {
+    const response = await fetch(`${this.API_BASE}/admin/students/rewards/batch-grant`, {
+      method: 'POST',
+      headers: this.getAuthHeaders(),
+      body: JSON.stringify({ studentIds, amount, description })
+    });
+    return this.handleResponse(response);
+  }
+
+  async adjustStudentRewards(userId: string, newAmount: number, description?: string): Promise<{ transaction: any; newBalance: number }> {
+    const response = await fetch(`${this.API_BASE}/admin/students/${userId}/rewards/adjust`, {
+      method: 'POST',
+      headers: this.getAuthHeaders(),
+      body: JSON.stringify({ newAmount, description })
     });
     return this.handleResponse(response);
   }

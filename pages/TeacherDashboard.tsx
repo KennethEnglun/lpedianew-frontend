@@ -1460,7 +1460,7 @@ const TeacherDashboard: React.FC = () => {
 	      const defaultClass = String(user?.profile?.homeroomClass || '').trim();
 	      if (defaultClass && !pointsGrantClass) setPointsGrantClass(defaultClass);
 
-	      const pointsResp = await authService.getStudentsPoints().catch(() => null as any);
+	      const pointsResp = await authService.getStudentsRewards().catch(() => null as any);
 	      const pointsById = new Map(
 	        (pointsResp?.students || []).map((s: any) => [String(s.userId), Number(s.currentPoints) || 0] as const)
 	      );
@@ -2860,12 +2860,12 @@ const TeacherDashboard: React.FC = () => {
                 )}
               </div>
 
-              {/* 點數加分（放在學生進度內） */}
+              {/* 獎勵積分加分（放在學生進度內） */}
               <div className="mb-6 p-4 bg-[#FFF3E0] rounded-2xl border-2 border-brand-brown">
                 <div className="flex items-center justify-between gap-4 mb-3">
                   <div className="flex items-center gap-2">
                     <Coins className="w-5 h-5 text-brand-brown" />
-                    <div className="text-lg font-black text-brand-brown">點數加分</div>
+                    <div className="text-lg font-black text-brand-brown">獎勵積分加分</div>
                   </div>
                   <button
                     type="button"
@@ -2970,7 +2970,7 @@ const TeacherDashboard: React.FC = () => {
                                 setPointsGrantError('請先選擇學生');
                                 return;
                               }
-                              await authService.grantPointsToStudent(pointsGrantStudentId, amount, pointsGrantDescription || undefined);
+                              await authService.grantRewardsToStudent(pointsGrantStudentId, amount, pointsGrantDescription || undefined);
                             } else {
                               if (!pointsGrantClass) {
                                 setPointsGrantError('請先選擇班級');
@@ -2983,7 +2983,7 @@ const TeacherDashboard: React.FC = () => {
                                 setPointsGrantError('此班級沒有學生');
                                 return;
                               }
-                              await authService.batchGrantPoints(ids, amount, pointsGrantDescription || `全班加分 ${amount}`);
+                              await authService.batchGrantRewards(ids, amount, pointsGrantDescription || `全班加分 ${amount}`);
                             }
 
                             window.alert('加分成功');
@@ -3088,7 +3088,7 @@ const TeacherDashboard: React.FC = () => {
                                       }
                                       const desc = window.prompt('改分原因（可留空）', '管理員改分') || undefined;
                                       try {
-                                        await authService.adjustStudentPoints(String(row.id), Math.floor(next), desc);
+                                        await authService.adjustStudentRewards(String(row.id), Math.floor(next), desc);
                                         await loadStudentProgress();
                                       } catch (e: any) {
                                         window.alert(e?.message || '改分失敗');

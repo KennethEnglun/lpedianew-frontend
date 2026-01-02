@@ -224,7 +224,7 @@ export default function StudyPracticeModal({ open, onClose, initialScope, onFini
 
     // 提交到後端以獲得「我的獎勵」點數（失敗不阻斷）
     void authService
-      .submitSelfStudyCompletion({ sessionId: session.id, score: session.score, scope: session.scope })
+      .submitRewardsSelfStudyCompletion({ sessionId: session.id, score: session.score, scope: session.scope })
       .then(() => onFinished?.())
       .catch(() => onFinished?.());
 
