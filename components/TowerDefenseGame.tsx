@@ -116,6 +116,7 @@ const GRID_HEIGHT = 7;
 const TILE_W = 76;
 const TILE_H = 38;
 const TILE_DEPTH = 18;
+const BATTLEFIELD_RENDER_SCALE = 0.7;
 const DEFAULT_GAME_DURATION_SECONDS = 60;
 const DEFAULT_PATH: Array<{ x: number; y: number }> = [
   { x: 0, y: 3 }, { x: 1, y: 3 }, { x: 2, y: 3 }, { x: 2, y: 2 }, { x: 2, y: 1 },
@@ -546,6 +547,119 @@ function drawRoundRect(ctx: CanvasRenderingContext2D, x: number, y: number, w: n
   ctx.lineTo(x, y + rr);
   ctx.quadraticCurveTo(x, y, x + rr, y);
   ctx.closePath();
+}
+
+function drawGoalTower(
+  ctx: CanvasRenderingContext2D,
+  opts: {
+    x: number;
+    y: number;
+    damage01: number;
+    hit01: number;
+    simNow: number;
+  }
+) {
+  const dmg = Math.max(0, Math.min(1, opts.damage01));
+  const hit = Math.max(0, Math.min(1, opts.hit01));
+
+  const baseW = 62;
+  const baseH = 72;
+  const outline = COLORS.border;
+
+  ctx.save();
+  ctx.translate(opts.x, opts.y);
+
+  if (hit > 0) {
+    const amp = 3 + 6 * hit;
+    const ox = (Math.sin(opts.simNow * 44.0) + Math.sin(opts.simNow * 28.0)) * 0.5 * amp;
+    const oy = (Math.cos(opts.simNow * 41.0) + Math.cos(opts.simNow * 19.0)) * 0.5 * amp;
+    ctx.translate(ox, oy);
+  }
+
+  // shadow
+  ctx.save();
+  ctx.fillStyle = COLORS.shadow;
+  ctx.beginPath();
+  ctx.ellipse(0, 30, 30, 13, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
+
+  // main body
+  const grad = ctx.createLinearGradient(0, -baseH * 0.6, 0, 26);
+  grad.addColorStop(0, '#A7B0BB');
+  grad.addColorStop(1, '#7E8792');
+  ctx.fillStyle = grad;
+  ctx.strokeStyle = outline;
+  ctx.lineWidth = 5;
+  drawRoundRect(ctx, -baseW / 2, -baseH / 2, baseW, baseH, 14);
+  ctx.fill();
+  ctx.stroke();
+
+  // top cap
+  ctx.save();
+  ctx.translate(0, -baseH / 2);
+  ctx.fillStyle = '#C7CED6';
+  ctx.strokeStyle = outline;
+  ctx.lineWidth = 5;
+  drawRoundRect(ctx, -baseW / 2 - 6, -14, baseW + 12, 24, 12);
+  ctx.fill();
+  ctx.stroke();
+  ctx.restore();
+
+  // emblem
+  ctx.save();
+  ctx.translate(0, -6);
+  ctx.fillStyle = '#FDE68A';
+  ctx.strokeStyle = outline;
+  ctx.lineWidth = 4;
+  ctx.beginPath();
+  ctx.arc(0, 0, 12, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.stroke();
+  ctx.fillStyle = '#1F2937';
+  ctx.font = '900 12px system-ui';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText('塔', 0, 1);
+  ctx.restore();
+
+  // cracks based on damage
+  if (dmg > 0.02) {
+    ctx.save();
+    ctx.strokeStyle = 'rgba(20,16,14,0.65)';
+    ctx.lineWidth = 2.5;
+    ctx.globalAlpha = 0.35 + dmg * 0.45;
+    const crackCount = dmg < 0.34 ? 1 : dmg < 0.67 ? 2 : 3;
+    for (let i = 0; i < crackCount; i++) {
+      const seed = Math.floor(hash01(i + 11, baseW, 9) * 100000);
+      const startX = (hash01(seed, i, 1) - 0.5) * 10;
+      const startY = -baseH * 0.35 + hash01(seed, i, 2) * 12;
+      const steps = 6 + Math.floor(hash01(seed, i, 3) * 4);
+      ctx.beginPath();
+      ctx.moveTo(startX, startY);
+      for (let s = 1; s <= steps; s++) {
+        const t = s / steps;
+        const x = startX + (hash01(seed, s, 8) - 0.5) * (10 + 24 * dmg) * (t * 0.7 + 0.3);
+        const y = startY + t * (baseH * (0.55 + 0.25 * dmg)) + (hash01(seed, s, 4) - 0.5) * 6;
+        ctx.lineTo(x, y);
+      }
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+
+  // hit flash
+  if (hit > 0) {
+    ctx.save();
+    ctx.globalAlpha = 0.22 + hit * 0.25;
+    ctx.strokeStyle = '#F8C5C5';
+    ctx.lineWidth = 6;
+    drawRoundRect(ctx, -baseW / 2 - 2, -baseH / 2 - 2, baseW + 4, baseH + 4, 14);
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  ctx.restore();
 }
 
 function drawCuteCat(
@@ -1590,6 +1704,7 @@ export const TowerDefenseGame: React.FC<Props> = ({ gameId, questions, subject, 
   const lastEffectUiUpdateRef = useRef<number>(0);
 
   const shakeRef = useRef<{ until: number; amp: number }>({ until: 0, amp: 0 });
+  const goalTowerHitRef = useRef<{ start: number; end: number }>({ start: 0, end: 0 });
 
   const questionTimeoutRef = useRef<number | null>(null);
   useEffect(() => {
@@ -1601,6 +1716,18 @@ export const TowerDefenseGame: React.FC<Props> = ({ gameId, questions, subject, 
   const startShake = (amp: number, durationSeconds: number) => {
     const until = simTimeRef.current + Math.max(0, durationSeconds);
     shakeRef.current = { until, amp: Math.max(shakeRef.current.amp, amp) };
+  };
+
+  const triggerGoalTowerHit = (simNow: number) => {
+    const duration = 0.35;
+    goalTowerHitRef.current = { start: simNow, end: simNow + duration };
+    const path = pathCellsRef.current;
+    const endCell = path[path.length - 1] || DEFAULT_PATH[DEFAULT_PATH.length - 1];
+    if (!endCell) return;
+    const pos = isoToScreen(endCell.x, endCell.y);
+    const baseY = pos.y - TILE_H / 2 - 14;
+    spawnShockwave(pos.x, baseY, '#F8C5C5', 10, 260, 0.22, 6);
+    spawnParticles(pos.x, baseY, 18, '#F8C5C5');
   };
 
   const spawnShockwave = (x: number, y: number, color: string, initialR = 6, vr = 180, life = 0.35, thickness = 5) => {
@@ -2041,7 +2168,7 @@ export const TowerDefenseGame: React.FC<Props> = ({ gameId, questions, subject, 
 		      setEffectUi({ slow: slowRem, freeze: freezeRem, frenzy: frenzyRem });
 		    }
 
-	    const movedEnemies: Enemy[] = [];
+    const movedEnemies: Enemy[] = [];
 	    const pathLen = pathCellsRef.current.length || DEFAULT_PATH.length;
     for (const enemy of enemiesSnapshot) {
 	      const personalSlow = enemy.slowUntil && simNow < enemy.slowUntil ? (enemy.slowFactor ?? 1) : 1;
@@ -2054,6 +2181,7 @@ export const TowerDefenseGame: React.FC<Props> = ({ gameId, questions, subject, 
             return newLives;
           });
         }
+        triggerGoalTowerHit(simNow);
         continue;
       }
       movedEnemies.push({ ...enemy, pathIndex: nextIndex });
@@ -2246,6 +2374,12 @@ export const TowerDefenseGame: React.FC<Props> = ({ gameId, questions, subject, 
     ctx.fillStyle = vignette;
     ctx.fillRect(0, 0, width, height);
 
+    // Scale game content (leave background full-size)
+    ctx.save();
+    ctx.translate(width / 2, height / 2);
+    ctx.scale(BATTLEFIELD_RENDER_SCALE, BATTLEFIELD_RENDER_SCALE);
+    ctx.translate(-width / 2, -height / 2);
+
     const simNow = simTimeRef.current;
     const frozen = simNow < freezeUntilRef.current;
     const slow = simNow < slowUntilRef.current;
@@ -2277,6 +2411,20 @@ export const TowerDefenseGame: React.FC<Props> = ({ gameId, questions, subject, 
         ctx.strokeStyle = 'rgba(94,76,64,0.25)';
         ctx.lineWidth = 2;
         ctx.stroke();
+      }
+    }
+
+    // Goal tower at the end of path (takes damage when enemies reach the end)
+    {
+      const path = pathCellsRef.current;
+      const endCell = path[path.length - 1] || DEFAULT_PATH[DEFAULT_PATH.length - 1];
+      if (endCell) {
+        const pos = isoToScreen(endCell.x, endCell.y);
+        const baseY = pos.y - TILE_H / 2 - 4;
+        const damage01 = livesEnabled ? Math.max(0, Math.min(1, (initialLives - lives) / Math.max(1, initialLives))) : 0;
+        const hit = goalTowerHitRef.current;
+        const hit01 = simNow >= hit.start && simNow <= hit.end ? Math.max(0, Math.min(1, (hit.end - simNow) / Math.max(0.001, hit.end - hit.start))) : 0;
+        drawGoalTower(ctx, { x: pos.x, y: baseY, damage01, hit01, simNow });
       }
     }
 
@@ -2553,6 +2701,8 @@ export const TowerDefenseGame: React.FC<Props> = ({ gameId, questions, subject, 
     if (simNow < shake.until && shake.amp > 0) {
       ctx.restore();
     }
+
+    ctx.restore();
   }
 
   useEffect(() => {
@@ -2714,7 +2864,7 @@ export const TowerDefenseGame: React.FC<Props> = ({ gameId, questions, subject, 
 	        )}
 	      </div>
 
-	      <div className="mt-3 bg-white border-4 border-brand-brown rounded-3xl p-4 shadow-comic-xl">
+	      <div className="mt-2 bg-white border-4 border-brand-brown rounded-3xl p-3 shadow-comic-xl max-h-[24vh] overflow-y-auto">
 	        {!isRunning && !gameOver ? (
 	          <div className="flex flex-col md:flex-row md:items-center gap-3">
 	            <div className="flex-1">
@@ -2736,7 +2886,7 @@ export const TowerDefenseGame: React.FC<Props> = ({ gameId, questions, subject, 
 	          <div className="text-center text-gray-500 font-bold">準備出題中…</div>
 	        ) : (
 	          <>
-	            <div className="flex items-center gap-2 mb-3">
+	            <div className="flex items-center gap-2 mb-2">
 	              <span className={`px-2 py-0.5 rounded-full text-xs font-black border-2 ${currentQuestion.kind === 'match' ? 'bg-lime-100 border-lime-300 text-lime-900' : 'bg-blue-100 border-blue-300 text-blue-900'}`}>
 	                {currentQuestion.kind === 'match' ? '配對' : '四選一'}
 	              </span>
@@ -2748,22 +2898,22 @@ export const TowerDefenseGame: React.FC<Props> = ({ gameId, questions, subject, 
 	              </span>
 	            </div>
 
-	            <h3 className="text-xl md:text-2xl font-black text-brand-brown mb-3">
+	            <h3 className="text-lg md:text-xl font-black text-brand-brown mb-2">
 	              {currentQuestion.kind === 'match' ? `選出與「${currentQuestion.stem}」相符的答案` : currentQuestion.stem}
 	            </h3>
 
 	            {answerResult && (
-	              <div className={`mb-3 px-4 py-3 rounded-2xl border-2 font-black ${answerResult.isCorrect ? 'bg-emerald-50 border-emerald-200 text-emerald-800' : 'bg-red-50 border-red-200 text-red-700'}`}>
+	              <div className={`mb-2 px-3 py-2 rounded-2xl border-2 font-black ${answerResult.isCorrect ? 'bg-emerald-50 border-emerald-200 text-emerald-800' : 'bg-red-50 border-red-200 text-red-700'}`}>
 	                {answerResult.effectText}
 	              </div>
 	            )}
 
-	            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+	            <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
 	              {currentOptions.map((option, idx) => {
 	                const locked = Boolean(answerResult);
 	                const isCorrect = idx === currentCorrectIndex;
 	                const isChosen = answerResult?.selectedIndex === idx;
-	                const base = 'px-4 py-3 border-4 rounded-2xl font-black shadow-comic';
+	                const base = 'px-3 py-2 border-4 rounded-2xl font-black shadow-comic';
 	                const state = (() => {
 	                  if (!locked) return 'bg-[#FEF7EC] hover:bg-[#FDEFCB] border-brand-brown text-brand-brown';
 	                  if (isCorrect) return 'bg-emerald-100 border-emerald-500 text-emerald-900';
