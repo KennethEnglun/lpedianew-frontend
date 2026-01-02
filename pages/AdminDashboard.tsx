@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { ClipboardList, FolderArchive, Shield, ShieldAlert, Users, Coins } from 'lucide-react';
+import { ClipboardList, FolderArchive, Shield, ShieldAlert, Users, Coins, Award } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { authService } from '../services/authService';
@@ -14,8 +14,9 @@ import AdminFoldersPanel from '../components/admin/panels/AdminFoldersPanel';
 import AdminUsersPanel from '../components/admin/panels/AdminUsersPanel';
 import AdminYearEndPanel from '../components/admin/panels/AdminYearEndPanel';
 import AdminPointsPanel from '../components/admin/panels/AdminPointsPanel';
+import AdminRewardsPanel from '../components/admin/panels/AdminRewardsPanel';
 import ModerationLogsPanel from '../components/admin/ModerationLogsPanel';
-import type { AdminSection, AdminUser, SidebarItem, UserRoleFilter, StudentPointsStatus, PointsOverview, PointTransaction } from '../components/admin/types';
+import type { AdminSection, AdminUser, SidebarItem, UserRoleFilter, StudentPointsStatus, PointsOverview, PointTransaction, StudentRewardsStatus, RewardsOverview } from '../components/admin/types';
 import { VISIBLE_SUBJECTS } from '../platform';
 import { compareStudentId } from '../utils/studentSort';
 
@@ -91,6 +92,18 @@ const AdminDashboard: React.FC = () => {
   });
   const [pointsTransactions, setPointsTransactions] = useState<PointTransaction[]>([]);
   const [pointsLoading, setPointsLoading] = useState(false);
+
+  // Rewards (我的獎勵積分) system state
+  const [studentsRewardsData, setStudentsRewardsData] = useState<StudentRewardsStatus[]>([]);
+  const [rewardsOverview, setRewardsOverview] = useState<RewardsOverview>({
+    totalStudents: 0,
+    totalPointsDistributed: 0,
+    totalPointsUsed: 0,
+    averagePointsPerStudent: 0,
+    studentsWithPoints: 0,
+    studentsWithoutPoints: 0
+  });
+  const [rewardsLoading, setRewardsLoading] = useState(false);
 
   const loadUsers = useCallback(async () => {
     try {
@@ -257,6 +270,12 @@ const AdminDashboard: React.FC = () => {
       void loadPointsData();
     }
   }, [activeSection, loadPointsData]);
+
+  useEffect(() => {
+    if (activeSection === 'rewards') {
+      void loadRewardsData();
+    }
+  }, [activeSection, loadRewardsData]);
 
   const classOptions = useMemo(() => {
     const set = new Set<string>();
@@ -550,6 +569,40 @@ const AdminDashboard: React.FC = () => {
     }
   }, [loadPointsData]);
 
+  const loadRewardsData = useCallback(async () => {
+    try {
+      setRewardsLoading(true);
+      const resp = await authService.getStudentsRewards();
+      const list = (resp?.students || []) as StudentRewardsStatus[];
+      setStudentsRewardsData(list);
+      const totalStudents = list.length;
+      const totalPointsDistributed = list.reduce((sum, s) => sum + (Number(s.totalReceived) || 0), 0);
+      const totalPointsUsed = list.reduce((sum, s) => sum + (Number(s.totalUsed) || 0), 0);
+      const totalCurrent = list.reduce((sum, s) => sum + (Number(s.currentPoints) || 0), 0);
+      setRewardsOverview({
+        totalStudents,
+        totalPointsDistributed,
+        totalPointsUsed,
+        averagePointsPerStudent: totalStudents > 0 ? totalCurrent / totalStudents : 0,
+        studentsWithPoints: list.filter((s) => (Number(s.currentPoints) || 0) > 0).length,
+        studentsWithoutPoints: list.filter((s) => (Number(s.currentPoints) || 0) === 0).length
+      });
+    } catch (e) {
+      console.error('Load rewards failed:', e);
+      setStudentsRewardsData([]);
+      setRewardsOverview({
+        totalStudents: 0,
+        totalPointsDistributed: 0,
+        totalPointsUsed: 0,
+        averagePointsPerStudent: 0,
+        studentsWithPoints: 0,
+        studentsWithoutPoints: 0
+      });
+    } finally {
+      setRewardsLoading(false);
+    }
+  }, []);
+
   const handleBatchGrantPoints = useCallback(async (studentIds: string[], amount: number, description?: string) => {
     try {
       try {
@@ -636,6 +689,7 @@ const AdminDashboard: React.FC = () => {
     { key: 'users', label: '帳號管理', icon: <Users className="w-5 h-5" /> },
     { key: 'assignments', label: '作業管理', icon: <ClipboardList className="w-5 h-5" /> },
     { key: 'folders', label: '班級資料夾', icon: <FolderArchive className="w-5 h-5" /> },
+    { key: 'rewards', label: '獎勵積分', icon: <Award className="w-5 h-5" /> },
     { key: 'points', label: '點數管理', icon: <Coins className="w-5 h-5" /> },
     { key: 'moderation', label: '內容審核', icon: <Shield className="w-5 h-5" /> },
     { key: 'yearEnd', label: '年度操作', icon: <ShieldAlert className="w-5 h-5" /> }
@@ -646,6 +700,7 @@ const AdminDashboard: React.FC = () => {
       case 'users': return '帳號管理';
       case 'assignments': return '作業管理';
       case 'folders': return '班級資料夾（封存）';
+      case 'rewards': return '獎勵積分管理';
       case 'points': return '點數管理';
       case 'moderation': return '內容審核';
       case 'yearEnd': return '年度操作';
@@ -658,6 +713,7 @@ const AdminDashboard: React.FC = () => {
       case 'users': return '新增/停用/刪除用戶，匯入匯出 CSV（只影響帳號資料）';
       case 'assignments': return '以檔案總管方式查看作業；管理員可查看、刪除及封存';
       case 'folders': return '查看封存資料夾、詳細內容及復原';
+      case 'rewards': return '管理「我的獎勵」積分，為個別學生或批次加分／改分';
       case 'points': return '管理學生點數，分配點數給個別學生或批次分配';
       case 'moderation': return '監控 AI 圖片生成內容安全，查看審核記錄和統計';
       case 'yearEnd': return '升班（封存本年度所有學生內容）';
@@ -730,6 +786,27 @@ const AdminDashboard: React.FC = () => {
               onGrantPoints={handleGrantPoints}
               onBatchGrantPoints={handleBatchGrantPoints}
               onAdjustPoints={handleAdjustPoints}
+            />
+          </div>
+        )}
+
+        {activeSection === 'rewards' && (
+          <div className="space-y-3">
+            {rewardsLoading && <div className="text-gray-700 font-bold">載入獎勵積分資料中...</div>}
+            <AdminRewardsPanel
+              students={studentsRewardsData}
+              overview={rewardsOverview}
+              loading={rewardsLoading}
+              onReload={loadRewardsData}
+              onGrant={async (userId, amount, description) => {
+                await authService.grantRewardsToStudent(userId, amount, description);
+              }}
+              onBatchGrant={async (studentIds, amount, description) => {
+                await authService.batchGrantRewards(studentIds, amount, description);
+              }}
+              onAdjust={async (userId, newAmount, description) => {
+                await authService.adjustStudentRewards(userId, newAmount, description);
+              }}
             />
           </div>
         )}

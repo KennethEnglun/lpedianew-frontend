@@ -1,6 +1,6 @@
 import type React from 'react';
 
-export type AdminSection = 'users' | 'assignments' | 'folders' | 'yearEnd' | 'points' | 'moderation';
+export type AdminSection = 'users' | 'assignments' | 'folders' | 'rewards' | 'points' | 'moderation' | 'yearEnd';
 export type UserRoleFilter = 'all' | 'teacher' | 'student';
 
 export interface AdminUser {
@@ -55,6 +55,28 @@ export interface StudentPointsStatus {
 }
 
 export interface PointsOverview {
+  totalStudents: number;
+  totalPointsDistributed: number;
+  totalPointsUsed: number;
+  averagePointsPerStudent: number;
+  studentsWithPoints: number;
+  studentsWithoutPoints: number;
+}
+
+// Rewards System Types（我的獎勵積分）
+export interface StudentRewardsStatus {
+  userId: string;
+  username: string;
+  name: string;
+  class?: string;
+  studentId?: string;
+  currentPoints: number;
+  totalReceived: number;
+  totalUsed: number;
+  lastUpdate?: string;
+}
+
+export interface RewardsOverview {
   totalStudents: number;
   totalPointsDistributed: number;
   totalPointsUsed: number;
