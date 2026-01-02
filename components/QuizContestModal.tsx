@@ -42,6 +42,7 @@ export function QuizContestModal(props: {
   const [questionIndex, setQuestionIndex] = useState(0);
 
   const [result, setResult] = useState<{ score: number; correctAnswers: number; totalQuestions: number; submittedAt?: string } | null>(null);
+  const [rewardsAward, setRewardsAward] = useState<{ amount: number; balance: number } | null>(null);
 
   const [leaderboards, setLeaderboards] = useState<any | null>(null);
   const [leaderboardTab, setLeaderboardTab] = useState<'best' | 'total' | 'avg'>('best');
@@ -64,6 +65,7 @@ export function QuizContestModal(props: {
     setTimeLimitSeconds(null);
     setQuestionIndex(0);
     setResult(null);
+    setRewardsAward(null);
     setLeaderboards(null);
     setLeaderboardTab('best');
     setLeaderboardLoading(false);
@@ -120,12 +122,24 @@ export function QuizContestModal(props: {
       const elapsed = startAt ? Math.floor((Date.now() - startAt) / 1000) : null;
       const resp = await authService.submitContestAttempt(attemptId, { answers, timeSpentSeconds: elapsed });
       const r = resp?.result || {};
+      const rw = resp?.rewards || null;
       setResult({
         score: Number(r.score) || 0,
         correctAnswers: Number(r.correctAnswers) || 0,
         totalQuestions: Number(r.totalQuestions) || answers.length,
         submittedAt: r.submittedAt
       });
+      if (rw && typeof rw === 'object') {
+        const amount = Number((rw as any).amount);
+        const balance = Number((rw as any).balance);
+        if (Number.isFinite(amount) && Number.isFinite(balance)) {
+          setRewardsAward({ amount: Math.trunc(amount), balance: Math.trunc(balance) });
+        } else {
+          setRewardsAward(null);
+        }
+      } else {
+        setRewardsAward(null);
+      }
       setPhase('result');
       onFinished?.();
     } catch (e: any) {
@@ -493,6 +507,11 @@ export function QuizContestModal(props: {
               <div className="text-lg font-bold text-gray-700">
                 得分：<span className="text-2xl font-black text-brand-brown">{Math.round(result.score)}%</span> • 正確：{result.correctAnswers}/{result.totalQuestions}
               </div>
+              {rewardsAward && (
+                <div className="mt-3 rounded-2xl border-2 border-yellow-200 bg-yellow-50 p-4 font-black text-yellow-900">
+                  獎勵積分 +{rewardsAward.amount}（目前：{rewardsAward.balance}）
+                </div>
+              )}
 
               <div className="mt-6 flex flex-col md:flex-row gap-4">
                 {contest.scopeCardId && (
