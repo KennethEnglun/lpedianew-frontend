@@ -1378,12 +1378,21 @@ const StudentDashboard: React.FC = () => {
 
             {/* My Rewards Card */}
             <div className="cartoon-card">
-              <div className="bg-[#F9E4C8] p-3 border-b-4 border-[#E6D2B5] text-center">
-                <h3 className="text-xl font-bold text-[#5D4037]">我的獎勵</h3>
+              <div className="bg-[#F9E4C8] p-3 border-b-4 border-[#E6D2B5]">
+                <div className="flex items-center justify-between gap-3">
+                  <h3 className="text-xl font-bold text-[#5D4037]">我的獎勵</h3>
+                  <button
+                    type="button"
+                    onClick={() => void openRewardsLeaderboard()}
+                    className="px-3 py-1.5 rounded-xl bg-white/70 border-2 border-[#5D4037] text-[#5D4037] font-black text-sm hover:bg-white shadow-comic active:translate-y-0.5 active:shadow-none"
+                  >
+                    排行榜
+                  </button>
+                </div>
               </div>
-              <div className="p-4 bg-white/60 h-full flex flex-col justify-center">
+              <div className="p-3 bg-white/60 h-full flex flex-col justify-center">
                 {/* Awards section */}
-                <div className="grid grid-cols-4 gap-3 justify-items-center mb-6">
+                <div className="grid grid-cols-4 gap-2 justify-items-center mb-3">
                   {(() => {
                     const pts = Number(rewardsPoints.currentPoints) || 0;
                     const medals = [
@@ -1396,17 +1405,17 @@ const StudentDashboard: React.FC = () => {
                     return medals.map((m) => {
                       const unlocked = pts >= m.min;
                       return (
-                        <div key={m.key} className="flex flex-col items-center gap-1 group" title={`${m.label}：${m.min} 分`}>
-                          <div className="w-12 h-12 rounded-full flex items-center justify-center group-hover:rotate-12 transition-transform">
+                        <div key={m.key} className="flex flex-col items-center gap-0.5 group" title={`${m.label}：${m.min} 分`}>
+                          <div className="w-11 h-11 rounded-full flex items-center justify-center group-hover:rotate-12 transition-transform">
                             <Award
                               className={[
-                                'w-10 h-10 drop-shadow-md transition-all',
+                                'w-9 h-9 drop-shadow-md transition-all',
                                 unlocked ? m.color : 'text-gray-300 opacity-60 grayscale'
                               ].join(' ')}
                             />
                           </div>
                           <span className="text-xs font-bold text-[#8D6E63] text-center">{m.label}</span>
-                          <span className="text-[10px] font-black text-[#8D6E63]/80 text-center">{m.min} 分</span>
+                          <span className="text-[10px] font-black text-[#8D6E63]/80 text-center">{m.min}</span>
                         </div>
                       );
                     });
@@ -1414,28 +1423,21 @@ const StudentDashboard: React.FC = () => {
                 </div>
 
                 {/* Achievement badges */}
-                <div className="grid grid-cols-2 gap-4 mb-4">
-                  <div className="bg-yellow-100 border-2 border-yellow-300 rounded-xl p-3 text-center">
-                    <Star className="w-8 h-8 text-yellow-500 mx-auto mb-1" />
+                <div className="grid grid-cols-2 gap-3 mb-2">
+                  <div className="bg-yellow-100 border-2 border-yellow-300 rounded-xl p-2 text-center">
+                    <Star className="w-7 h-7 text-yellow-500 mx-auto mb-0.5" />
                     <div className="text-lg font-bold text-[#5D4037]">{rewardsPoints.currentPoints || 0}</div>
                     <div className="text-xs font-bold text-[#8D6E63]">獎勵積分</div>
                   </div>
-                  <div className="bg-blue-100 border-2 border-blue-300 rounded-xl p-3 text-center">
-                    <div className="text-2xl mb-1">🏆</div>
+                  <div className="bg-blue-100 border-2 border-blue-300 rounded-xl p-2 text-center">
+                    <div className="text-2xl mb-0.5">🏆</div>
                     <div className="text-lg font-bold text-[#5D4037]">{rewardsPoints.selfStudyDoubleRemaining ?? 0}</div>
                     <div className="text-xs font-bold text-[#8D6E63]">自學 2 倍剩餘</div>
                   </div>
                 </div>
 
                 <div className="text-center">
-                  <div className="text-sm font-bold text-[#8D6E63]">繼續努力獲得更多獎勵！</div>
-                  <button
-                    type="button"
-                    onClick={() => void openRewardsLeaderboard()}
-                    className="mt-3 px-4 py-2 rounded-2xl bg-[#D2EFFF] border-4 border-[#5D4037] text-[#5D4037] font-black hover:bg-white shadow-comic active:translate-y-1 active:shadow-none"
-                  >
-                    查看同級排行榜
-                  </button>
+                  <div className="text-xs font-bold text-[#8D6E63]">繼續努力獲得更多獎勵！</div>
                 </div>
               </div>
             </div>
