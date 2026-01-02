@@ -10,9 +10,9 @@ const BASE64_CHUNK_SIZE = 7000;
 export function looksLikeExecutableHtml(input: string): boolean {
   const text = (input || '').trim().toLowerCase();
   if (!text) return false;
-  if (text.length < 60) return false;
 
   if (text.includes('<iframe')) return true;
+  if (text.length < 60) return false;
   if (text.startsWith('<!doctype html')) return true;
   if (text.includes('<html')) return true;
   if (text.includes('<head')) return true;
