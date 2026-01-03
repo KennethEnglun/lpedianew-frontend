@@ -22,6 +22,137 @@ function looksLikeReactOrTsx(raw: string): boolean {
   return false;
 }
 
+function extractBareImportSpecifiers(source: string): string[] {
+  const out = new Set<string>();
+  const text = String(source || '');
+  const importFrom = /\b(?:import|export)\s+[\s\S]*?\sfrom\s*['"]([^'"]+)['"]/g;
+  const importOnly = /\bimport\s*['"]([^'"]+)['"]/g;
+  const dynamicImport = /\bimport\s*\(\s*['"]([^'"]+)['"]\s*\)/g;
+
+  const push = (spec: string) => {
+    const s = String(spec || '').trim();
+    if (!s) return;
+    if (s.startsWith('.') || s.startsWith('/') || s.startsWith('http://') || s.startsWith('https://') || s.startsWith('data:')) return;
+    out.add(s);
+  };
+
+  let m: RegExpExecArray | null;
+  while ((m = importFrom.exec(text))) push(m[1]);
+  while ((m = importOnly.exec(text))) push(m[1]);
+  while ((m = dynamicImport.exec(text))) push(m[1]);
+
+  return Array.from(out);
+}
+
+function buildEsmShUrl(specifier: string): string {
+  return `https://esm.sh/${specifier}`;
+}
+
+function buildReactTsxRunnerSrcDoc(opts: { encodedSource: string; imports: string[] }): string {
+  const reactVer = '19.2.1';
+  const imports: Record<string, string> = {
+    react: buildEsmShUrl(`react@${reactVer}`),
+    'react/jsx-runtime': buildEsmShUrl(`react@${reactVer}/jsx-runtime`),
+    'react/jsx-dev-runtime': buildEsmShUrl(`react@${reactVer}/jsx-dev-runtime`),
+    'react-dom': buildEsmShUrl(`react-dom@${reactVer}`),
+    'react-dom/client': buildEsmShUrl(`react-dom@${reactVer}/client`)
+  };
+
+  for (const spec of opts.imports) {
+    if (imports[spec]) continue;
+    imports[spec] = buildEsmShUrl(spec);
+  }
+
+  const importMapJson = JSON.stringify({ imports });
+  const csp = [
+    "default-src 'none'",
+    "script-src 'unsafe-inline' 'unsafe-eval' https: http: blob:",
+    "style-src 'unsafe-inline' https: http: blob:",
+    "img-src https: http: data: blob:",
+    "font-src https: http: data: blob:",
+    'media-src https: http: data: blob:',
+    'connect-src https: http: ws: wss:',
+    'frame-src https: http:',
+    "object-src 'none'",
+    "base-uri 'none'"
+  ].join('; ');
+
+  // Note: this runner intentionally enables external network imports via esm.sh.
+  return [
+    '<!doctype html>',
+    '<html>',
+    '<head>',
+    '<meta charset="utf-8" />',
+    `<meta http-equiv="Content-Security-Policy" content="${csp.replace(/&/g, '&amp;').replace(/"/g, '&quot;')}" />`,
+    '<meta name="viewport" content="width=device-width, initial-scale=1" />',
+    '<style>html,body{height:100%;margin:0}body{font-family:ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Arial}#root{min-height:100%}.err{position:fixed;left:12px;right:12px;bottom:12px;z-index:2147483647;background:#111827;color:#fff;border:2px solid rgba(255,255,255,.2);border-radius:12px;padding:10px 12px;font:12px/1.4 ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,monospace;white-space:pre-wrap;display:none}</style>',
+    `<script type="importmap">${importMapJson}</script>`,
+    // Tailwind CDN is optional but improves UX for common className usage.
+    '<script src="https://cdn.tailwindcss.com"></script>',
+    '<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>',
+    '</head>',
+    '<body>',
+    '<div id="root"></div>',
+    '<div id="err" class="err"></div>',
+    '<script>',
+    '  (function(){',
+    '    var box=document.getElementById("err");',
+    '    function show(msg){ try{ box.style.display="block"; box.textContent=String(msg||"").slice(0,20000); }catch(e){} }',
+    '    window.addEventListener("error",function(e){ show((e&&e.message?e.message:"Runtime error") + (e&&e.error&&e.error.stack?("\\n"+e.error.stack):"")); });',
+    '    window.addEventListener("unhandledrejection",function(e){ var r=e&&e.reason; show("Unhandled promise rejection\\n"+(r&&r.stack?r.stack:String(r))); });',
+    '    window.__LPEDIA_SHOW_ERROR__=show;',
+    '  })();',
+    '</script>',
+    '<script type="module">',
+    '  function b64ToUtf8(b64){',
+    '    const bin=atob(b64);',
+    '    const bytes=new Uint8Array(bin.length);',
+    '    for(let i=0;i<bin.length;i++) bytes[i]=bin.charCodeAt(i);',
+    '    return new TextDecoder().decode(bytes);',
+    '  }',
+    '  const encodedSource=' + JSON.stringify(String(opts.encodedSource || '')) + ';',
+    '  const source=b64ToUtf8(encodedSource);',
+    '  const hasDefaultExport=/\\bexport\\s+default\\b/.test(source);',
+    '  if(!hasDefaultExport){ window.__LPEDIA_SHOW_ERROR__("需要 default export（例如：export default function App() { ... }）"); }',
+    '  let compiled="";',
+    '  try{',
+    '    compiled=Babel.transform(source,{',
+    '      sourceType:"module",',
+    '      presets:[["env",{targets:{esmodules:true},modules:false}],["react",{runtime:"classic"}],"typescript"],',
+    '    }).code;',
+    '  }catch(e){',
+    '    window.__LPEDIA_SHOW_ERROR__("編譯失敗\\n"+(e&&e.message?e.message:String(e)));',
+    '  }',
+    '  if(!compiled){}',
+    '  else{',
+    '    try{',
+    '      const blob=new Blob([compiled],{type:"text/javascript"});',
+    '      const url=URL.createObjectURL(blob);',
+    '      const mod=await import(url);',
+    '      URL.revokeObjectURL(url);',
+    '      const App=mod.default;',
+    '      if(!App){ window.__LPEDIA_SHOW_ERROR__("找不到 default export（mod.default）"); }',
+    '      else{',
+    '        const ReactMod=await import("react");',
+    '        const React=ReactMod.default||ReactMod;',
+    '        const ReactDom=await import("react-dom/client");',
+    '        const createRoot=ReactDom.createRoot||(ReactDom.default&&ReactDom.default.createRoot);',
+    '        if(!createRoot){ window.__LPEDIA_SHOW_ERROR__("react-dom/client 缺少 createRoot()"); }',
+    '        else{',
+    '          const root=createRoot(document.getElementById("root"));',
+    '          root.render(React.createElement(App));',
+    '        }',
+    '      }',
+    '    }catch(e){',
+    '      window.__LPEDIA_SHOW_ERROR__("執行失敗\\n"+(e&&e.stack?e.stack:String(e)));',
+    '    }',
+    '  }',
+    '</script>',
+    '</body>',
+    '</html>'
+  ].join('\n');
+}
+
 function extractEmbeddableIframe(rawHtml: string): ExtractedIframe | null {
   if (typeof DOMParser === 'undefined') return null;
   const trimmed = String(rawHtml || '').trim();
@@ -78,8 +209,13 @@ export default function ExecutableHtmlPreview({
 
   const extractedIframe = useMemo(() => extractEmbeddableIframe(rawHtml), [rawHtml]);
   const isReactLike = useMemo(() => looksLikeReactOrTsx(rawHtml) && !rawHtml.toLowerCase().includes('<html'), [rawHtml]);
-  const [tab, setTab] = useState<Tab>(() => (isReactLike ? 'code' : defaultTab));
+  const [tab, setTab] = useState<Tab>(() => (isReactLike ? 'preview' : defaultTab));
   const srcDoc = useMemo(() => buildPreviewSrcDoc(rawHtml), [rawHtml]);
+  const tsxRunnerDoc = useMemo(() => {
+    if (!isReactLike) return '';
+    const imports = extractBareImportSpecifiers(rawHtml);
+    return buildReactTsxRunnerSrcDoc({ encodedSource: encodedHtml, imports });
+  }, [encodedHtml, isReactLike, rawHtml]);
 
   useEffect(() => {
     if (tab !== 'preview') return;
@@ -187,25 +323,6 @@ export default function ExecutableHtmlPreview({
       );
     }
 
-    if (isReactLike) {
-      return (
-        <div className="p-4 bg-amber-50 text-amber-900 text-sm border-t border-amber-200" style={{ height: bodyHeight }}>
-          <div className="font-black mb-2">此內容並非可直接執行的 HTML</div>
-          <div className="font-bold leading-relaxed">
-            你貼上的內容看起來是 React/TSX 程式碼（例如有 import / export / JSX）。
-            系統的「HTML 可執行預覽」只支援純 HTML/CSS/JavaScript（可含&lt;script&gt;），不會在瀏覽器內編譯 React 專案。
-          </div>
-          <div className="mt-3 font-bold">
-            請改用：
-            <ul className="list-disc ml-5 mt-1 space-y-1">
-              <li>貼上可直接開啟的完整 HTML（含所需&lt;script&gt;），或</li>
-              <li>把作品部署到網址後，用&lt;iframe src="..."&gt;嵌入。</li>
-            </ul>
-          </div>
-        </div>
-      );
-    }
-
     return (
       <div className="bg-black" style={{ height: bodyHeight }}>
         {shouldLoad ? (
@@ -223,6 +340,17 @@ export default function ExecutableHtmlPreview({
               allowFullScreen
               style={{ width: '100%', height: '100%' }}
               className="block w-full"
+              loading="lazy"
+            />
+          ) : isReactLike ? (
+            <iframe
+              key={reloadNonce}
+              title="React/TSX Preview"
+              sandbox="allow-scripts allow-forms allow-modals"
+              referrerPolicy="no-referrer"
+              srcDoc={tsxRunnerDoc}
+              style={{ width: '100%', height: '100%' }}
+              className="block w-full bg-white"
               loading="lazy"
             />
           ) : (

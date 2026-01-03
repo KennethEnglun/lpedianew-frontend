@@ -12,6 +12,11 @@ export function looksLikeExecutableHtml(input: string): boolean {
   if (!text) return false;
 
   if (text.includes('<iframe')) return true;
+  // React/TSX code (App Studio style) — allow even when short.
+  if (text.includes("from 'react'") || text.includes('from "react"')) return true;
+  if (text.includes('react-dom') && text.includes('import ')) return true;
+  if (text.includes('export default') && text.includes('return (')) return true;
+
   if (text.length < 60) return false;
   if (text.startsWith('<!doctype html')) return true;
   if (text.includes('<html')) return true;
