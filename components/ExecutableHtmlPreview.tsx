@@ -117,6 +117,8 @@ function buildReactTsxRunnerSrcDoc(opts: { encodedSource: string; imports: strin
     '  let compiled="";',
     '  try{',
     '    compiled=Babel.transform(source,{',
+    '      filename:"App.tsx",',
+    '      sourceFileName:"App.tsx",',
     '      sourceType:"module",',
     '      presets:[["env",{targets:{esmodules:true},modules:false}],["react",{runtime:"classic"}],"typescript"],',
     '    }).code;',
