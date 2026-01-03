@@ -11,6 +11,17 @@ type ExtractedIframe = {
   referrerPolicy?: React.HTMLAttributeReferrerPolicy;
 };
 
+function looksLikeReactOrTsx(raw: string): boolean {
+  const text = String(raw || '').trim();
+  if (!text) return false;
+  const lower = text.toLowerCase();
+  if (lower.includes("from 'react'") || lower.includes('from "react"')) return true;
+  if (lower.includes('import react') || lower.startsWith('import ')) return true;
+  if (lower.includes('export default') || lower.includes('useeffect(') || lower.includes('usestate(')) return true;
+  if (text.includes('className=') && text.includes('return (')) return true;
+  return false;
+}
+
 function extractEmbeddableIframe(rawHtml: string): ExtractedIframe | null {
   if (typeof DOMParser === 'undefined') return null;
   const trimmed = String(rawHtml || '').trim();
@@ -53,7 +64,6 @@ export default function ExecutableHtmlPreview({
   height?: number;
 }) {
   const containerRef = useRef<HTMLDivElement | null>(null);
-  const [tab, setTab] = useState<Tab>(defaultTab);
   const [shouldLoad, setShouldLoad] = useState(false);
   const [reloadNonce, setReloadNonce] = useState(0);
   const [isFullscreen, setIsFullscreen] = useState(false);
@@ -67,6 +77,8 @@ export default function ExecutableHtmlPreview({
   }, [encodedHtml]);
 
   const extractedIframe = useMemo(() => extractEmbeddableIframe(rawHtml), [rawHtml]);
+  const isReactLike = useMemo(() => looksLikeReactOrTsx(rawHtml) && !rawHtml.toLowerCase().includes('<html'), [rawHtml]);
+  const [tab, setTab] = useState<Tab>(() => (isReactLike ? 'code' : defaultTab));
   const srcDoc = useMemo(() => buildPreviewSrcDoc(rawHtml), [rawHtml]);
 
   useEffect(() => {
@@ -172,6 +184,25 @@ export default function ExecutableHtmlPreview({
         <pre className="p-4 text-xs overflow-auto bg-gray-900 text-gray-100 whitespace-pre">
           <code>{rawHtml}</code>
         </pre>
+      );
+    }
+
+    if (isReactLike) {
+      return (
+        <div className="p-4 bg-amber-50 text-amber-900 text-sm border-t border-amber-200" style={{ height: bodyHeight }}>
+          <div className="font-black mb-2">此內容並非可直接執行的 HTML</div>
+          <div className="font-bold leading-relaxed">
+            你貼上的內容看起來是 React/TSX 程式碼（例如有 import / export / JSX）。
+            系統的「HTML 可執行預覽」只支援純 HTML/CSS/JavaScript（可含&lt;script&gt;），不會在瀏覽器內編譯 React 專案。
+          </div>
+          <div className="mt-3 font-bold">
+            請改用：
+            <ul className="list-disc ml-5 mt-1 space-y-1">
+              <li>貼上可直接開啟的完整 HTML（含所需&lt;script&gt;），或</li>
+              <li>把作品部署到網址後，用&lt;iframe src="..."&gt;嵌入。</li>
+            </ul>
+          </div>
+        </div>
       );
     }
 
