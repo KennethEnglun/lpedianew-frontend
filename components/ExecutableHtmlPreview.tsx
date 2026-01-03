@@ -48,19 +48,30 @@ function buildEsmShUrl(specifier: string): string {
   return `https://esm.sh/${specifier}`;
 }
 
+function addEsmShQuery(url: string, params: Record<string, string>): string {
+  const q = Object.entries(params)
+    .filter(([, v]) => v !== '')
+    .map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(v)}`)
+    .join('&');
+  if (!q) return url;
+  return url.includes('?') ? `${url}&${q}` : `${url}?${q}`;
+}
+
 function buildReactTsxRunnerSrcDoc(opts: { encodedSource: string; imports: string[] }): string {
-  const reactVer = '19.2.1';
+  const reactVer = '19.2.3';
   const imports: Record<string, string> = {
     react: buildEsmShUrl(`react@${reactVer}`),
     'react/jsx-runtime': buildEsmShUrl(`react@${reactVer}/jsx-runtime`),
     'react/jsx-dev-runtime': buildEsmShUrl(`react@${reactVer}/jsx-dev-runtime`),
-    'react-dom': buildEsmShUrl(`react-dom@${reactVer}`),
-    'react-dom/client': buildEsmShUrl(`react-dom@${reactVer}/client`)
+    // Ensure react-dom shares the same React instance (avoid duplicate React copies).
+    'react-dom': addEsmShQuery(buildEsmShUrl(`react-dom@${reactVer}`), { external: 'react' }),
+    'react-dom/client': addEsmShQuery(buildEsmShUrl(`react-dom@${reactVer}/client`), { external: 'react' })
   };
 
   for (const spec of opts.imports) {
     if (imports[spec]) continue;
-    imports[spec] = buildEsmShUrl(spec);
+    // Externalize React to force a single React instance across deps (e.g. recharts).
+    imports[spec] = addEsmShQuery(buildEsmShUrl(spec), { external: 'react,react-dom,react-dom/client' });
   }
 
   const importMapJson = JSON.stringify({ imports });
