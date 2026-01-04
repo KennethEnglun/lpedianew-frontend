@@ -919,6 +919,7 @@ const AssignmentExplorerModal: React.FC<Props> = ({ open, onClose, authService, 
 	                    ) : (
 	                      quizQuestions.map((q: any, i: number) => {
 	                        const options = Array.isArray(q?.options) ? q.options : [];
+                          const imageSrc = String(q?.image || q?.imageUrl || '').trim();
 	                        const correctIndex = Number.isFinite(Number(q?.correctAnswer))
 	                          ? Number(q.correctAnswer)
 	                          : (Number.isFinite(Number(q?.correctIndex)) ? Number(q.correctIndex) : null);
@@ -926,6 +927,20 @@ const AssignmentExplorerModal: React.FC<Props> = ({ open, onClose, authService, 
 	                          <div key={q?.id ?? i} className="border-2 border-gray-200 rounded-2xl bg-white p-3">
 	                            <div className="font-black text-brand-brown mb-2">問題 {i + 1}</div>
 	                            <div className="text-gray-800 font-bold whitespace-pre-wrap">{String(q?.question || '')}</div>
+                              {imageSrc && (
+                                <div className="mt-2">
+                                  <img
+                                    src={imageSrc}
+                                    alt={`Q${i + 1}`}
+                                    className="max-h-60 w-auto rounded-xl border-2 border-gray-200 bg-white"
+                                    loading="lazy"
+                                    onError={(e) => {
+                                      const el = e.currentTarget as HTMLImageElement;
+                                      el.style.display = 'none';
+                                    }}
+                                  />
+                                </div>
+                              )}
                             {options.length > 0 && (
                               <div className="mt-2 grid grid-cols-1 md:grid-cols-2 gap-2">
                                 {options.map((opt: any, oi: number) => {
