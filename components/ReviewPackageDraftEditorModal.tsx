@@ -49,6 +49,32 @@ const formatSec = (sec: number) => {
   return `${String(mm).padStart(2, '0')}:${String(ss).padStart(2, '0')}`;
 };
 
+const parseYouTubeVideoId = (input: string) => {
+  const raw = String(input || '').trim();
+  if (!raw) return null;
+  if (/^[a-zA-Z0-9_-]{11}$/.test(raw)) return raw;
+  try {
+    const url = new URL(raw);
+    const host = String(url.hostname || '').toLowerCase();
+    const isYouTube = host === 'youtube.com' || host.endsWith('.youtube.com') || host === 'youtu.be';
+    if (!isYouTube) return null;
+    if (host === 'youtu.be') {
+      const id = url.pathname.replace(/^\/+/, '').slice(0, 64);
+      return /^[a-zA-Z0-9_-]{11}$/.test(id) ? id : null;
+    }
+    const v = url.searchParams.get('v');
+    if (v && /^[a-zA-Z0-9_-]{11}$/.test(v)) return v;
+    const parts = url.pathname.split('/').filter(Boolean);
+    const embedIdx = parts.findIndex((p) => p === 'embed');
+    if (embedIdx >= 0 && parts[embedIdx + 1] && /^[a-zA-Z0-9_-]{11}$/.test(parts[embedIdx + 1])) return parts[embedIdx + 1];
+    const shortsIdx = parts.findIndex((p) => p === 'shorts');
+    if (shortsIdx >= 0 && parts[shortsIdx + 1] && /^[a-zA-Z0-9_-]{11}$/.test(parts[shortsIdx + 1])) return parts[shortsIdx + 1];
+  } catch {
+    return null;
+  }
+  return null;
+};
+
 export default function ReviewPackageDraftEditorModal({
   open,
   onClose,
@@ -145,6 +171,8 @@ export default function ReviewPackageDraftEditorModal({
     if (!s) return '請先選擇科目';
     const url = String(videoUrl || '').trim();
     if (!url) return '請先輸入影片連結';
+    const yt = parseYouTubeVideoId(url);
+    if (!yt) return '請輸入有效的 YouTube 連結（或 11 位 videoId）';
     for (const c of normalizedCheckpointsForSave) {
       if (!c.id) return '題目時間點缺少 id';
       if (!Number.isFinite(c.timestampSec) || c.timestampSec < 0) return '題目時間點格式不正確';
@@ -209,7 +237,7 @@ export default function ReviewPackageDraftEditorModal({
             </div>
 
             <label className="block">
-              <div className="text-sm font-black text-brand-brown mb-1">影片連結（建議貼可直接播放的 mp4 連結）</div>
+              <div className="text-sm font-black text-brand-brown mb-1">YouTube 影片連結（或 11 位 videoId）</div>
               <input
                 value={videoUrl}
                 onChange={(e) => setVideoUrl(e.target.value)}
@@ -217,7 +245,7 @@ export default function ReviewPackageDraftEditorModal({
                 placeholder="https://..."
               />
               <div className="mt-1 text-xs font-bold text-gray-700">
-                SharePoint 分享連結未必可播放；可嘗試在原連結加上 <span className="font-black"> &amp;download=1</span>，或改用 mp4 直連。
+                例：<span className="font-black">https://youtu.be/VIDEO_ID</span> 或 <span className="font-black">https://www.youtube.com/watch?v=VIDEO_ID</span>
               </div>
             </label>
 
@@ -398,9 +426,17 @@ export default function ReviewPackageDraftEditorModal({
           }
 
           const durationSec = durationText ? parseTimeToSec(durationText) : null;
+          const youtubeVideoId = parseYouTubeVideoId(videoUrl);
+          if (!youtubeVideoId) {
+            const msg = '請輸入有效的 YouTube 連結（或 11 位 videoId）';
+            setError(msg);
+            throw new Error(msg);
+          }
           const contentSnapshot = {
             reviewPackage: {
               videoUrl: String(videoUrl || '').trim(),
+              videoProvider: 'youtube',
+              youtubeVideoId,
               videoDurationSec: durationSec === null ? null : clampInt(durationSec),
               checkpoints: normalizedCheckpointsForSave.map((c) => ({
                 id: c.id,
