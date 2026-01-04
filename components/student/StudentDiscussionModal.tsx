@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { X, Send, MessageSquare, Users } from 'lucide-react';
+import { X, Send, MessageSquare, Users, Maximize2, Minimize2 } from 'lucide-react';
 import { authService } from '../../services/authService';
 import RichHtmlContent from '../RichHtmlContent';
 
@@ -60,6 +60,7 @@ export function StudentDiscussionModal({ open, discussionId, onClose, onSubmitte
   const [loading, setLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
+  const [fullscreen, setFullscreen] = useState(false);
   const [discussion, setDiscussion] = useState<any | null>(null);
   const [hasResponded, setHasResponded] = useState(false);
   const [responseText, setResponseText] = useState('');
@@ -67,6 +68,7 @@ export function StudentDiscussionModal({ open, discussionId, onClose, onSubmitte
 
   useEffect(() => {
     if (!open || !discussionId) return;
+    setFullscreen(false);
     setLoading(true);
     setSubmitting(false);
     setError('');
@@ -121,8 +123,8 @@ export function StudentDiscussionModal({ open, discussionId, onClose, onSubmitte
   if (!open || !discussionId) return null;
 
   return (
-    <div className="fixed inset-0 bg-black/50 z-[120] flex items-center justify-center p-4">
-      <div className="bg-white border-4 border-brand-brown rounded-3xl w-full max-w-4xl max-h-[92vh] overflow-hidden shadow-comic flex flex-col">
+    <div className={`fixed inset-0 bg-black/50 z-[120] flex ${fullscreen ? 'items-stretch justify-stretch p-0' : 'items-center justify-center p-4'}`}>
+      <div className={`bg-white border-4 border-brand-brown w-full overflow-hidden shadow-comic flex flex-col ${fullscreen ? 'max-w-none max-h-none h-full rounded-none' : 'max-w-4xl max-h-[92vh] rounded-3xl'}`}>
         <div className="p-5 border-b-4 border-brand-brown bg-[#D2EFFF] flex items-center justify-between gap-4">
           <div className="min-w-0">
             <div className="text-2xl font-black text-brand-brown truncate">{discussion?.title || '討論串'}</div>
@@ -130,13 +132,24 @@ export function StudentDiscussionModal({ open, discussionId, onClose, onSubmitte
               {discussion?.teacherName ? `教師：${discussion.teacherName}` : ''}{discussion?.subject ? ` • ${discussion.subject}` : ''}
             </div>
           </div>
-          <button
-            onClick={onClose}
-            className="w-10 h-10 rounded-full bg-white border-2 border-brand-brown hover:bg-gray-100 flex items-center justify-center flex-shrink-0"
-            aria-label="關閉"
-          >
-            <X className="w-6 h-6 text-brand-brown" />
-          </button>
+          <div className="flex items-center gap-2 flex-shrink-0">
+            <button
+              type="button"
+              onClick={() => setFullscreen((v) => !v)}
+              className="px-3 py-2 rounded-2xl border-4 border-brand-brown bg-white text-brand-brown font-black shadow-comic hover:bg-gray-50 flex items-center gap-2"
+              title={fullscreen ? '退出全螢幕' : '全螢幕'}
+            >
+              {fullscreen ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
+              {fullscreen ? '退出全螢幕' : '全螢幕'}
+            </button>
+            <button
+              onClick={onClose}
+              className="w-10 h-10 rounded-full bg-white border-2 border-brand-brown hover:bg-gray-100 flex items-center justify-center"
+              aria-label="關閉"
+            >
+              <X className="w-6 h-6 text-brand-brown" />
+            </button>
+          </div>
         </div>
 
         <div className="flex-1 overflow-y-auto p-5 bg-brand-cream">

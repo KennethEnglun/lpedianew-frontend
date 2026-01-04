@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Bot, Check, Copy, X } from 'lucide-react';
+import { Bot, Check, Copy, Maximize2, Minimize2, X } from 'lucide-react';
 import { authService } from '../services/authService';
 
 type ChatMessage = {
@@ -132,8 +132,10 @@ export default function BotTaskChatModal(props: { open: boolean; taskId: string 
   const [sending, setSending] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [fullscreen, setFullscreen] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
-  const endRef = useRef<HTMLDivElement | null>(null);
+  const scrollRef = useRef<HTMLDivElement | null>(null);
+  const isAtBottomRef = useRef(true);
   const [copiedMessageId, setCopiedMessageId] = useState<string | null>(null);
 
   const title = useMemo(() => {
@@ -143,9 +145,29 @@ export default function BotTaskChatModal(props: { open: boolean; taskId: string 
     return subject ? `${botName}（${subject}）` : botName;
   }, [taskInfo]);
 
+  const updateIsAtBottom = () => {
+    const el = scrollRef.current;
+    if (!el) return;
+    const gap = el.scrollHeight - el.scrollTop - el.clientHeight;
+    isAtBottomRef.current = gap < 80;
+  };
+
+  const scrollToBottom = () => {
+    const el = scrollRef.current;
+    if (!el) return;
+    el.scrollTo({ top: el.scrollHeight, behavior: 'auto' });
+  };
+
   useEffect(() => {
     if (!open) return;
-    endRef.current?.scrollIntoView({ behavior: 'smooth' });
+    isAtBottomRef.current = true;
+    window.requestAnimationFrame(scrollToBottom);
+  }, [open]);
+
+  useEffect(() => {
+    if (!open) return;
+    if (!isAtBottomRef.current) return;
+    window.requestAnimationFrame(scrollToBottom);
   }, [open, messages.length]);
 
   useEffect(() => {
@@ -275,8 +297,8 @@ export default function BotTaskChatModal(props: { open: boolean; taskId: string 
   if (!open || !taskId) return null;
 
   return (
-    <div className="fixed inset-0 z-[90] bg-black/50 flex items-center justify-center p-4">
-      <div className="bg-white w-full max-w-5xl max-h-[90vh] overflow-hidden rounded-3xl border-4 border-brand-brown shadow-comic-xl flex flex-col">
+    <div className={`fixed inset-0 z-[90] bg-black/50 flex ${fullscreen ? 'items-stretch justify-stretch p-0' : 'items-center justify-center p-4'}`}>
+      <div className={`bg-white w-full overflow-hidden border-4 border-brand-brown shadow-comic-xl flex flex-col ${fullscreen ? 'max-w-none max-h-none h-full rounded-none' : 'max-w-5xl max-h-[90vh] rounded-3xl'}`}>
         <div className="p-5 border-b-4 border-brand-brown bg-[#D2EFFF] flex items-center justify-between gap-4">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-full bg-white border-2 border-brand-brown flex items-center justify-center">
@@ -287,17 +309,32 @@ export default function BotTaskChatModal(props: { open: boolean; taskId: string 
               <div className="text-xs text-gray-600 font-bold">{title}</div>
             </div>
           </div>
-          <button
-            onClick={() => { abortRef.current?.abort(); onClose(); }}
-            className="w-10 h-10 rounded-full bg-white border-2 border-brand-brown hover:bg-gray-100 flex items-center justify-center"
-            aria-label="關閉"
-          >
-            <X className="w-6 h-6 text-brand-brown" />
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setFullscreen((v) => !v)}
+              className="px-3 py-2 rounded-2xl border-4 border-brand-brown bg-white text-brand-brown font-black shadow-comic hover:bg-gray-50 flex items-center gap-2"
+              title={fullscreen ? '退出全螢幕' : '全螢幕'}
+            >
+              {fullscreen ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
+              {fullscreen ? '退出全螢幕' : '全螢幕'}
+            </button>
+            <button
+              onClick={() => { abortRef.current?.abort(); onClose(); }}
+              className="w-10 h-10 rounded-full bg-white border-2 border-brand-brown hover:bg-gray-100 flex items-center justify-center"
+              aria-label="關閉"
+            >
+              <X className="w-6 h-6 text-brand-brown" />
+            </button>
+          </div>
         </div>
 
         <div className="flex-1 min-h-0 flex flex-col bg-gray-50">
-          <div className="flex-1 min-h-0 overflow-y-auto p-4">
+          <div
+            ref={scrollRef}
+            className="flex-1 min-h-0 overflow-y-auto p-4"
+            onScroll={updateIsAtBottom}
+          >
             {loading ? (
               <div className="text-center py-10 text-brand-brown font-bold">載入中...</div>
             ) : error ? (
@@ -336,7 +373,6 @@ export default function BotTaskChatModal(props: { open: boolean; taskId: string 
                     </div>
                   </div>
                 ))}
-                <div ref={endRef} />
               </div>
             )}
           </div>

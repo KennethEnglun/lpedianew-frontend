@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { X, Trophy, BarChart3 } from 'lucide-react';
+import { X, Trophy, BarChart3, Maximize2, Minimize2 } from 'lucide-react';
 import { authService } from '../services/authService';
 import type { StudyAnalytics } from '../types/study';
 import { StudyAnalyticsModal } from './student/StudyAnalyticsModal';
@@ -49,9 +49,11 @@ export function QuizContestModal(props: {
   const [leaderboardLoading, setLeaderboardLoading] = useState(false);
   const [showScopeReport, setShowScopeReport] = useState(false);
   const [scopeReport, setScopeReport] = useState<StudyAnalytics | null>(null);
+  const [fullscreen, setFullscreen] = useState(false);
 
   useEffect(() => {
     if (!open) return;
+    setFullscreen(false);
     setPhase('idle');
     setStarting(false);
     setSubmitting(false);
@@ -203,8 +205,8 @@ export function QuizContestModal(props: {
   })();
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
-      <div className="bg-white border-4 border-brand-brown rounded-3xl w-full max-w-5xl max-h-[92vh] overflow-hidden shadow-comic flex flex-col">
+    <div className={`fixed inset-0 bg-black bg-opacity-50 z-50 flex ${fullscreen ? 'items-stretch justify-stretch p-0' : 'items-center justify-center p-4'}`}>
+      <div className={`bg-white border-4 border-brand-brown w-full overflow-hidden shadow-comic flex flex-col ${fullscreen ? 'max-w-none max-h-none h-full rounded-none' : 'max-w-5xl max-h-[92vh] rounded-3xl'}`}>
         <div className="p-6 border-b-4 border-brand-brown bg-[#D2EFFF]">
           <div className="flex justify-between items-center gap-4">
             <div className="min-w-0">
@@ -214,13 +216,24 @@ export function QuizContestModal(props: {
                 {contest.timeLimitSeconds ? ` • ${contest.timeLimitSeconds} 秒限時` : ''}
               </p>
             </div>
-            <button
-              onClick={onClose}
-              className="w-10 h-10 rounded-full bg-white border-2 border-brand-brown hover:bg-gray-100 flex items-center justify-center flex-shrink-0"
-              aria-label="關閉"
-            >
-              <X className="w-6 h-6 text-brand-brown" />
-            </button>
+            <div className="flex items-center gap-2 flex-shrink-0">
+              <button
+                type="button"
+                onClick={() => setFullscreen((v) => !v)}
+                className="px-3 py-2 rounded-2xl border-4 border-brand-brown bg-white text-brand-brown font-black shadow-comic hover:bg-gray-50 flex items-center gap-2"
+                title={fullscreen ? '退出全螢幕' : '全螢幕'}
+              >
+                {fullscreen ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
+                {fullscreen ? '退出全螢幕' : '全螢幕'}
+              </button>
+              <button
+                onClick={onClose}
+                className="w-10 h-10 rounded-full bg-white border-2 border-brand-brown hover:bg-gray-100 flex items-center justify-center"
+                aria-label="關閉"
+              >
+                <X className="w-6 h-6 text-brand-brown" />
+              </button>
+            </div>
           </div>
         </div>
 

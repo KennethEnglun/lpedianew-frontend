@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { X } from 'lucide-react';
+import { Maximize2, Minimize2, X } from 'lucide-react';
 import { authService } from '../../services/authService';
 import type { Subject } from '../../types';
 import TowerDefenseGame from '../TowerDefenseGame';
@@ -39,6 +39,7 @@ export function StudentGameModal(props: {
   const [completed, setCompleted] = useState(false);
   const [result, setResult] = useState<GameResultPayload | null>(null);
   const [startedAtMs, setStartedAtMs] = useState<number | null>(null);
+  const [fullscreen, setFullscreen] = useState(false);
 
   useEffect(() => {
     if (!open) return;
@@ -67,7 +68,10 @@ export function StudentGameModal(props: {
 
   const title = String(game?.title || '遊戲');
   const gameType = String(game?.gameType || '');
-  const fullscreen = gameType === 'tower-defense';
+  useEffect(() => {
+    if (!open) return;
+    setFullscreen(gameType === 'tower-defense');
+  }, [open, gameType]);
 
   const mazeQuestions = useMemo(() => {
     if (gameType !== 'maze') return [];
@@ -243,6 +247,15 @@ export function StudentGameModal(props: {
           </div>
           <div className="flex items-center gap-3">
             {submitting && <div className="bg-[#333] px-3 py-1 rounded text-yellow-300 font-mono">提交中...</div>}
+            <button
+              type="button"
+              onClick={() => setFullscreen((v) => !v)}
+              className="px-3 py-2 rounded-2xl border-2 border-[#4A4A4A] bg-[#333] hover:bg-[#444] text-white font-black flex items-center gap-2"
+              title={fullscreen ? '退出全螢幕' : '全螢幕'}
+            >
+              {fullscreen ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
+              {fullscreen ? '退出全螢幕' : '全螢幕'}
+            </button>
             <button
               onClick={onClose}
               className="w-10 h-10 rounded-full bg-[#333] hover:bg-[#444] text-white flex items-center justify-center transition-colors"
