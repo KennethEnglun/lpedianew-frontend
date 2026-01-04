@@ -1,8 +1,9 @@
-import React, { useState } from 'react';
-import { AlertTriangle } from 'lucide-react';
+import React, { useEffect, useMemo, useState } from 'react';
+import { AlertTriangle, Download, Eye, RefreshCw } from 'lucide-react';
 import Button from '../../Button';
 import ResetDataConfirmModal from '../ResetDataConfirmModal';
 import { authService } from '../../../services/authService';
+import AssignmentExplorerModal from '../../AssignmentExplorerModal';
 
 export default function AdminYearEndPanel(props: {
   yearEndLoading: boolean;
@@ -15,6 +16,68 @@ export default function AdminYearEndPanel(props: {
   const [resetLoading, setResetLoading] = useState(false);
   const [resetResult, setResetResult] = useState<{ message: string; resetTime: string; resetBy: string } | null>(null);
   const [resetError, setResetError] = useState('');
+
+  const [archivesLoading, setArchivesLoading] = useState(false);
+  const [archivesError, setArchivesError] = useState('');
+  const [archives, setArchives] = useState<any[]>([]);
+  const [archiveExplorerOpen, setArchiveExplorerOpen] = useState(false);
+  const [selectedArchiveId, setSelectedArchiveId] = useState('');
+
+  const loadArchives = async () => {
+    try {
+      setArchivesLoading(true);
+      setArchivesError('');
+      const resp = await authService.listYearArchives();
+      setArchives(Array.isArray(resp.archives) ? resp.archives : []);
+    } catch (e: any) {
+      setArchivesError(e?.message || '載入封存列表失敗');
+      setArchives([]);
+    } finally {
+      setArchivesLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    void loadArchives();
+  }, []);
+
+  useEffect(() => {
+    if (!yearEndResult?.archiveId) return;
+    void loadArchives();
+  }, [yearEndResult?.archiveId]);
+
+  const archiveAuth = useMemo(() => {
+    const archiveId = String(selectedArchiveId || '').trim();
+    if (!archiveId) return authService;
+    return {
+      getManageTasks: (params?: any) => authService.getYearArchiveManageTasks(archiveId, params),
+      getAssignmentResponses: (assignmentId: string) => authService.getYearArchiveAssignmentResponses(archiveId, assignmentId),
+      getQuizResults: (quizId: string) => authService.getYearArchiveQuizResults(archiveId, quizId),
+      getGameResults: (gameId: string) => authService.getYearArchiveGameResults(archiveId, gameId),
+      getContestResults: (contestId: string) => authService.getYearArchiveContestResults(archiveId, contestId),
+      getContestAttemptDetail: (attemptId: string) => authService.getYearArchiveContestAttemptDetail(archiveId, attemptId),
+      getBotTaskThreads: (taskId: string) => authService.getYearArchiveBotTaskThreads(archiveId, taskId),
+      getBotTaskThreadMessages: (taskId: string, threadId: string) => authService.getYearArchiveBotTaskThreadMessages(archiveId, taskId, threadId),
+      getReviewPackageResults: (packageId: string) => authService.getYearArchiveReviewPackageResults(archiveId, packageId),
+      getNoteDetail: (noteId: string) => authService.getYearArchiveNoteDetail(archiveId, noteId),
+      listNoteSubmissions: (noteId: string) => authService.listYearArchiveNoteSubmissions(archiveId, noteId)
+    };
+  }, [selectedArchiveId]);
+
+  const downloadArchive = async (archiveId: string) => {
+    const id = String(archiveId || '').trim();
+    if (!id) return;
+    try {
+      const blob = await authService.downloadYearArchive(id);
+      const link = document.createElement('a');
+      link.href = URL.createObjectURL(blob);
+      link.download = `year_archive_${id}.tar.gz`;
+      link.click();
+      URL.revokeObjectURL(link.href);
+    } catch (e: any) {
+      alert(e?.message || '下載失敗');
+    }
+  };
 
   const handleResetData = async () => {
     setResetLoading(true);
@@ -56,6 +119,65 @@ export default function AdminYearEndPanel(props: {
             {yearEndLoading ? '封存中...' : '升班（封存本年度）'}
           </Button>
         </div>
+      </div>
+
+      {/* Archives list */}
+      <div className="bg-white border border-gray-200 rounded-2xl p-5 shadow-sm mb-6">
+        <div className="flex flex-wrap items-center justify-between gap-3 mb-3">
+          <div>
+            <div className="text-lg font-black text-brand-brown">年度封存列表</div>
+            <div className="text-sm text-gray-600 font-bold mt-1">可查看封存作業（只讀）或打包下載。</div>
+          </div>
+          <Button
+            className="bg-white hover:bg-gray-50 flex items-center gap-2 border border-brand-brown text-brand-brown"
+            onClick={() => void loadArchives()}
+            disabled={archivesLoading}
+          >
+            <RefreshCw className={`w-4 h-4 ${archivesLoading ? 'animate-spin' : ''}`} />
+            重新載入
+          </Button>
+        </div>
+
+        {archivesError && <div className="text-red-700 font-bold mb-2">{archivesError}</div>}
+        {archivesLoading ? (
+          <div className="text-gray-700 font-bold">載入中...</div>
+        ) : archives.length === 0 ? (
+          <div className="text-gray-600 font-bold">目前沒有封存紀錄</div>
+        ) : (
+          <div className="space-y-2">
+            {archives.map((a: any) => {
+              const id = String(a.archiveId || '');
+              const at = String(a.archivedAt || '');
+              return (
+                <div key={id} className="p-3 rounded-2xl border border-gray-200 bg-gray-50 flex flex-wrap items-center justify-between gap-3">
+                  <div className="min-w-0">
+                    <div className="font-black text-gray-900">{id}</div>
+                    <div className="text-xs text-gray-600 font-bold break-words">{at}</div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      className="bg-white hover:bg-gray-100 flex items-center gap-2 border border-gray-300 text-gray-800"
+                      onClick={() => {
+                        setSelectedArchiveId(id);
+                        setArchiveExplorerOpen(true);
+                      }}
+                    >
+                      <Eye className="w-4 h-4" />
+                      查看
+                    </Button>
+                    <Button
+                      className="bg-[#E8F5E9] hover:bg-[#C8E6C9] flex items-center gap-2"
+                      onClick={() => void downloadArchive(id)}
+                    >
+                      <Download className="w-4 h-4" />
+                      下載
+                    </Button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
       </div>
 
       {/* Reset All Data Section */}
@@ -101,7 +223,19 @@ export default function AdminYearEndPanel(props: {
         onConfirm={handleResetData}
         loading={resetLoading}
       />
+
+      <AssignmentExplorerModal
+        open={archiveExplorerOpen}
+        onClose={() => {
+          setArchiveExplorerOpen(false);
+          setSelectedArchiveId('');
+        }}
+        authService={archiveAuth}
+        viewerRole="admin"
+        viewerId="admin"
+        readOnly
+        title={selectedArchiveId ? `封存作業管理（${selectedArchiveId}）` : '封存作業管理'}
+      />
     </>
   );
 }
-

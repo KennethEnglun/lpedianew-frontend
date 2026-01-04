@@ -1021,9 +1021,117 @@ class AuthService {
   }
 
   // 年度封存（升班）：管理員專用
-  async archiveYearEnd(): Promise<{ message: string; archiveId: string; archivedAt: string; files: Array<{ file: string; existed: boolean; count: number }> }> {
+  async archiveYearEnd(): Promise<{ message: string; archiveId: string; archivedAt: string; files?: any[]; cleared?: any[] }> {
     const response = await fetch(`${this.API_BASE}/admin/year-end/archive`, {
       method: 'POST',
+      headers: this.getAuthHeaders()
+    });
+    return this.handleResponse(response);
+  }
+
+  // 年度封存：封存列表 / 下載 / 查看（管理員）
+  async listYearArchives(): Promise<{ archives: any[] }> {
+    const response = await fetch(`${this.API_BASE}/admin/year-end/archives`, {
+      headers: this.getAuthHeaders()
+    });
+    return this.handleResponse(response);
+  }
+
+  async getYearArchive(archiveId: string): Promise<{ archiveId: string; manifest: any }> {
+    const response = await fetch(`${this.API_BASE}/admin/year-end/archives/${encodeURIComponent(archiveId)}`, {
+      headers: this.getAuthHeaders()
+    });
+    return this.handleResponse(response);
+  }
+
+  async downloadYearArchive(archiveId: string): Promise<Blob> {
+    const response = await fetch(`${this.API_BASE}/admin/year-end/archives/${encodeURIComponent(archiveId)}/download`, {
+      headers: this.getAuthHeaders()
+    });
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({ message: '下載失敗' }));
+      throw new Error(err?.message || err?.error || '下載失敗');
+    }
+    return response.blob();
+  }
+
+  // 封存作業管理（只讀）：沿用 AssignmentExplorerModal 的資料結構
+  async getYearArchiveManageTasks(archiveId: string, params?: { subject?: string; className?: string }): Promise<{ tasks: any[]; total: number }> {
+    const searchParams = new URLSearchParams();
+    if (params?.subject) searchParams.append('subject', params.subject);
+    if (params?.className) searchParams.append('className', params.className);
+    const qs = searchParams.toString() ? `?${searchParams.toString()}` : '';
+    const response = await fetch(`${this.API_BASE}/admin/year-end/archives/${encodeURIComponent(archiveId)}/manage/tasks${qs}`, {
+      headers: this.getAuthHeaders()
+    });
+    return this.handleResponse(response);
+  }
+
+  async getYearArchiveAssignmentResponses(archiveId: string, assignmentId: string): Promise<{ assignment: any; responses: any[]; total: number }> {
+    const response = await fetch(`${this.API_BASE}/admin/year-end/archives/${encodeURIComponent(archiveId)}/assignments/${encodeURIComponent(assignmentId)}/responses`, {
+      headers: this.getAuthHeaders()
+    });
+    return this.handleResponse(response);
+  }
+
+  async getYearArchiveQuizResults(archiveId: string, quizId: string): Promise<{ quiz: any; results: any[]; total: number; statistics: any }> {
+    const response = await fetch(`${this.API_BASE}/admin/year-end/archives/${encodeURIComponent(archiveId)}/quizzes/${encodeURIComponent(quizId)}/results`, {
+      headers: this.getAuthHeaders()
+    });
+    return this.handleResponse(response);
+  }
+
+  async getYearArchiveGameResults(archiveId: string, gameId: string): Promise<{ game: any; scores: any[] }> {
+    const response = await fetch(`${this.API_BASE}/admin/year-end/archives/${encodeURIComponent(archiveId)}/games/${encodeURIComponent(gameId)}/results`, {
+      headers: this.getAuthHeaders()
+    });
+    return this.handleResponse(response);
+  }
+
+  async getYearArchiveContestResults(archiveId: string, contestId: string): Promise<{ contest: any; attempts: any[]; leaderboards: any }> {
+    const response = await fetch(`${this.API_BASE}/admin/year-end/archives/${encodeURIComponent(archiveId)}/contests/${encodeURIComponent(contestId)}/results`, {
+      headers: this.getAuthHeaders()
+    });
+    return this.handleResponse(response);
+  }
+
+  async getYearArchiveContestAttemptDetail(archiveId: string, attemptId: string): Promise<any> {
+    const response = await fetch(`${this.API_BASE}/admin/year-end/archives/${encodeURIComponent(archiveId)}/contests/attempts/${encodeURIComponent(attemptId)}`, {
+      headers: this.getAuthHeaders()
+    });
+    return this.handleResponse(response);
+  }
+
+  async getYearArchiveBotTaskThreads(archiveId: string, taskId: string): Promise<{ task: any; threads: any[] }> {
+    const response = await fetch(`${this.API_BASE}/admin/year-end/archives/${encodeURIComponent(archiveId)}/bot-tasks/${encodeURIComponent(taskId)}/threads`, {
+      headers: this.getAuthHeaders()
+    });
+    return this.handleResponse(response);
+  }
+
+  async getYearArchiveBotTaskThreadMessages(archiveId: string, taskId: string, threadId: string): Promise<{ task: any; thread: any; student: any; messages: any[] }> {
+    const response = await fetch(`${this.API_BASE}/admin/year-end/archives/${encodeURIComponent(archiveId)}/bot-tasks/${encodeURIComponent(taskId)}/threads/${encodeURIComponent(threadId)}/messages`, {
+      headers: this.getAuthHeaders()
+    });
+    return this.handleResponse(response);
+  }
+
+  async getYearArchiveReviewPackageResults(archiveId: string, packageId: string): Promise<any> {
+    const response = await fetch(`${this.API_BASE}/admin/year-end/archives/${encodeURIComponent(archiveId)}/review-packages/${encodeURIComponent(packageId)}/results`, {
+      headers: this.getAuthHeaders()
+    });
+    return this.handleResponse(response);
+  }
+
+  async getYearArchiveNoteDetail(archiveId: string, noteId: string): Promise<{ note: any }> {
+    const response = await fetch(`${this.API_BASE}/admin/year-end/archives/${encodeURIComponent(archiveId)}/notes/${encodeURIComponent(noteId)}`, {
+      headers: this.getAuthHeaders()
+    });
+    return this.handleResponse(response);
+  }
+
+  async listYearArchiveNoteSubmissions(archiveId: string, noteId: string): Promise<{ note: any; submissions: any[]; total: number }> {
+    const response = await fetch(`${this.API_BASE}/admin/year-end/archives/${encodeURIComponent(archiveId)}/notes/${encodeURIComponent(noteId)}/submissions`, {
       headers: this.getAuthHeaders()
     });
     return this.handleResponse(response);

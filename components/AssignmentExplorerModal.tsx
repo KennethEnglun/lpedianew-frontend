@@ -27,6 +27,8 @@ type Props = {
   authService: any;
   viewerRole: 'teacher' | 'admin';
   viewerId: string;
+  readOnly?: boolean;
+  title?: string;
 };
 
 const normalizeStringArray = (value: any) => (
@@ -161,7 +163,8 @@ const parseGradeFromClassName = (className?: string) => {
   return match ? match[1] : '';
 };
 
-const AssignmentExplorerModal: React.FC<Props> = ({ open, onClose, authService, viewerRole, viewerId }) => {
+const AssignmentExplorerModal: React.FC<Props> = ({ open, onClose, authService, viewerRole, viewerId, readOnly, title }) => {
+  const actionsEnabled = readOnly !== true;
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [tasks, setTasks] = useState<any[]>([]);
@@ -203,7 +206,7 @@ const AssignmentExplorerModal: React.FC<Props> = ({ open, onClose, authService, 
   const [botThreadError, setBotThreadError] = useState('');
   const [botThreadMessages, setBotThreadMessages] = useState<any[]>([]);
 
-  const canArchive = viewerRole === 'admin';
+  const canArchive = viewerRole === 'admin' && actionsEnabled;
 
   const copyText = async (text: string) => {
     const value = String(text || '');
@@ -488,6 +491,7 @@ const AssignmentExplorerModal: React.FC<Props> = ({ open, onClose, authService, 
   };
 
   const openSelectedReviewPackageAiReport = async () => {
+    if (!actionsEnabled) return;
     if (!selectedTask || String(selectedTask.type) !== 'review-package') return;
     setAiReportModalOpen(true);
     setAiReportLoading(true);
@@ -504,6 +508,7 @@ const AssignmentExplorerModal: React.FC<Props> = ({ open, onClose, authService, 
   };
 
   const regenerateSelectedReviewPackageAiReport = async () => {
+    if (!actionsEnabled) return;
     if (!selectedTask || String(selectedTask.type) !== 'review-package') return;
     setAiReportLoading(true);
     setAiReportError('');
@@ -552,6 +557,7 @@ const AssignmentExplorerModal: React.FC<Props> = ({ open, onClose, authService, 
   };
 
   const canDeleteTask = (t: any) => {
+    if (!actionsEnabled) return false;
     if (!t) return false;
     if (viewerRole === 'admin') return true;
     return String(t.teacherId || '') === String(viewerId || '');
@@ -576,6 +582,7 @@ const AssignmentExplorerModal: React.FC<Props> = ({ open, onClose, authService, 
   };
 
   const copyTaskToTeacherFolder = async (t: any) => {
+    if (!actionsEnabled) return;
     try {
       const type = String(t?.type || '').trim();
       const id = String(t?.id || '').trim();
@@ -713,30 +720,34 @@ const AssignmentExplorerModal: React.FC<Props> = ({ open, onClose, authService, 
       <div className="bg-white border-4 border-brand-brown rounded-3xl w-full max-w-6xl max-h-[90vh] overflow-y-auto shadow-comic">
         <div className="p-6 border-b-4 border-brand-brown bg-[#C0E2BE] flex items-center justify-between">
           <div>
-            <div className="text-2xl font-black text-brand-brown">作業管理</div>
+            <div className="text-2xl font-black text-brand-brown">{title || '作業管理'}</div>
             <div className="text-sm text-brand-brown/80 font-bold">
               {breadcrumbs || '科目 → 班別 → 學段 → 課題 → 任務'}
             </div>
 			          </div>
 			          <div className="flex items-center gap-2">
-			            <button
-			              type="button"
-			              onClick={() => setScopeCardOpen(true)}
-			              className="px-4 py-2 rounded-2xl border-4 border-brand-brown bg-white text-brand-brown font-black shadow-comic hover:bg-gray-50 flex items-center gap-2"
-			              title="學生學習分析（範圍卡）"
-			            >
-			              <BarChart3 className="w-4 h-4" />
-			              學生學習分析
-			            </button>
-			            <button
-			              type="button"
-			              onClick={() => setStudentAiNotesOpen(true)}
-			              className="px-4 py-2 rounded-2xl border-4 border-brand-brown bg-white text-brand-brown font-black shadow-comic hover:bg-gray-50 flex items-center gap-2"
-			              title="查看每位學生的 AI筆記"
-			            >
-			              <BookOpen className="w-4 h-4" />
-			              學生AI筆記
-			            </button>
+                  {actionsEnabled && (
+			              <button
+			                type="button"
+			                onClick={() => setScopeCardOpen(true)}
+			                className="px-4 py-2 rounded-2xl border-4 border-brand-brown bg-white text-brand-brown font-black shadow-comic hover:bg-gray-50 flex items-center gap-2"
+			                title="學生學習分析（範圍卡）"
+			              >
+			                <BarChart3 className="w-4 h-4" />
+			                學生學習分析
+			              </button>
+                  )}
+                  {actionsEnabled && (
+			              <button
+			                type="button"
+			                onClick={() => setStudentAiNotesOpen(true)}
+			                className="px-4 py-2 rounded-2xl border-4 border-brand-brown bg-white text-brand-brown font-black shadow-comic hover:bg-gray-50 flex items-center gap-2"
+			                title="查看每位學生的 AI筆記"
+			              >
+			                <BookOpen className="w-4 h-4" />
+			                學生AI筆記
+			              </button>
+                  )}
 			            {canArchive && (
 			              <button
 		                type="button"
@@ -799,7 +810,7 @@ const AssignmentExplorerModal: React.FC<Props> = ({ open, onClose, authService, 
                   </div>
                 </div>
 	                <div className="flex items-center gap-2">
-	                  {String(selectedTask.type) !== 'review-package' && (
+	                  {actionsEnabled && String(selectedTask.type) !== 'review-package' && (
 	                    <button
 	                      type="button"
 	                      onClick={() => void copyTaskToTeacherFolder(selectedTask)}
@@ -993,20 +1004,22 @@ const AssignmentExplorerModal: React.FC<Props> = ({ open, onClose, authService, 
                     {String((selectedTask as any).status || '') !== 'published' ? (
                       <>
                         <div className="font-bold text-gray-800">（草稿）先編輯模板，確認後再派發（派發後模板會固定）</div>
-                        <div className="pt-2">
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setNoteEditorMode('template');
-                              setNoteEditorNoteId(String(selectedTask.id));
-                              setNoteEditorStudentId('');
-                              setNoteEditorOpen(true);
-                            }}
-                            className="px-3 py-1 rounded-xl border-2 border-brand-brown bg-white text-brand-brown font-black shadow-comic hover:bg-gray-50"
-                          >
-                            編輯模板 / 派發
-                          </button>
-                        </div>
+                        {actionsEnabled && (
+                          <div className="pt-2">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setNoteEditorMode('template');
+                                setNoteEditorNoteId(String(selectedTask.id));
+                                setNoteEditorStudentId('');
+                                setNoteEditorOpen(true);
+                              }}
+                              className="px-3 py-1 rounded-xl border-2 border-brand-brown bg-white text-brand-brown font-black shadow-comic hover:bg-gray-50"
+                            >
+                              編輯模板 / 派發
+                            </button>
+                          </div>
+                        )}
                       </>
                     ) : (
                       <>
