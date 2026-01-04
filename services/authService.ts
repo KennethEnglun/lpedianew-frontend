@@ -1761,6 +1761,14 @@ class AuthService {
     return this.handleResponse(response);
   }
 
+  async deleteReviewPackage(packageId: string): Promise<{ message: string }> {
+    const response = await fetch(`${this.API_BASE}/review-packages/${encodeURIComponent(packageId)}`, {
+      method: 'DELETE',
+      headers: this.getAuthHeaders()
+    });
+    return this.handleResponse(response);
+  }
+
   // AI 報告（温習套件）
   async getReviewPackageAiReport(packageId: string, params?: { scope?: 'overall' | 'student'; studentId?: string; refresh?: boolean }): Promise<{ report: any; cached: boolean }> {
     const searchParams = new URLSearchParams();

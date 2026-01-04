@@ -116,14 +116,28 @@ const indexToLetter = (idx: number) => {
 
 const getTaskLabel = (t: any) => {
   switch (String(t?.type)) {
+    case 'assignment': return '討論串';
     case 'quiz': return '小測驗';
-    case 'game': return '遊戲';
+    case 'game': return String(t?.gameType || '') === 'math' ? '數學測驗' : '小遊戲';
     case 'contest': return '問答比賽';
     case 'ai-bot': return 'AI小助手任務';
     case 'note': return '筆記';
-    case 'review-package': return '温習套件';
+    case 'review-package': return '溫習套件';
     default: return '任務';
   }
+};
+
+const getTaskCardColor = (t: any) => {
+  const type = String(t?.type || '');
+  if (type === 'assignment') return { bg: 'bg-[#F8D0D6]', badge: 'bg-[#F2B8C0] text-brand-brown' }; // 討論
+  if (type === 'note') return { bg: 'bg-[#E6E2FF]', badge: 'bg-[#D7D2FF] text-brand-brown' }; // 筆記
+  if (type === 'quiz') return { bg: 'bg-[#FCEFB5]', badge: 'bg-[#F9E38A] text-brand-brown' }; // 小測驗
+  if (type === 'game' && String(t?.gameType || '') === 'math') return { bg: 'bg-[#D9F0FF]', badge: 'bg-[#BFE3FF] text-brand-brown' }; // 數學測驗
+  if (type === 'game') return { bg: 'bg-[#DDF4E1]', badge: 'bg-[#CBECD2] text-brand-brown' }; // 小遊戲
+  if (type === 'contest') return { bg: 'bg-[#FFF2DD]', badge: 'bg-[#FFE6BF] text-brand-brown' }; // 問答比賽
+  if (type === 'review-package') return { bg: 'bg-[#D7F1FF]', badge: 'bg-[#BFE7FF] text-brand-brown' }; // 溫習套件
+  if (type === 'ai-bot') return { bg: 'bg-[#E8F4FD]', badge: 'bg-[#D2EFFF] text-brand-brown' }; // AI小助手
+  return { bg: 'bg-white', badge: 'bg-gray-100 text-gray-700' };
 };
 
 const formatTime = (sec: number) => {
@@ -539,7 +553,6 @@ const AssignmentExplorerModal: React.FC<Props> = ({ open, onClose, authService, 
 
   const canDeleteTask = (t: any) => {
     if (!t) return false;
-    if (String(t.type) === 'review-package') return false;
     if (viewerRole === 'admin') return true;
     return String(t.teacherId || '') === String(viewerId || '');
   };
@@ -603,6 +616,7 @@ const AssignmentExplorerModal: React.FC<Props> = ({ open, onClose, authService, 
       else if (t.type === 'contest') await authService.deleteContest(t.id);
       else if (t.type === 'ai-bot') await authService.deleteBotTask(t.id);
       else if (t.type === 'note') await authService.deleteNote(t.id);
+      else if (t.type === 'review-package') await authService.deleteReviewPackage(t.id);
       else await authService.deleteAssignment(t.id);
       await load();
       setSelectedTask(null);
@@ -619,6 +633,7 @@ const AssignmentExplorerModal: React.FC<Props> = ({ open, onClose, authService, 
     else if (t.type === 'contest') await authService.deleteContest(t.id);
     else if (t.type === 'ai-bot') await authService.deleteBotTask(t.id);
     else if (t.type === 'note') await authService.deleteNote(t.id);
+    else if (t.type === 'review-package') await authService.deleteReviewPackage(t.id);
     else await authService.deleteAssignment(t.id);
   };
 
@@ -1380,12 +1395,14 @@ const AssignmentExplorerModal: React.FC<Props> = ({ open, onClose, authService, 
 	                    const archived = !!t.archivedAt || t.isActive === false;
 	                    const deletable = canDeleteTask(t);
 	                    const { sub } = parseFolder(t);
+                      const label = getTaskLabel(t);
+                      const colors = getTaskCardColor(t);
 	                    const key = taskKey(t);
 	                    const isSelected = selectedTaskKeys.has(key);
 	                    return (
 	                      <div
 	                        key={key}
-	                        className={`bg-white border-4 rounded-3xl p-4 shadow-comic flex flex-wrap items-center justify-between gap-3 ${archived ? 'opacity-70' : ''} ${selectMode && isSelected ? 'border-blue-500 bg-blue-50' : 'border-brand-brown'}`}
+	                        className={`border-4 rounded-3xl p-4 shadow-comic flex flex-wrap items-center justify-between gap-3 ${colors.bg} ${archived ? 'opacity-70' : ''} ${selectMode && isSelected ? 'border-blue-500 ring-4 ring-blue-300' : 'border-brand-brown'}`}
 	                      >
 	                        <div className="min-w-0 flex items-start gap-3 flex-1">
 	                          {selectMode && (
@@ -1406,11 +1423,16 @@ const AssignmentExplorerModal: React.FC<Props> = ({ open, onClose, authService, 
 	                            />
 	                          )}
 	                          <div className="min-w-0">
-	                          <div className="text-xl font-black text-brand-brown break-words">
-	                            {String(t.title || '')}
+	                          <div className="flex flex-wrap items-center gap-2">
+	                            <div className="text-xl font-black text-brand-brown break-words">
+	                              {String(t.title || '')}
+	                            </div>
+	                            <span className={`px-2 py-1 rounded-xl border-2 border-brand-brown/30 font-black text-xs ${colors.badge}`}>
+	                              {label}
+	                            </span>
 	                          </div>
 	                          <div className="text-sm text-gray-600 font-bold mt-1">
-	                            {getTaskLabel(t)} ・ {String(t.teacherName || '教師')}
+	                            {String(t.teacherName || '教師')}
 	                            {!!sub?.name && <span className="ml-2 text-xs">（子folder：{sub.name}）</span>}
 	                          </div>
 	                          <div className="text-xs text-gray-600 font-bold mt-1">
