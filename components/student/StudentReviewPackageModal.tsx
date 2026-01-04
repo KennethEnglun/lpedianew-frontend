@@ -33,6 +33,7 @@ export function StudentReviewPackageModal({ open, packageId, onClose, onFinished
   const maxReachedRef = useRef(0);
   const lockedRef = useRef(false);
   const lastReportRef = useRef<{ max: number; pos: number; at: number }>({ max: 0, pos: 0, at: 0 });
+  const diagnosedRef = useRef(false);
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -162,6 +163,7 @@ export function StudentReviewPackageModal({ open, packageId, onClose, onFinished
     setActiveCheckpointId(null);
     setSelectedIndex(-1);
     setSubmitting(false);
+    diagnosedRef.current = false;
     lastReportRef.current = { max: 0, pos: 0, at: 0 };
     (async () => {
       try {
@@ -367,6 +369,31 @@ export function StudentReviewPackageModal({ open, packageId, onClose, onFinished
                       ? '影片來源不支援播放（MEDIA_ERR_SRC_NOT_SUPPORTED）。若是 SharePoint 分享連結，可嘗試在原連結加上 &download=1，或改用可直接播放的 mp4 連結。'
                       : '載入影片失敗，請檢查影片連結是否可直接播放。';
                     setError(msg);
+
+                    if (diagnosedRef.current) return;
+                    diagnosedRef.current = true;
+                    void (async () => {
+                      try {
+                        const resp = await fetch(proxiedSrc, { headers: { Range: 'bytes=0-0' } });
+                        const ct = resp.headers.get('content-type') || '';
+                        if (!resp.ok && resp.status !== 206) {
+                          let extra = '';
+                          try {
+                            const body = await resp.json();
+                            extra = body?.error ? `（${String(body.error)}）` : '';
+                          } catch {
+                            // ignore
+                          }
+                          setError(`影片載入失敗：${resp.status} ${resp.statusText}${extra}`);
+                          return;
+                        }
+                        if (ct && !ct.toLowerCase().startsWith('video/') && !ct.toLowerCase().startsWith('application/octet-stream')) {
+                          setError(`影片載入失敗：來源回傳 Content-Type=${ct}（不是影片串流）。建議改用 mp4 直連。`);
+                        }
+                      } catch {
+                        // ignore
+                      }
+                    })();
                   }}
                   onPlay={() => {
                     if (lockedRef.current) {
