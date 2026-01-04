@@ -6,6 +6,8 @@ import NoteCreateModal from './NoteCreateModal';
 import NoteEditorModal from './NoteEditorModal';
 import { ScopeCardExplorerModal } from './ScopeCardExplorerModal';
 import { StudentAiNotesModal } from './StudentAiNotesModal';
+import { AiReportModal } from './AiReportModal';
+import { TeacherReviewPackagePanel } from './review-package/TeacherReviewPackagePanel';
 
 type ManagedTaskType = 'assignment' | 'quiz' | 'game' | 'contest' | 'ai-bot' | 'note' | 'review-package';
 type ManageApiTaskType = 'assignment' | 'quiz' | 'game' | 'contest' | 'ai-bot' | 'note';
@@ -170,6 +172,12 @@ const AssignmentExplorerModal: React.FC<Props> = ({ open, onClose, authService, 
   const [noteEditorStudentId, setNoteEditorStudentId] = useState('');
   const [scopeCardOpen, setScopeCardOpen] = useState(false);
   const [studentAiNotesOpen, setStudentAiNotesOpen] = useState(false);
+  const [reviewPackageStats, setReviewPackageStats] = useState<any | null>(null);
+
+  const [aiReportModalOpen, setAiReportModalOpen] = useState(false);
+  const [aiReportLoading, setAiReportLoading] = useState(false);
+  const [aiReportError, setAiReportError] = useState('');
+  const [aiReportData, setAiReportData] = useState<any | null>(null);
 
   const [selectMode, setSelectMode] = useState(false);
   const [selectedTaskKeys, setSelectedTaskKeys] = useState<Set<string>>(new Set());
@@ -238,6 +246,7 @@ const AssignmentExplorerModal: React.FC<Props> = ({ open, onClose, authService, 
         setSelectedTask(null);
         setTaskResponses([]);
         setTaskDetail(null);
+        setReviewPackageStats(null);
         setTaskLoading(false);
       }
     } catch (e: any) {
@@ -257,6 +266,7 @@ const AssignmentExplorerModal: React.FC<Props> = ({ open, onClose, authService, 
     setTopicId('');
     setSelectedTask(null);
     setTaskResponses([]);
+    setReviewPackageStats(null);
     setScopeCardOpen(false);
     setSelectMode(false);
     setSelectedTaskKeys(new Set());
@@ -413,6 +423,7 @@ const AssignmentExplorerModal: React.FC<Props> = ({ open, onClose, authService, 
     setSelectedTask(t);
     setTaskResponses([]);
     setTaskDetail(null);
+    setReviewPackageStats(null);
     setExpandedQuizResultIds(new Set());
     setExpandedContestAttemptIds(new Set());
     setContestAttemptDetails({});
@@ -437,8 +448,9 @@ const AssignmentExplorerModal: React.FC<Props> = ({ open, onClose, authService, 
         setTaskResponses(Array.isArray(resp.threads) ? resp.threads : []);
       } else if (t.type === 'review-package') {
         const resp = await authService.getReviewPackageResults(t.id);
-        setTaskDetail(t);
+        setTaskDetail(resp?.package ? { ...t, ...resp.package } : t);
         setTaskResponses(Array.isArray(resp?.results) ? resp.results : []);
+        setReviewPackageStats(resp?.stats || null);
       } else if (t.type === 'note') {
         if (String(t.status || '') && String(t.status) !== 'published') {
           const resp = await authService.getNoteDetail(t.id);
@@ -458,6 +470,36 @@ const AssignmentExplorerModal: React.FC<Props> = ({ open, onClose, authService, 
       setError(e?.message || '載入詳情失敗');
     } finally {
       setTaskLoading(false);
+    }
+  };
+
+  const openSelectedReviewPackageAiReport = async () => {
+    if (!selectedTask || String(selectedTask.type) !== 'review-package') return;
+    setAiReportModalOpen(true);
+    setAiReportLoading(true);
+    setAiReportError('');
+    setAiReportData(null);
+    try {
+      const data = await authService.getReviewPackageAiReport(String(selectedTask.id), { scope: 'overall' });
+      setAiReportData(data?.report || null);
+    } catch (e: any) {
+      setAiReportError(e?.message || '載入 AI 報告失敗');
+    } finally {
+      setAiReportLoading(false);
+    }
+  };
+
+  const regenerateSelectedReviewPackageAiReport = async () => {
+    if (!selectedTask || String(selectedTask.type) !== 'review-package') return;
+    setAiReportLoading(true);
+    setAiReportError('');
+    try {
+      const data = await authService.regenerateReviewPackageAiReport(String(selectedTask.id), { scope: 'overall' });
+      setAiReportData(data?.report || null);
+    } catch (e: any) {
+      setAiReportError(e?.message || '重新生成 AI 報告失敗');
+    } finally {
+      setAiReportLoading(false);
     }
   };
 
@@ -963,7 +1005,18 @@ const AssignmentExplorerModal: React.FC<Props> = ({ open, onClose, authService, 
 
               <div className="mt-4 border-t-2 border-gray-200 pt-4">
                 <div className="text-lg font-black text-brand-brown mb-2">學生回應 / 結果</div>
-                {taskLoading ? (
+                {selectedTask.type === 'review-package' ? (
+                  taskLoading ? (
+                    <div className="text-brand-brown font-bold">載入中...</div>
+                  ) : (
+                    <TeacherReviewPackagePanel
+                      pkg={taskDetail as any}
+                      results={taskResponses as any}
+                      stats={reviewPackageStats}
+                      onOpenAiReport={() => void openSelectedReviewPackageAiReport()}
+                    />
+                  )
+                ) : taskLoading ? (
                   <div className="text-brand-brown font-bold">載入中...</div>
                 ) : taskResponses.length === 0 ? (
                   <div className="text-gray-500 font-bold">目前沒有資料</div>
@@ -1515,6 +1568,16 @@ const AssignmentExplorerModal: React.FC<Props> = ({ open, onClose, authService, 
 	          void load({ keepSelection: true });
 	        }}
 	      />
+
+        <AiReportModal
+          open={aiReportModalOpen}
+          title="温習套件 AI 報告"
+          loading={aiReportLoading}
+          error={aiReportError}
+          report={aiReportData}
+          onClose={() => setAiReportModalOpen(false)}
+          onRegenerate={aiReportData ? () => void regenerateSelectedReviewPackageAiReport() : undefined}
+        />
 	    </div>
 	  );
 };

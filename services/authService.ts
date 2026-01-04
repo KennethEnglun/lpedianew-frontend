@@ -1761,6 +1761,31 @@ class AuthService {
     return this.handleResponse(response);
   }
 
+  // AI 報告（温習套件）
+  async getReviewPackageAiReport(packageId: string, params?: { scope?: 'overall' | 'student'; studentId?: string; refresh?: boolean }): Promise<{ report: any; cached: boolean }> {
+    const searchParams = new URLSearchParams();
+    if (params?.scope) searchParams.append('scope', params.scope);
+    if (params?.studentId) searchParams.append('studentId', params.studentId);
+    if (params?.refresh) searchParams.append('refresh', '1');
+    const query = searchParams.toString() ? `?${searchParams.toString()}` : '';
+    const response = await fetch(`${this.API_BASE}/review-packages/${encodeURIComponent(packageId)}/ai-report${query}`, {
+      headers: this.getAuthHeaders()
+    });
+    return this.handleResponse(response);
+  }
+
+  async regenerateReviewPackageAiReport(packageId: string, params?: { scope?: 'overall' | 'student'; studentId?: string }): Promise<{ report: any; cached: boolean }> {
+    const searchParams = new URLSearchParams();
+    if (params?.scope) searchParams.append('scope', params.scope);
+    if (params?.studentId) searchParams.append('studentId', params.studentId);
+    const query = searchParams.toString() ? `?${searchParams.toString()}` : '';
+    const response = await fetch(`${this.API_BASE}/review-packages/${encodeURIComponent(packageId)}/ai-report/regenerate${query}`, {
+      method: 'POST',
+      headers: this.getAuthHeaders()
+    });
+    return this.handleResponse(response);
+  }
+
   async getSharedContests(params: {
     subject: string;
     grade: string;
