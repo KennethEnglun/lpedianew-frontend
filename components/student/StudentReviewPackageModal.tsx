@@ -118,7 +118,7 @@ export function StudentReviewPackageModal({ open, packageId, onClose, onFinished
       if (name === 'NotAllowedError') {
         setError('瀏覽器阻止播放（NotAllowed）。請再按一次播放，或點一下影片畫面。');
       } else if (name === 'NotSupportedError') {
-        setError('此影片連結不支援直接播放（NotSupported）。請教師改用可直接播放的 mp4 連結。');
+        setError('此影片連結不支援直接播放（NotSupported）。若是 SharePoint 分享連結，可嘗試在原連結加上 &download=1，或改用可直接播放的 mp4 連結。');
       } else {
         setError(e?.message || '播放失敗：請檢查影片連結是否可直接播放');
       }
@@ -364,7 +364,7 @@ export function StudentReviewPackageModal({ open, packageId, onClose, onFinished
                     const video = videoRef.current;
                     const code = video?.error?.code;
                     const msg = code === 4
-                      ? '影片來源不支援播放（MEDIA_ERR_SRC_NOT_SUPPORTED）。請教師改用可直接播放的 mp4 連結。'
+                      ? '影片來源不支援播放（MEDIA_ERR_SRC_NOT_SUPPORTED）。若是 SharePoint 分享連結，可嘗試在原連結加上 &download=1，或改用可直接播放的 mp4 連結。'
                       : '載入影片失敗，請檢查影片連結是否可直接播放。';
                     setError(msg);
                   }}

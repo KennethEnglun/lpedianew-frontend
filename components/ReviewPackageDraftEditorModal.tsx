@@ -216,6 +216,9 @@ export default function ReviewPackageDraftEditorModal({
                 className="w-full px-4 py-2 rounded-2xl border-4 border-brand-brown font-bold"
                 placeholder="https://..."
               />
+              <div className="mt-1 text-xs font-bold text-gray-700">
+                SharePoint 分享連結未必可播放；可嘗試在原連結加上 <span className="font-black"> &amp;download=1</span>，或改用 mp4 直連。
+              </div>
             </label>
 
             <label className="block">
