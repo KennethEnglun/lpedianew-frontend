@@ -113,8 +113,15 @@ export function StudentReviewPackageModal({ open, packageId, onClose, onFinished
     try {
       v.playbackRate = 1;
       await v.play();
-    } catch {
-      // ignore
+    } catch (e: any) {
+      const name = String(e?.name || '');
+      if (name === 'NotAllowedError') {
+        setError('瀏覽器阻止播放（NotAllowed）。請再按一次播放，或點一下影片畫面。');
+      } else if (name === 'NotSupportedError') {
+        setError('此影片連結不支援直接播放（NotSupported）。請教師改用可直接播放的 mp4 連結。');
+      } else {
+        setError(e?.message || '播放失敗：請檢查影片連結是否可直接播放');
+      }
     }
   };
 
@@ -192,6 +199,12 @@ export function StudentReviewPackageModal({ open, packageId, onClose, onFinished
   }, [open, packageId]);
 
   if (!open || !packageId) return null;
+
+  const token = authService.getToken();
+  const apiBase = authService.getApiBase();
+  const proxiedSrc = token
+    ? `${apiBase}/review-packages/${encodeURIComponent(packageId)}/video?token=${encodeURIComponent(token)}`
+    : String(pkg?.videoUrl || '');
 
   const onSeekCheck = () => {
     const video = videoRef.current;
@@ -307,7 +320,7 @@ export function StudentReviewPackageModal({ open, packageId, onClose, onFinished
               <div className="bg-black rounded-2xl overflow-hidden border-4 border-brand-brown">
                 <video
                   ref={videoRef}
-                  src={String(pkg?.videoUrl || '')}
+                  src={proxiedSrc}
                   className="w-full max-h-[55vh] bg-black"
                   controls={false}
                   playsInline
@@ -346,6 +359,14 @@ export function StudentReviewPackageModal({ open, packageId, onClose, onFinished
                       video.playbackRate = 1;
                       showToast('倍速已鎖定為 1x');
                     }
+                  }}
+                  onError={() => {
+                    const video = videoRef.current;
+                    const code = video?.error?.code;
+                    const msg = code === 4
+                      ? '影片來源不支援播放（MEDIA_ERR_SRC_NOT_SUPPORTED）。請教師改用可直接播放的 mp4 連結。'
+                      : '載入影片失敗，請檢查影片連結是否可直接播放。';
+                    setError(msg);
                   }}
                   onPlay={() => {
                     if (lockedRef.current) {

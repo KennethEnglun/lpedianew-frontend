@@ -52,6 +52,11 @@ class AuthService {
     return localStorage.getItem(this.TOKEN_KEY);
   }
 
+  // 給需要 <video>/<img> 等無法自訂 Authorization header 的場景使用
+  getApiBase(): string {
+    return this.API_BASE;
+  }
+
   // 獲取儲存的用戶資訊
   getUser(): User | null {
     const userStr = localStorage.getItem(this.USER_KEY);
