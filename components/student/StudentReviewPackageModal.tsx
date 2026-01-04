@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { X, Play, Pause, Lock, CheckCircle2, XCircle } from 'lucide-react';
+import { X, Play, Pause, Lock, CheckCircle2, XCircle, Maximize2, Minimize2 } from 'lucide-react';
 import { authService } from '../../services/authService';
 
 type Props = {
@@ -69,6 +69,7 @@ export function StudentReviewPackageModal({ open, packageId, onClose, onFinished
   const activeCheckpointIdRef = useRef<string | null>(null);
   const lastReportRef = useRef<{ max: number; pos: number; at: number }>({ max: 0, pos: 0, at: 0 });
   const diagnosedRef = useRef(false);
+  const fsRootRef = useRef<HTMLDivElement | null>(null);
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -82,6 +83,7 @@ export function StudentReviewPackageModal({ open, packageId, onClose, onFinished
   const [currentTime, setCurrentTime] = useState(0);
   const [maxReached, setMaxReached] = useState(0);
   const [locked, setLocked] = useState(false);
+  const [isFullscreen, setIsFullscreen] = useState(false);
 
   const [activeCheckpointId, setActiveCheckpointId] = useState<string | null>(null);
   const [editingCheckpointId, setEditingCheckpointId] = useState<string | null>(null);
@@ -301,6 +303,7 @@ export function StudentReviewPackageModal({ open, packageId, onClose, onFinished
     setSubmitting(false);
     setFinalSubmitting(false);
     setReport(null);
+    setIsFullscreen(false);
     diagnosedRef.current = false;
     ytContainerIdRef.current = '';
     destroyYouTube();
@@ -324,6 +327,32 @@ export function StudentReviewPackageModal({ open, packageId, onClose, onFinished
       }
     })();
   }, [open, packageId]);
+
+  useEffect(() => {
+    if (!open) return;
+    const onFsChange = () => {
+      const el = fsRootRef.current;
+      const active = !!el && document.fullscreenElement === el;
+      setIsFullscreen(active);
+    };
+    document.addEventListener('fullscreenchange', onFsChange);
+    onFsChange();
+    return () => document.removeEventListener('fullscreenchange', onFsChange);
+  }, [open]);
+
+  const toggleFullscreen = async () => {
+    const el = fsRootRef.current;
+    if (!el) return;
+    try {
+      if (document.fullscreenElement) {
+        await document.exitFullscreen();
+      } else {
+        await el.requestFullscreen();
+      }
+    } catch {
+      // ignore
+    }
+  };
 
   useEffect(() => {
     if (!open) return;
@@ -621,7 +650,13 @@ export function StudentReviewPackageModal({ open, packageId, onClose, onFinished
 
   return (
     <div className="fixed inset-0 bg-black/50 z-[120] flex items-center justify-center p-4">
-      <div className="bg-white border-4 border-brand-brown rounded-3xl w-full max-w-5xl max-h-[90vh] overflow-y-auto shadow-comic">
+      <div
+        ref={fsRootRef}
+        className={[
+          'bg-white border-4 border-brand-brown w-full overflow-y-auto shadow-comic',
+          isFullscreen ? 'h-full max-h-none max-w-none rounded-none' : 'max-w-6xl max-h-[90vh] rounded-3xl'
+        ].join(' ')}
+      >
         <div className="p-5 border-b-4 border-brand-brown bg-[#C0E2BE] flex items-center justify-between">
           <div className="min-w-0">
             <div className="text-2xl font-black text-brand-brown truncate">{String(pkg?.title || '温習套件')}</div>
@@ -641,16 +676,32 @@ export function StudentReviewPackageModal({ open, packageId, onClose, onFinished
               )}
             </div>
           </div>
-          <button
-            onClick={() => {
-              void reportProgress({ force: true });
-              onClose();
-            }}
-            className="w-10 h-10 rounded-full bg-white border-2 border-brand-brown hover:bg-gray-100 flex items-center justify-center"
-            aria-label="關閉"
-          >
-            <X className="w-6 h-6 text-brand-brown" />
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={toggleFullscreen}
+              className="w-10 h-10 rounded-full bg-white border-2 border-brand-brown hover:bg-gray-100 flex items-center justify-center"
+              aria-label={isFullscreen ? '退出全螢幕' : '全螢幕'}
+              title={isFullscreen ? '退出全螢幕' : '全螢幕'}
+            >
+              {isFullscreen ? <Minimize2 className="w-6 h-6 text-brand-brown" /> : <Maximize2 className="w-6 h-6 text-brand-brown" />}
+            </button>
+            <button
+              onClick={() => {
+                void reportProgress({ force: true });
+                try {
+                  if (document.fullscreenElement) void document.exitFullscreen();
+                } catch {
+                  // ignore
+                }
+                onClose();
+              }}
+              className="w-10 h-10 rounded-full bg-white border-2 border-brand-brown hover:bg-gray-100 flex items-center justify-center"
+              aria-label="關閉"
+            >
+              <X className="w-6 h-6 text-brand-brown" />
+            </button>
+          </div>
         </div>
 
         <div className="p-5 space-y-4">
@@ -670,297 +721,236 @@ export function StudentReviewPackageModal({ open, packageId, onClose, onFinished
             <div className="text-center font-black text-brand-brown py-10">載入中...</div>
           ) : (
             <>
-	              <div className="bg-black rounded-2xl overflow-hidden border-4 border-brand-brown">
-	                {isYouTube ? (
-	                  <div className="w-full bg-black relative" style={{ aspectRatio: '16 / 9' }}>
-	                    <div id={ytContainerIdRef.current || `yt-${packageId}`} className="w-full h-full" />
-	                    {!ytReady && !error && (
-	                      <div className="absolute inset-0 flex items-center justify-center text-white font-black">
-	                        載入 YouTube 播放器中...
-	                      </div>
-	                    )}
-	                  </div>
-	                ) : (
-	                  <video
-                    ref={videoRef}
-                    src={proxiedSrc}
-                    className="w-full max-h-[55vh] bg-black"
-                    controls={false}
-                    playsInline
-                    onLoadedMetadata={() => {
-                      const video = videoRef.current;
-                      if (!video) return;
-                      const d = Number(video.duration) || 0;
-                      setDuration(d);
-                      const resume = clamp(currentTime, 0, d || currentTime || 0);
-                      seekingGuardRef.current = true;
-                      try {
-                        if (Number.isFinite(resume) && resume > 0) video.currentTime = resume;
-                        video.playbackRate = 1;
-                      } finally {
-                        window.setTimeout(() => { seekingGuardRef.current = false; }, 0);
-                      }
-                    }}
-                    onTimeUpdate={() => {
-                      const video = videoRef.current;
-                      if (!video) return;
-                      const t = Number(video.currentTime) || 0;
-                      setCurrentTime(t);
-                      const nextMax = Math.max(maxReachedRef.current || 0, t);
-                      maxReachedRef.current = nextMax;
-                      setMaxReached(nextMax);
-                      void reportProgress({ posSec: t, maxSec: nextMax });
-                      maybeGateAtCheckpoint(t);
-                    }}
-                    onSeeking={onSeekCheck}
-                    onRateChange={() => {
-                      const video = videoRef.current;
-                      if (!video) return;
-                      if (video.playbackRate !== 1) {
-                        video.playbackRate = 1;
-                        showToast('倍速已鎖定為 1x');
-                      }
-                    }}
-                    onError={() => {
-                      const video = videoRef.current;
-                      const code = video?.error?.code;
-                      const msg = code === 4
-                        ? '影片來源不支援播放（MEDIA_ERR_SRC_NOT_SUPPORTED）。請改用可直接播放的 mp4 連結。'
-                        : '載入影片失敗，請檢查影片連結是否可直接播放。';
-                      setError(msg);
-                    }}
-                    onPlay={() => {
-                      if (lockedRef.current) {
-                        safePause();
-                        showToast('請先完成題目');
-                        return;
-                      }
-                      setIsPlaying(true);
-                      const video = videoRef.current;
-                      if (video) video.playbackRate = 1;
-                    }}
-                    onPause={() => setIsPlaying(false)}
-                    onEnded={() => {
-                      setIsPlaying(false);
-                      const pos = Math.floor(duration || 0);
-                      const max = Math.floor(Math.max(maxReachedRef.current || 0, pos));
-                      void reportProgress({ ended: true, force: true, posSec: pos, maxSec: max });
-                      onFinished?.();
-                    }}
-                  />
-                )}
-              </div>
-
-              <div className="bg-white border-4 border-brand-brown rounded-2xl p-4 shadow-comic space-y-3">
-                <div className="flex flex-col md:flex-row md:items-center gap-3 justify-between">
-                  <div className="font-black text-brand-brown">
-                    進度：{formatTime(currentTime)} / {formatTime(duration)}
-                    <span className="ml-3 text-sm font-bold text-brand-brown/80">
-                      已解鎖至：{formatTime(maxReached)}
-                    </span>
+              <div className="grid grid-cols-1 lg:grid-cols-[1fr_420px] gap-4 items-start">
+                <div className="space-y-3">
+                  <div className="bg-black rounded-2xl overflow-hidden border-4 border-brand-brown">
+                    {isYouTube ? (
+                      <div className="w-full bg-black relative" style={{ aspectRatio: '16 / 9' }}>
+                        <div id={ytContainerIdRef.current || `yt-${packageId}`} className="w-full h-full" />
+                        {!ytReady && !error && (
+                          <div className="absolute inset-0 flex items-center justify-center text-white font-black">
+                            載入 YouTube 播放器中...
+                          </div>
+                        )}
+                      </div>
+                    ) : (
+                      <video
+                        ref={videoRef}
+                        src={proxiedSrc}
+                        className="w-full max-h-[55vh] bg-black"
+                        controls={false}
+                        playsInline
+                        onLoadedMetadata={() => {
+                          const video = videoRef.current;
+                          if (!video) return;
+                          const d = Number(video.duration) || 0;
+                          setDuration(d);
+                          const resume = clamp(currentTime, 0, d || currentTime || 0);
+                          seekingGuardRef.current = true;
+                          try {
+                            if (Number.isFinite(resume) && resume > 0) video.currentTime = resume;
+                            video.playbackRate = 1;
+                          } finally {
+                            window.setTimeout(() => { seekingGuardRef.current = false; }, 0);
+                          }
+                        }}
+                        onTimeUpdate={() => {
+                          const video = videoRef.current;
+                          if (!video) return;
+                          const t = Number(video.currentTime) || 0;
+                          setCurrentTime(t);
+                          const nextMax = Math.max(maxReachedRef.current || 0, t);
+                          maxReachedRef.current = nextMax;
+                          setMaxReached(nextMax);
+                          void reportProgress({ posSec: t, maxSec: nextMax });
+                          maybeGateAtCheckpoint(t);
+                        }}
+                        onSeeking={onSeekCheck}
+                        onRateChange={() => {
+                          const video = videoRef.current;
+                          if (!video) return;
+                          if (video.playbackRate !== 1) {
+                            video.playbackRate = 1;
+                            showToast('倍速已鎖定為 1x');
+                          }
+                        }}
+                        onError={() => {
+                          const video = videoRef.current;
+                          const code = video?.error?.code;
+                          const msg = code === 4
+                            ? '影片來源不支援播放（MEDIA_ERR_SRC_NOT_SUPPORTED）。請改用可直接播放的 mp4 連結。'
+                            : '載入影片失敗，請檢查影片連結是否可直接播放。';
+                          setError(msg);
+                        }}
+                        onPlay={() => {
+                          if (lockedRef.current) {
+                            safePause();
+                            showToast('請先完成題目');
+                            return;
+                          }
+                          setIsPlaying(true);
+                          const video = videoRef.current;
+                          if (video) video.playbackRate = 1;
+                        }}
+                        onPause={() => setIsPlaying(false)}
+                        onEnded={() => {
+                          setIsPlaying(false);
+                          const pos = Math.floor(duration || 0);
+                          const max = Math.floor(Math.max(maxReachedRef.current || 0, pos));
+                          void reportProgress({ ended: true, force: true, posSec: pos, maxSec: max });
+                          onFinished?.();
+                        }}
+                      />
+                    )}
                   </div>
-                  <div className="flex gap-2">
-	                    <button
-	                      type="button"
-	                      disabled={!canPlay}
-	                      onClick={() => {
-	                        if (isPlaying) {
-	                          if (isYouTube) ytPause();
-	                          else safePause();
-	                          return;
-	                        }
-	                        if (isYouTube) ytPlay();
-	                        else void safePlay();
-	                      }}
-	                      className={[
-	                        'px-4 py-2 rounded-2xl border-4 border-brand-brown font-black shadow-comic active:translate-y-1 active:shadow-none flex items-center gap-2',
-	                        !canPlay ? 'bg-gray-200 text-gray-600 cursor-not-allowed' : 'bg-[#FDEEAD] text-brand-brown hover:bg-[#FCE690]'
-	                      ].join(' ')}
-	                    >
-	                      {isPlaying ? <Pause className="w-5 h-5" /> : <Play className="w-5 h-5" />}
-	                      {isPlaying ? '暫停' : (isYouTube && !ytReady ? '載入中' : '播放')}
-	                    </button>
-	                  </div>
-	                </div>
-
-                <div className="relative">
-                  <div className="h-4 rounded-full border-2 border-brand-brown bg-gray-200 overflow-hidden">
-                    <div className="h-full bg-[#D2EFFF]" style={{ width: `${watchedPct}%` }} />
-                    <div className="h-full bg-[#93C47D] -mt-4" style={{ width: `${progressPct}%` }} />
-                  </div>
-	                  <input
-	                    type="range"
-	                    min={0}
-	                    max={Math.max(0, Math.floor(duration || 0))}
-	                    value={Math.floor(currentTime || 0)}
-	                    disabled={isYouTube && !ytReady}
-	                    onChange={(e) => {
-	                      const target = Number(e.target.value) || 0;
-	                      const allowed = maxReachedRef.current || 0;
-	                      const next = target > allowed + 0.5 ? allowed : target;
-                      if (target > allowed + 0.5) showToast('請勿跳過影片');
-                      if (isYouTube) {
-                        ytSeekTo(next);
-                      } else {
-                        const video = videoRef.current;
-                        if (!video) return;
-                        seekingGuardRef.current = true;
-                        try {
-                          video.currentTime = next;
-                        } finally {
-                          window.setTimeout(() => { seekingGuardRef.current = false; }, 0);
-                        }
-                      }
-                      setCurrentTime(next);
-                    }}
-                    className="absolute inset-0 w-full opacity-0 cursor-pointer"
-                    aria-label="影片進度"
-                  />
                 </div>
 
-	              <div className="text-sm font-bold text-gray-700">
-	                必答題目：{requiredCheckpointIds.filter((id) => answeredIds.has(id)).length} / {requiredCheckpointIds.length}
-	                <span className="ml-3">結尾：{watchedToEnd ? '已看完' : '未看完'}</span>
-	                {submitted && typeof attempt?.score === 'number' && <span className="ml-3">分數：{Math.round(Number(attempt.score) || 0)}%</span>}
-	                <span className="ml-3">提交：{submitted ? '已提交' : '未提交'}</span>
-	              </div>
-	            </div>
-
-              {!submitted && (
-                <div className="flex flex-col md:flex-row gap-3 md:items-center md:justify-between">
-                  <div className="text-sm font-bold text-gray-700">
-                    {readyToSubmit ? '已符合提交條件（看至結尾 + 完成必答）' : '完成條件：看至結尾 + 完成所有必答題目'}
-                  </div>
-                  <button
-                    type="button"
-                    disabled={!readyToSubmit || finalSubmitting || locked}
-                    onClick={submitWholePackage}
-                    className={[
-                      'px-4 py-2 rounded-2xl border-4 border-brand-brown font-black shadow-comic active:translate-y-1 active:shadow-none flex items-center gap-2',
-                      !readyToSubmit || finalSubmitting || locked ? 'bg-gray-200 text-gray-600 cursor-not-allowed' : 'bg-[#93C47D] text-brand-brown hover:bg-[#86b572]'
-                    ].join(' ')}
-                  >
-                    {finalSubmitting ? '提交中...' : '完成並提交'}
-                  </button>
-                </div>
-              )}
-
-              {submitted && report && (
-                <div className="bg-white border-4 border-brand-brown rounded-3xl p-5 shadow-comic space-y-3">
-                  <div className="font-black text-brand-brown text-lg">回饋報告</div>
-                  <div className="text-sm font-bold text-gray-700">
-                    得分：{Number(report.earnedPoints) || 0} / {Number(report.totalPoints) || 0}（{Math.round(Number(report.scorePct) || 0)}%）
-                  </div>
-                  <div className="space-y-2">
-                    {(Array.isArray(report.items) ? report.items : []).map((it: any) => {
-                      const ts = formatTime(Number(it.timestampSec) || 0);
-                      const correctIdx = Number.isInteger(Number(it.correctIndex)) ? Number(it.correctIndex) : -1;
-                      const selectedIdx = Number.isInteger(Number(it.selectedIndex)) ? Number(it.selectedIndex) : -1;
-                      const opts = Array.isArray(it.options) ? it.options : [];
-                      return (
-                        <div key={String(it.checkpointId)} className="border-2 border-brand-brown rounded-2xl p-3 bg-[#FFFDF6]">
-                          <div className="font-black text-brand-brown">
-                            {ts}：{String(it.questionText || '')}
-                          </div>
-                          <div className="text-sm font-bold text-gray-700">
-                            你的答案：{selectedIdx >= 0 ? `${selectedIdx + 1}. ${String(opts[selectedIdx] ?? '')}` : '（未作答）'}
-                          </div>
-                          <div className="text-sm font-bold text-gray-700">
-                            正確答案：{correctIdx >= 0 ? `${correctIdx + 1}. ${String(opts[correctIdx] ?? '')}` : '（無）'}
-                            <span className="ml-2">得分：{Number(it.pointsEarned) || 0}/{Number(it.points) || 0}</span>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              )}
-
-              {canEditAnswers && unlockedCheckpoints.length > 0 && (
-                <div className="bg-white border-4 border-brand-brown rounded-3xl p-5 shadow-comic space-y-3">
-                  <div className="font-black text-brand-brown">已解鎖題目（可修改答案，提交前不會顯示對錯）</div>
-                  <div className="space-y-2">
-                    {unlockedCheckpoints.map((c) => {
-                      const sel = selectedByCheckpointId.get(c.id) ?? -1;
-                      return (
-                        <div key={c.id} className="flex flex-col md:flex-row md:items-center md:justify-between gap-2 border-2 border-brand-brown rounded-2xl p-3 bg-[#FFFDF6]">
-                          <div className="min-w-0">
-                            <div className="font-black text-brand-brown truncate">
-                              {formatTime(c.timestampSec)}：{c.questionText || '（題目）'}
-                            </div>
-                            <div className="text-sm font-bold text-gray-700">
-                              目前答案：{sel >= 0 ? `${sel + 1}` : '（未作答）'}
-                            </div>
-                          </div>
-                          <button
-                            type="button"
-                            disabled={locked || submitting}
-                            onClick={() => {
+                <div className="space-y-4">
+                  <div className="bg-white border-4 border-brand-brown rounded-2xl p-4 shadow-comic space-y-3">
+                    <div className="flex flex-col md:flex-row md:items-center gap-3 justify-between">
+                      <div className="font-black text-brand-brown">
+                        進度：{formatTime(currentTime)} / {formatTime(duration)}
+                        <span className="ml-3 text-sm font-bold text-brand-brown/80">
+                          已解鎖至：{formatTime(maxReached)}
+                        </span>
+                      </div>
+                      <div className="flex gap-2">
+                        <button
+                          type="button"
+                          disabled={!canPlay}
+                          onClick={() => {
+                            if (isPlaying) {
                               if (isYouTube) ytPause();
                               else safePause();
-                              setEditingCheckpointId(c.id);
-                              const existing = selectedByCheckpointId.get(c.id);
-                              setSelectedIndex(typeof existing === 'number' ? existing : -1);
-                            }}
-                            className={[
-                              'px-4 py-2 rounded-2xl border-4 border-brand-brown font-black shadow-comic active:translate-y-1 active:shadow-none',
-                              locked || submitting ? 'bg-gray-200 text-gray-600 cursor-not-allowed' : 'bg-white text-brand-brown hover:bg-gray-50'
-                            ].join(' ')}
-                          >
-                            修改答案
-                          </button>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              )}
-
-	            {locked && activeCheckpoint && (
-	              <div className="bg-white border-4 border-brand-brown rounded-3xl p-5 shadow-comic space-y-4">
-                  <div className="font-black text-brand-brown">
-                    時間點 {formatTime(activeCheckpoint.timestampSec)}：{activeCheckpoint.questionText || '請作答'}
-                  </div>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                    {(Array.isArray(activeCheckpoint.options) ? activeCheckpoint.options : []).map((opt, idx) => {
-                      const picked = selectedIndex === idx;
-                      return (
-                        <button
-                          key={idx}
-                          type="button"
-                          disabled={submitting}
-                          onClick={() => setSelectedIndex(idx)}
+                              return;
+                            }
+                            if (isYouTube) ytPlay();
+                            else void safePlay();
+                          }}
                           className={[
-                            'text-left px-4 py-3 rounded-2xl border-4 font-bold shadow-comic active:translate-y-1 active:shadow-none transition-all',
-                            picked ? 'bg-[#FDEEAD] border-brand-brown text-brand-brown' : 'bg-white border-brand-brown text-gray-800 hover:-translate-y-1'
+                            'px-4 py-2 rounded-2xl border-4 border-brand-brown font-black shadow-comic active:translate-y-1 active:shadow-none flex items-center gap-2',
+                            !canPlay ? 'bg-gray-200 text-gray-600 cursor-not-allowed' : 'bg-[#FDEEAD] text-brand-brown hover:bg-[#FCE690]'
                           ].join(' ')}
                         >
-                          {opt}
+                          {isPlaying ? <Pause className="w-5 h-5" /> : <Play className="w-5 h-5" />}
+                          {isPlaying ? '暫停' : (isYouTube && !ytReady ? '載入中' : '播放')}
                         </button>
-                      );
-                    })}
+                      </div>
+                    </div>
+
+                    <div className="relative">
+                      <div className="h-4 rounded-full border-2 border-brand-brown bg-gray-200 overflow-hidden">
+                        <div className="h-full bg-[#D2EFFF]" style={{ width: `${watchedPct}%` }} />
+                        <div className="h-full bg-[#93C47D] -mt-4" style={{ width: `${progressPct}%` }} />
+                      </div>
+                      <input
+                        type="range"
+                        min={0}
+                        max={Math.max(0, Math.floor(duration || 0))}
+                        value={Math.floor(currentTime || 0)}
+                        disabled={isYouTube && !ytReady}
+                        onChange={(e) => {
+                          const target = Number(e.target.value) || 0;
+                          const allowed = maxReachedRef.current || 0;
+                          const next = target > allowed + 0.5 ? allowed : target;
+                          if (target > allowed + 0.5) showToast('請勿跳過影片');
+                          if (isYouTube) {
+                            ytSeekTo(next);
+                          } else {
+                            const video = videoRef.current;
+                            if (!video) return;
+                            seekingGuardRef.current = true;
+                            try {
+                              video.currentTime = next;
+                            } finally {
+                              window.setTimeout(() => { seekingGuardRef.current = false; }, 0);
+                            }
+                          }
+                          setCurrentTime(next);
+                        }}
+                        className="absolute inset-0 w-full opacity-0 cursor-pointer"
+                        aria-label="影片進度"
+                      />
+                    </div>
+
+                    <div className="text-sm font-bold text-gray-700">
+                      必答題目：{requiredCheckpointIds.filter((id) => answeredIds.has(id)).length} / {requiredCheckpointIds.length}
+                      <span className="ml-3">結尾：{watchedToEnd ? '已看完' : '未看完'}</span>
+                      {submitted && typeof attempt?.score === 'number' && <span className="ml-3">分數：{Math.round(Number(attempt.score) || 0)}%</span>}
+                      <span className="ml-3">提交：{submitted ? '已提交' : '未提交'}</span>
+                    </div>
+
+                    {!locked && nextRequiredCheckpoint && (
+                      <div className="text-sm font-bold text-gray-700">
+                        下一個必答時間點：{formatTime(nextRequiredCheckpoint.timestampSec)}
+                      </div>
+                    )}
                   </div>
 
-                  <div className="flex items-center justify-between gap-3">
-                    <div className="text-sm font-bold text-gray-700 flex items-center gap-2">
-                      <Lock className="w-4 h-4" />
-                      需提交答案才可繼續播放（答對/答錯皆可繼續）
+                  {!submitted && (
+                    <div className="bg-white border-4 border-brand-brown rounded-3xl p-4 shadow-comic flex flex-col gap-3">
+                      <div className="text-sm font-bold text-gray-700">
+                        {readyToSubmit ? '已符合提交條件（看至結尾 + 完成必答）' : '完成條件：看至結尾 + 完成所有必答題目'}
+                      </div>
+                      <button
+                        type="button"
+                        disabled={!readyToSubmit || finalSubmitting || locked}
+                        onClick={submitWholePackage}
+                        className={[
+                          'px-4 py-2 rounded-2xl border-4 border-brand-brown font-black shadow-comic active:translate-y-1 active:shadow-none flex items-center justify-center gap-2',
+                          !readyToSubmit || finalSubmitting || locked ? 'bg-gray-200 text-gray-600 cursor-not-allowed' : 'bg-[#93C47D] text-brand-brown hover:bg-[#86b572]'
+                        ].join(' ')}
+                      >
+                        {finalSubmitting ? '提交中...' : '完成並提交'}
+                      </button>
                     </div>
-	                    <button
-	                      type="button"
-	                      onClick={submitAnswer}
-	                      disabled={submitting || selectedIndex < 0}
-                      className={[
-                        'px-4 py-2 rounded-2xl border-4 border-brand-brown font-black shadow-comic active:translate-y-1 active:shadow-none flex items-center gap-2',
-                        submitting || selectedIndex < 0 ? 'bg-gray-300 text-gray-600 cursor-not-allowed' : 'bg-[#93C47D] text-brand-brown hover:bg-[#86b572]'
-                      ].join(' ')}
-	                    >
-	                      {submitting ? '提交中...' : '提交'}
-	                      {submitting ? null : (selectedIndex < 0 ? <XCircle className="w-5 h-5" /> : <CheckCircle2 className="w-5 h-5" />)}
-	                    </button>
-	                  </div>
-	                </div>
-	              )}
+                  )}
+
+                  {locked && activeCheckpoint && (
+                    <div className="bg-white border-4 border-brand-brown rounded-3xl p-5 shadow-comic space-y-4">
+                      <div className="font-black text-brand-brown">
+                        時間點 {formatTime(activeCheckpoint.timestampSec)}：{activeCheckpoint.questionText || '請作答'}
+                      </div>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                        {(Array.isArray(activeCheckpoint.options) ? activeCheckpoint.options : []).map((opt, idx) => {
+                          const picked = selectedIndex === idx;
+                          return (
+                            <button
+                              key={idx}
+                              type="button"
+                              disabled={submitting}
+                              onClick={() => setSelectedIndex(idx)}
+                              className={[
+                                'text-left px-4 py-3 rounded-2xl border-4 font-bold shadow-comic active:translate-y-1 active:shadow-none transition-all',
+                                picked ? 'bg-[#FDEEAD] border-brand-brown text-brand-brown' : 'bg-white border-brand-brown text-gray-800 hover:-translate-y-1'
+                              ].join(' ')}
+                            >
+                              {opt}
+                            </button>
+                          );
+                        })}
+                      </div>
+
+                      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+                        <div className="text-sm font-bold text-gray-700 flex items-center gap-2">
+                          <Lock className="w-4 h-4" />
+                          需提交答案才可繼續播放（答對/答錯皆可繼續）
+                        </div>
+                        <button
+                          type="button"
+                          onClick={submitAnswer}
+                          disabled={submitting || selectedIndex < 0}
+                          className={[
+                            'px-4 py-2 rounded-2xl border-4 border-brand-brown font-black shadow-comic active:translate-y-1 active:shadow-none flex items-center justify-center gap-2',
+                            submitting || selectedIndex < 0 ? 'bg-gray-300 text-gray-600 cursor-not-allowed' : 'bg-[#93C47D] text-brand-brown hover:bg-[#86b572]'
+                          ].join(' ')}
+                        >
+                          {submitting ? '提交中...' : '提交'}
+                          {submitting ? null : (selectedIndex < 0 ? <XCircle className="w-5 h-5" /> : <CheckCircle2 className="w-5 h-5" />)}
+                        </button>
+                      </div>
+                    </div>
+                  )}
 
                   {!locked && editingCheckpoint && canEditAnswers && (
                     <div className="bg-white border-4 border-brand-brown rounded-3xl p-5 shadow-comic space-y-4">
@@ -1015,11 +1005,93 @@ export function StudentReviewPackageModal({ open, packageId, onClose, onFinished
                     </div>
                   )}
 
-	            {!locked && nextRequiredCheckpoint && (
-	              <div className="text-sm font-bold text-gray-700">
-	                下一個必答時間點：{formatTime(nextRequiredCheckpoint.timestampSec)}
+                  {canEditAnswers && unlockedCheckpoints.length > 0 && (
+                    <div className="bg-white border-4 border-brand-brown rounded-3xl p-5 shadow-comic space-y-3">
+                      <div className="font-black text-brand-brown">已解鎖題目（可修改答案，提交前不會顯示對錯）</div>
+                      <div className="space-y-2">
+                        {unlockedCheckpoints.map((c) => {
+                          const sel = selectedByCheckpointId.get(c.id) ?? -1;
+                          return (
+                            <div key={c.id} className="flex flex-col md:flex-row md:items-center md:justify-between gap-2 border-2 border-brand-brown rounded-2xl p-3 bg-[#FFFDF6]">
+                              <div className="min-w-0">
+                                <div className="font-black text-brand-brown truncate">
+                                  {formatTime(c.timestampSec)}：{c.questionText || '（題目）'}
+                                </div>
+                                <div className="text-sm font-bold text-gray-700">
+                                  目前答案：{sel >= 0 ? `${sel + 1}` : '（未作答）'}
+                                </div>
+                              </div>
+                              <button
+                                type="button"
+                                disabled={locked || submitting}
+                                onClick={() => {
+                                  if (isYouTube) ytPause();
+                                  else safePause();
+                                  setEditingCheckpointId(c.id);
+                                  const existing = selectedByCheckpointId.get(c.id);
+                                  setSelectedIndex(typeof existing === 'number' ? existing : -1);
+                                }}
+                                className={[
+                                  'px-4 py-2 rounded-2xl border-4 border-brand-brown font-black shadow-comic active:translate-y-1 active:shadow-none',
+                                  locked || submitting ? 'bg-gray-200 text-gray-600 cursor-not-allowed' : 'bg-white text-brand-brown hover:bg-gray-50'
+                                ].join(' ')}
+                              >
+                                修改答案
+                              </button>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+
+                  {submitted && report && (
+                    <div className="bg-white border-4 border-brand-brown rounded-3xl p-5 shadow-comic space-y-3">
+                      <div className="font-black text-brand-brown text-lg">回饋報告</div>
+                      <div className="text-sm font-bold text-gray-700">
+                        得分：{Number(report.earnedPoints) || 0} / {Number(report.totalPoints) || 0}（{Math.round(Number(report.scorePct) || 0)}%）
+                      </div>
+                      <div className="space-y-2">
+                        {(Array.isArray(report.items) ? report.items : []).map((it: any) => {
+                          const ts = formatTime(Number(it.timestampSec) || 0);
+                          const correctIdx = Number.isInteger(Number(it.correctIndex)) ? Number(it.correctIndex) : -1;
+                          const selectedIdx = Number.isInteger(Number(it.selectedIndex)) ? Number(it.selectedIndex) : -1;
+                          const opts = Array.isArray(it.options) ? it.options : [];
+                          const isCorrect = it?.isCorrect === true || Number(it?.pointsEarned) > 0;
+                          return (
+                            <div
+                              key={String(it.checkpointId)}
+                              className={[
+                                'border-2 rounded-2xl p-3',
+                                isCorrect ? 'border-green-700 bg-green-50' : 'border-red-700 bg-red-50'
+                              ].join(' ')}
+                            >
+                              <div className="flex items-center justify-between gap-3">
+                                <div className="font-black text-brand-brown">
+                                  {ts}：{String(it.questionText || '')}
+                                </div>
+                                <div className={[
+                                  'text-xs font-black px-2 py-0.5 rounded-xl border',
+                                  isCorrect ? 'border-green-700 bg-green-100 text-green-900' : 'border-red-700 bg-red-100 text-red-900'
+                                ].join(' ')}>
+                                  {isCorrect ? '正確' : '錯誤'}
+                                </div>
+                              </div>
+                              <div className="text-sm font-bold text-gray-700">
+                                你的答案：{selectedIdx >= 0 ? `${selectedIdx + 1}. ${String(opts[selectedIdx] ?? '')}` : '（未作答）'}
+                              </div>
+                              <div className="text-sm font-bold text-gray-700">
+                                正確答案：{correctIdx >= 0 ? `${correctIdx + 1}. ${String(opts[correctIdx] ?? '')}` : '（無）'}
+                                <span className="ml-2">得分：{Number(it.pointsEarned) || 0}/{Number(it.points) || 0}</span>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
                 </div>
-              )}
+              </div>
             </>
           )}
         </div>
