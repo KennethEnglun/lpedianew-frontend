@@ -1,6 +1,6 @@
 /**
- * AI 题目生成服务
- * 根据学习范围生成个性化题目
+ * AI 題目生成服務
+ * 根據學習範圍生成個人化題目
  */
 
 import type {
@@ -37,27 +37,27 @@ const shuffleQuestionOptions = (q: StudyQuestion): StudyQuestion => {
   };
 };
 
-// 题目生成服务类
+// 題目生成服務類
 export class QuestionGeneratorService {
   /**
-   * 根据学习范围生成题目
+   * 根據學習範圍生成題目
    */
   static async generateQuestions(scope: StudyScope): Promise<StudyApiResponse<StudyQuestion[]>> {
     try {
       const nonce = createNonce();
       const prompt = QuestionGeneratorService.buildGenerationPrompt(scope, nonce);
 
-      // 调用现有的聊天服务生成题目
+      // 調用現有的聊天服務生成題目
       const response = await authService.sendChatMessage({
         message: prompt,
-        subject: scope.subject, // 添加科目参数
-        // 可以创建一个专门的机器人来生成题目，或使用全局聊天
+        subject: scope.subject, // 添加科目參數
+        // 可以建立一個專門的機器人來生成題目，或使用全局聊天
         botId: undefined, // 使用全局聊天
         ephemeral: true // 不寫入 AI 對話紀錄（避免污染學生的聊天記錄）
       });
 
       if (!response.assistantMessage?.content) {
-        throw new Error('AI 响应为空');
+        throw new Error('AI 回應為空');
       }
 
       const questions = QuestionGeneratorService.parseAIResponse(
@@ -68,20 +68,20 @@ export class QuestionGeneratorService {
       return {
         success: true,
         data: questions,
-        message: `成功生成 ${questions.length} 道题目`
+        message: `成功生成 ${questions.length} 道題目`
       };
 
     } catch (error) {
-      console.error('题目生成失败:', error);
+      console.error('題目生成失敗:', error);
       return {
         success: false,
-        error: error instanceof Error ? error.message : '题目生成失败'
+        error: error instanceof Error ? error.message : '題目生成失敗'
       };
     }
   }
 
   /**
-   * 构建AI生成题目的提示词
+   * 構建 AI 生成題目的提示詞
    */
   private static buildGenerationPrompt(scope: StudyScope, nonce: string): string {
     const difficultyText = `${scope.difficulty}程度`;
@@ -89,35 +89,35 @@ export class QuestionGeneratorService {
     let contentSection = '';
     if (scope.contentSource === 'custom' && scope.customContent) {
       contentSection = `
-学习内容：
+學習內容：
 ${scope.customContent}
 
-请根据以上学习内容生成题目。`;
+請根據以上學習內容生成題目。`;
     } else {
       contentSection = `
-学习范围：
+學習範圍：
 - 科目：${scope.subject}
-- 章节：${scope.chapters.join('、')}
-- 知识点：${scope.topics.join('、')}`;
+- 章節：${scope.chapters.join('、')}
+- 知識點：${scope.topics.join('、')}`;
     }
 
     return `你是一位香港小學教育專家，需要為學生生成 ${scope.questionCount} 道${difficultyText}的選擇題。
 
 ${contentSection}
 
-请严格按照以下要求生成题目：
+請嚴格按照以下要求生成題目：
 
 【語言要求（必須嚴格遵守）】
 - 只使用「香港繁體中文」書面語（不得出現簡體字／內地用語）
 - 用詞清晰、正式，適合香港小學生理解
 
-1. 每道题目必须包含：
+1. 每道題目必須包含：
    - 題目內容（清晰、準確、適合小學生理解）
    - 4 個選項（A、B、C、D）
    - 正確答案（用 correctAnswer 的數字索引表示：0=A, 1=B, 2=C, 3=D）
    - 詳細解釋（用小學生能懂的語言說明為什麼這個答案正確；請不要寫「答案是A/B/C/D」這類字樣，改用「正確選項的內容」來解釋，避免選項順序調整後解釋不一致）
 
-2. 题目要求：
+2. 題目要求：
    - ${difficultyText}，適合小學生認知水平與語言習慣
    - 覆蓋不同知識點，避免重複
    - 題目表述清晰簡單，避免歧義和複雜詞彙
@@ -125,7 +125,7 @@ ${contentSection}
    - 選項順序與正確答案位置要隨機分散，避免每題都把正確答案放在同一個位置
    - 本次出題隨機碼：${nonce}（請確保與上一次不完全相同）
 
-3. 输出格式（严格按照JSON格式）：
+3. 輸出格式（嚴格按照 JSON 格式）：
 \`\`\`json
 [
   {
@@ -139,42 +139,42 @@ ${contentSection}
 \`\`\`
 
 注意：
-- correctAnswer 使用数字索引（0=A, 1=B, 2=C, 3=D）
-- 确保JSON格式正确，可以被程序解析
-- 题目内容要有教育价值，符合学习目标
+- correctAnswer 使用數字索引（0=A, 1=B, 2=C, 3=D）
+- 確保 JSON 格式正確，可以被程式解析
+- 題目內容要有教育價值，符合學習目標
 
-请立即开始生成 ${scope.questionCount} 道题目：`;
+請立即開始生成 ${scope.questionCount} 道題目：`;
   }
 
   /**
-   * 解析AI响应，提取题目数据
+   * 解析 AI 回應，提取題目資料
    */
   private static parseAIResponse(content: string, scope: StudyScope): StudyQuestion[] {
     try {
-      // 尝试提取JSON内容
+      // 嘗試提取 JSON 內容
       const jsonMatch = content.match(/```json\s*([\s\S]*?)\s*```/) ||
                        content.match(/\[[\s\S]*?\]/);
 
       if (!jsonMatch) {
-        throw new Error('无法找到有效的JSON格式题目数据');
+        throw new Error('無法找到有效的 JSON 格式題目資料');
       }
 
       const jsonContent = jsonMatch[1] || jsonMatch[0];
       const questionsData = JSON.parse(jsonContent);
 
       if (!Array.isArray(questionsData)) {
-        throw new Error('题目数据格式不正确');
+        throw new Error('題目資料格式不正確');
       }
 
-      // 转换为 StudyQuestion 格式
+      // 轉換為 StudyQuestion 格式
       const questions: StudyQuestion[] = questionsData.map((item: any, index: number) => {
-        // 验证必要字段
+        // 驗證必要欄位
         if (!item.question || !Array.isArray(item.options) || item.options.length !== 4) {
-          throw new Error(`第 ${index + 1} 道题目格式不完整`);
+          throw new Error(`第 ${index + 1} 道題目格式不完整`);
         }
 
         if (typeof item.correctAnswer !== 'number' || item.correctAnswer < 0 || item.correctAnswer > 3) {
-          throw new Error(`第 ${index + 1} 道题目的正确答案格式错误`);
+          throw new Error(`第 ${index + 1} 道題目的正確答案格式錯誤`);
         }
 
         return {
@@ -183,55 +183,55 @@ ${contentSection}
           options: item.options.map((opt: any) => String(opt || '').trim()),
           correctAnswer: Number(item.correctAnswer),
           explanation: String(item.explanation || '').trim(),
-          topic: String(item.topic || scope.topics[0] || '一般知识').trim(),
+          topic: String(item.topic || scope.topics[0] || '一般知識').trim(),
           difficulty: scope.difficulty,
           source: scope.contentSource === 'custom' ? '自定义内容' : scope.chapters.join('、'),
           generatedAt: new Date().toISOString()
         };
       });
 
-      // 强制随机化：题目顺序 + 选项顺序（修正 correctAnswer）
+      // 強制隨機化：題目順序 + 選項順序（修正 correctAnswer）
       const randomized = questions.map(shuffleQuestionOptions);
       shuffleInPlace(randomized);
 
-      // 验证生成的题目数量
+      // 驗證生成的題目數量
       if (randomized.length === 0) {
-        throw new Error('没有生成任何题目');
+        throw new Error('沒有生成任何題目');
       }
 
-      console.log(`成功解析 ${randomized.length} 道题目`);
+      console.log(`成功解析 ${randomized.length} 道題目`);
       return randomized;
 
     } catch (error) {
-      console.error('解析AI响应失败:', error);
+      console.error('解析 AI 回應失敗:', error);
 
-      // 如果解析失败，生成备用题目
+      // 如果解析失敗，生成備用題目
       return QuestionGeneratorService.generateFallbackQuestions(scope);
     }
   }
 
   /**
-   * 生成备用题目（当AI生成失败时）
+   * 生成備用題目（當 AI 生成失敗時）
    */
   private static generateFallbackQuestions(scope: StudyScope): StudyQuestion[] {
     const fallbackQuestions: StudyQuestion[] = [];
-    const questionCount = Math.min(scope.questionCount, 5); // 最多生成5道备用题目
+    const questionCount = Math.min(scope.questionCount, 5); // 最多生成 5 道備用題目
 
     for (let i = 0; i < questionCount; i++) {
-      const topic = scope.topics[i % scope.topics.length] || '基础知识';
+      const topic = scope.topics[i % scope.topics.length] || '基礎知識';
       const correctAnswer = Math.floor(Math.random() * 4);
 
       fallbackQuestions.push({
         id: generateId.question(),
-        content: `关于"${topic}"的选择题 ${i + 1}`,
+        content: `關於「${topic}」的選擇題 ${i + 1}`,
         options: [
-          '选项 A',
-          '选项 B',
-          '选项 C',
-          '选项 D'
+          '選項 A',
+          '選項 B',
+          '選項 C',
+          '選項 D'
         ],
         correctAnswer,
-        explanation: '这是一道示例题目，请重新生成题目。',
+        explanation: '這是一道示例題目，請重新生成題目。',
         topic: topic,
         difficulty: scope.difficulty,
         source: scope.contentSource === 'custom' ? '自定义内容' : scope.chapters.join('、'),
@@ -245,7 +245,7 @@ ${contentSection}
   }
 
   /**
-   * 验证生成的题目质量
+   * 驗證生成的題目品質
    */
   static validateQuestions(questions: StudyQuestion[]): { isValid: boolean; errors: string[] } {
     const errors: string[] = [];
@@ -254,23 +254,23 @@ ${contentSection}
       const questionNum = index + 1;
 
       if (!question.content || question.content.trim().length < 5) {
-        errors.push(`第 ${questionNum} 题：题目内容太短`);
+        errors.push(`第 ${questionNum} 題：題目內容太短`);
       }
 
       if (question.options.length !== 4) {
-        errors.push(`第 ${questionNum} 题：选项数量不正确（需要4个）`);
+        errors.push(`第 ${questionNum} 題：選項數量不正確（需要 4 個）`);
       }
 
       if (question.correctAnswer < 0 || question.correctAnswer > 3) {
-        errors.push(`第 ${questionNum} 题：正确答案索引无效`);
+        errors.push(`第 ${questionNum} 題：正確答案索引無效`);
       }
 
       if (question.options.some(opt => !opt || opt.trim().length === 0)) {
-        errors.push(`第 ${questionNum} 题：存在空选项`);
+        errors.push(`第 ${questionNum} 題：存在空選項`);
       }
 
       if (!question.explanation || question.explanation.trim().length < 5) {
-        errors.push(`第 ${questionNum} 题：解释内容太短`);
+        errors.push(`第 ${questionNum} 題：解釋內容太短`);
       }
     });
 
@@ -278,29 +278,29 @@ ${contentSection}
   }
 
   /**
-   * 生成题目预览（不调用AI，用于UI测试）
+   * 生成題目預覽（不調用 AI，用於 UI 測試）
    */
   static generatePreviewQuestions(scope: StudyScope): StudyQuestion[] {
     const previewQuestions: StudyQuestion[] = [];
-    const sampleTopics = scope.topics.length > 0 ? scope.topics : ['基础概念', '应用技能', '综合分析'];
+    const sampleTopics = scope.topics.length > 0 ? scope.topics : ['基礎概念', '應用技能', '綜合分析'];
 
     for (let i = 0; i < Math.min(scope.questionCount, 3); i++) {
       const topic = sampleTopics[i % sampleTopics.length];
 
       previewQuestions.push({
         id: generateId.question(),
-        content: `这是关于"${topic}"的${scope.difficulty}程度题目示例`,
+        content: `這是關於「${topic}」的${scope.difficulty}程度題目示例`,
         options: [
-          '这是选项 A',
-          '这是选项 B',
-          '这是选项 C',
-          '这是选项 D'
+          '這是選項 A',
+          '這是選項 B',
+          '這是選項 C',
+          '這是選項 D'
         ],
-        correctAnswer: i % 4, // 轮换正确答案
-        explanation: `这是第 ${i + 1} 题的解释说明，会详细说明为什么选择这个答案。`,
+        correctAnswer: i % 4, // 輪換正確答案
+        explanation: `這是第 ${i + 1} 題的解釋說明，會詳細說明為什麼選擇這個答案。`,
         topic: topic,
         difficulty: scope.difficulty,
-        source: scope.contentSource === 'custom' ? '自定义内容预览' : scope.chapters.join('、'),
+        source: scope.contentSource === 'custom' ? '自訂內容預覽' : scope.chapters.join('、'),
         generatedAt: new Date().toISOString()
       });
     }
@@ -309,5 +309,5 @@ ${contentSection}
   }
 }
 
-// 导出服务实例
+// 匯出服務實例
 export const questionGenerator = QuestionGeneratorService;
