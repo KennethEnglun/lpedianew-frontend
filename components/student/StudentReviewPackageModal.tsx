@@ -405,6 +405,7 @@ export function StudentReviewPackageModal({ open, packageId, onClose, onFinished
             rel: 0,
             iv_load_policy: 3,
             playsinline: 1,
+            showinfo: 0,
             enablejsapi: 1,
             origin: window.location.origin
           },
@@ -661,7 +662,6 @@ export function StudentReviewPackageModal({ open, packageId, onClose, onFinished
           <div className="min-w-0">
             <div className="text-2xl font-black text-brand-brown truncate">{String(pkg?.title || '温習套件')}</div>
             <div className="text-sm text-brand-brown/80 font-bold flex items-center gap-2">
-              <span>倍速：固定 1x</span>
               {locked && (
                 <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-xl border-2 border-brand-brown bg-white">
                   <Lock className="w-4 h-4" />
@@ -727,6 +727,12 @@ export function StudentReviewPackageModal({ open, packageId, onClose, onFinished
                     {isYouTube ? (
                       <div className="w-full bg-black relative" style={{ aspectRatio: '16 / 9' }}>
                         <div id={ytContainerIdRef.current || `yt-${packageId}`} className="w-full h-full" />
+                        {/* Block all interactions with YouTube UI (share/watch later/related videos overlays). */}
+                        <div
+                          className="absolute inset-0"
+                          onClick={() => showToast('請使用右側按鈕控制播放')}
+                          onContextMenu={(e) => e.preventDefault()}
+                        />
                         {!ytReady && !error && (
                           <div className="absolute inset-0 flex items-center justify-center text-white font-black">
                             載入 YouTube 播放器中...

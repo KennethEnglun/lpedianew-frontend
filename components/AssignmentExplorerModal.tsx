@@ -7,7 +7,17 @@ import NoteEditorModal from './NoteEditorModal';
 import { ScopeCardExplorerModal } from './ScopeCardExplorerModal';
 import { StudentAiNotesModal } from './StudentAiNotesModal';
 
-type ManagedTaskType = 'assignment' | 'quiz' | 'game' | 'contest' | 'ai-bot' | 'note';
+type ManagedTaskType = 'assignment' | 'quiz' | 'game' | 'contest' | 'ai-bot' | 'note' | 'review-package';
+type ManageApiTaskType = 'assignment' | 'quiz' | 'game' | 'contest' | 'ai-bot' | 'note';
+
+const isManageApiTaskType = (value: any): value is ManageApiTaskType => (
+  value === 'assignment'
+  || value === 'quiz'
+  || value === 'game'
+  || value === 'contest'
+  || value === 'ai-bot'
+  || value === 'note'
+);
 
 type Props = {
   open: boolean;
@@ -109,8 +119,16 @@ const getTaskLabel = (t: any) => {
     case 'contest': return '問答比賽';
     case 'ai-bot': return 'AI小助手任務';
     case 'note': return '筆記';
+    case 'review-package': return '温習套件';
     default: return '任務';
   }
+};
+
+const formatTime = (sec: number) => {
+  const s = Math.max(0, Math.floor(Number(sec) || 0));
+  const mm = Math.floor(s / 60);
+  const ss = s % 60;
+  return `${String(mm).padStart(2, '0')}:${String(ss).padStart(2, '0')}`;
 };
 
 const parseFolder = (task: any) => {
@@ -417,6 +435,10 @@ const AssignmentExplorerModal: React.FC<Props> = ({ open, onClose, authService, 
         const resp = await authService.getBotTaskThreads(t.id);
         setTaskDetail(resp.task || null);
         setTaskResponses(Array.isArray(resp.threads) ? resp.threads : []);
+      } else if (t.type === 'review-package') {
+        const resp = await authService.getReviewPackageResults(t.id);
+        setTaskDetail(t);
+        setTaskResponses(Array.isArray(resp?.results) ? resp.results : []);
       } else if (t.type === 'note') {
         if (String(t.status || '') && String(t.status) !== 'published') {
           const resp = await authService.getNoteDetail(t.id);
@@ -475,6 +497,7 @@ const AssignmentExplorerModal: React.FC<Props> = ({ open, onClose, authService, 
 
   const canDeleteTask = (t: any) => {
     if (!t) return false;
+    if (String(t.type) === 'review-package') return false;
     if (viewerRole === 'admin') return true;
     return String(t.teacherId || '') === String(viewerId || '');
   };
@@ -483,12 +506,13 @@ const AssignmentExplorerModal: React.FC<Props> = ({ open, onClose, authService, 
 
   const renameTask = async (t: any) => {
     if (!canDeleteTask(t)) return;
+    if (!isManageApiTaskType(String(t?.type || ''))) return;
     const current = String(t?.title || '').trim();
     const next = prompt('輸入新名稱', current);
     const title = String(next || '').trim();
     if (!title || title === current) return;
     try {
-      await authService.renameManageTaskTitle(String(t.type) as ManagedTaskType, String(t.id), title);
+      await authService.renameManageTaskTitle(String(t.type) as ManageApiTaskType, String(t.id), title);
       setSelectedTask((prev) => (prev && String(prev.id) === String(t.id) && String(prev.type) === String(t.type) ? { ...prev, title } : prev));
       await load({ keepSelection: true });
     } catch (e: any) {
@@ -612,10 +636,11 @@ const AssignmentExplorerModal: React.FC<Props> = ({ open, onClose, authService, 
 
   const archiveTask = async (t: any, archived: boolean) => {
     if (!canArchive) return;
+    if (!isManageApiTaskType(String(t?.type || ''))) return;
     const label = getTaskLabel(t);
     if (!window.confirm(archived ? `確定要復原此${label}嗎？` : `確定要封存此${label}嗎？（學生將不再看到，但資料會保留）`)) return;
     try {
-      const type = String(t.type) as ManagedTaskType;
+      const type = String(t.type) as ManageApiTaskType;
       if (archived) await authService.restoreManageTask(type, String(t.id));
       else await authService.archiveManageTask(type, String(t.id));
       await load({ keepSelection: true });
@@ -716,20 +741,22 @@ const AssignmentExplorerModal: React.FC<Props> = ({ open, onClose, authService, 
                     {String(selectedTask.createdAt || '')}
                   </div>
                 </div>
-                <div className="flex items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={() => void copyTaskToTeacherFolder(selectedTask)}
-                    className="px-4 py-2 rounded-2xl border-4 border-brand-brown bg-white text-brand-brown font-black shadow-comic hover:bg-gray-50 flex items-center gap-2"
-                    title="複製到教師資料夾（模板），可日後再派送"
-                  >
-                    <FolderInput className="w-4 h-4" />
-                    複製到資料夾
-                  </button>
-                  {canDeleteTask(selectedTask) && (
-                    <button
-                      type="button"
-                      onClick={() => void renameTask(selectedTask)}
+	                <div className="flex items-center gap-2">
+	                  {String(selectedTask.type) !== 'review-package' && (
+	                    <button
+	                      type="button"
+	                      onClick={() => void copyTaskToTeacherFolder(selectedTask)}
+	                      className="px-4 py-2 rounded-2xl border-4 border-brand-brown bg-white text-brand-brown font-black shadow-comic hover:bg-gray-50 flex items-center gap-2"
+	                      title="複製到教師資料夾（模板），可日後再派送"
+	                    >
+	                      <FolderInput className="w-4 h-4" />
+	                      複製到資料夾
+	                    </button>
+	                  )}
+	                  {canDeleteTask(selectedTask) && (
+	                    <button
+	                      type="button"
+	                      onClick={() => void renameTask(selectedTask)}
                       className="px-4 py-2 rounded-2xl border-4 border-brand-brown bg-white text-brand-brown font-black shadow-comic hover:bg-gray-50 flex items-center gap-2"
                       title="改名（只限派發老師或管理員）"
                     >
@@ -760,16 +787,65 @@ const AssignmentExplorerModal: React.FC<Props> = ({ open, onClose, authService, 
                 </div>
               </div>
 
-              <div className="mt-4 border-t-2 border-gray-200 pt-4">
-                <div className="text-lg font-black text-brand-brown mb-2">教師內容 / 題目</div>
-                {selectedTask.type === 'assignment' && (
-                  <div className="bg-[#FEF7EC] border-2 border-gray-200 rounded-2xl p-4">
-                    {renderContentBlocks(taskDetail?.content)}
-                  </div>
-                )}
-
-	                {selectedTask.type === 'quiz' && (
+	              <div className="mt-4 border-t-2 border-gray-200 pt-4">
+	                <div className="text-lg font-black text-brand-brown mb-2">教師內容 / 題目</div>
+	                {selectedTask.type === 'assignment' && (
+	                  <div className="bg-[#FEF7EC] border-2 border-gray-200 rounded-2xl p-4">
+	                    {renderContentBlocks(taskDetail?.content)}
+	                  </div>
+	                )}
+	
+	                {selectedTask.type === 'review-package' && (
 	                  <div className="bg-[#FEF7EC] border-2 border-gray-200 rounded-2xl p-4 space-y-3">
+	                    <div className="text-sm font-black text-brand-brown">
+	                      影片：<span className="text-gray-800 font-bold break-all">{String((taskDetail as any)?.videoUrl || selectedTask?.videoUrl || '')}</span>
+	                    </div>
+	                    <div className="text-sm font-bold text-gray-700">
+	                      題目數：{Array.isArray((taskDetail as any)?.checkpoints) ? (taskDetail as any).checkpoints.length : (Array.isArray(selectedTask?.checkpoints) ? selectedTask.checkpoints.length : 0)}
+	                    </div>
+	                    {Array.isArray((taskDetail as any)?.checkpoints) && (taskDetail as any).checkpoints.length > 0 && (
+	                      <div className="space-y-2">
+	                        {(taskDetail as any).checkpoints
+	                          .slice()
+	                          .sort((a: any, b: any) => (Number(a?.timestampSec) || 0) - (Number(b?.timestampSec) || 0))
+	                          .slice(0, 20)
+	                          .map((c: any, i: number) => (
+	                            <div key={String(c?.id || i)} className="p-3 rounded-2xl border-2 border-gray-200 bg-white">
+	                              <div className="text-xs font-black text-brand-brown">
+	                                {i + 1}. {formatTime(Number(c?.timestampSec) || 0)} {c?.required === false ? '（選答）' : '（必答）'} ・ 分數 {Number(c?.points) || 0}
+	                              </div>
+	                              <div className="text-sm font-bold text-gray-800 whitespace-pre-wrap">{String(c?.questionText || '')}</div>
+	                              {Array.isArray(c?.options) && c.options.length > 0 && (
+	                                <div className="mt-2 grid grid-cols-1 md:grid-cols-2 gap-2">
+	                                  {c.options.map((opt: any, oi: number) => {
+	                                    const correct = Number.isInteger(Number(c?.correctIndex)) ? Number(c.correctIndex) : -1;
+	                                    const isCorrect = oi === correct;
+	                                    return (
+	                                      <div
+	                                        key={oi}
+	                                        className={[
+	                                          'p-2 rounded-xl border-2 font-bold text-gray-800',
+	                                          isCorrect ? 'border-green-700 bg-green-50' : 'border-gray-200 bg-gray-50'
+	                                        ].join(' ')}
+	                                      >
+	                                        {indexToLetter(oi)}. {String(opt)}
+	                                      </div>
+	                                    );
+	                                  })}
+	                                </div>
+	                              )}
+	                            </div>
+	                          ))}
+	                        {(taskDetail as any).checkpoints.length > 20 && (
+	                          <div className="text-xs text-gray-600 font-bold">（只顯示前 20 題）</div>
+	                        )}
+	                      </div>
+	                    )}
+	                  </div>
+	                )}
+
+		                {selectedTask.type === 'quiz' && (
+		                  <div className="bg-[#FEF7EC] border-2 border-gray-200 rounded-2xl p-4 space-y-3">
 	                    {quizQuestions.length === 0 ? (
 	                      <div className="text-gray-500 font-bold">（未有題目資料）</div>
 	                    ) : (
@@ -896,18 +972,25 @@ const AssignmentExplorerModal: React.FC<Props> = ({ open, onClose, authService, 
                     {taskResponses.map((r: any, idx: number) => {
                       const name = r.studentName || r.studentUsername || '學生';
                       const cls = r.studentClass || r.className || '';
-                      const meta = (() => {
-                        if (selectedTask.type === 'quiz' || selectedTask.type === 'contest') {
-                          const score = r.score !== undefined && r.score !== null ? `${Math.round(Number(r.score))}%` : '';
-                          const at = r.submittedAt || r.startedAt || r.createdAt || '';
-                          return [score, at].filter(Boolean).join(' ・ ');
-                        }
-                        if (selectedTask.type === 'game') {
-                          const score = r.score !== undefined && r.score !== null ? `${Math.round(Number(r.score))}%` : '';
-                          const at = r.completedAt || r.playedAt || '';
-                          return [score, at].filter(Boolean).join(' ・ ');
-                        }
-                        if (selectedTask.type === 'ai-bot') {
+	                      const meta = (() => {
+	                        if (selectedTask.type === 'quiz' || selectedTask.type === 'contest') {
+	                          const score = r.score !== undefined && r.score !== null ? `${Math.round(Number(r.score))}%` : '';
+	                          const at = r.submittedAt || r.startedAt || r.createdAt || '';
+	                          return [score, at].filter(Boolean).join(' ・ ');
+	                        }
+                          if (selectedTask.type === 'review-package') {
+                            const completed = r.completed ? '已提交' : '未提交';
+                            const score = r.score !== undefined && r.score !== null ? `${Math.round(Number(r.score))}%` : '';
+                            const max = r.maxReachedSec !== undefined && r.maxReachedSec !== null ? `解鎖至 ${formatTime(Number(r.maxReachedSec) || 0)}` : '';
+                            const at = r.completedAt || r.updatedAt || '';
+                            return [completed, score, max, at].filter(Boolean).join(' ・ ');
+                          }
+	                        if (selectedTask.type === 'game') {
+	                          const score = r.score !== undefined && r.score !== null ? `${Math.round(Number(r.score))}%` : '';
+	                          const at = r.completedAt || r.playedAt || '';
+	                          return [score, at].filter(Boolean).join(' ・ ');
+	                        }
+	                        if (selectedTask.type === 'ai-bot') {
                           const done = r.completed ? '已完成' : '未完成';
                           const at = r.lastMessageAt || '';
                           return [done, at].filter(Boolean).join(' ・ ');
@@ -917,8 +1000,8 @@ const AssignmentExplorerModal: React.FC<Props> = ({ open, onClose, authService, 
                           const at = r.submittedAt || r.updatedAt || '';
                           return [status, at].filter(Boolean).join(' ・ ');
                         }
-                        return r.createdAt || '';
-                      })();
+	                        return r.createdAt || '';
+	                      })();
                       const canOpenBotChat = selectedTask.type === 'ai-bot' && !!r.threadId;
 
                       return (
@@ -943,11 +1026,19 @@ const AssignmentExplorerModal: React.FC<Props> = ({ open, onClose, authService, 
                             <div className="font-black text-brand-brown">{name}{cls ? `（${cls}）` : ''}</div>
                             <div className="text-xs text-gray-600 font-bold">{meta}</div>
                           </div>
-                          {selectedTask.type === 'assignment' && typeof r.content === 'string' && (
-                            <div className="mt-2 text-sm text-gray-800 whitespace-pre-wrap break-words">
-                              {r.content}
-                            </div>
-                          )}
+	                          {selectedTask.type === 'assignment' && typeof r.content === 'string' && (
+	                            <div className="mt-2 text-sm text-gray-800 whitespace-pre-wrap break-words">
+	                              {r.content}
+	                            </div>
+	                          )}
+
+                            {selectedTask.type === 'review-package' && (
+                              <div className="mt-2 text-sm font-bold text-gray-700 flex flex-wrap gap-3">
+                                <span>結尾：{r.watchedToEnd ? '已看完' : '未看完'}</span>
+                                <span>必答：{r.completed ? '已提交' : '未提交'}</span>
+                                {r.completed && (r.score !== undefined && r.score !== null) && <span>分數：{Math.round(Number(r.score))}%</span>}
+                              </div>
+                            )}
 
 	                          {selectedTask.type === 'quiz' && Array.isArray(r.answers) && (
 	                            <div className="mt-3">
