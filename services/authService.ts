@@ -1012,6 +1012,14 @@ class AuthService {
     return this.handleResponse(response);
   }
 
+  async deleteArchivedClassFolderPermanently(className: string, folderId: string): Promise<{ result: { deleted: string[]; deletedCount: number } }> {
+    const response = await fetch(`${this.API_BASE}/class-folders/${encodeURIComponent(className)}/${encodeURIComponent(folderId)}/hard`, {
+      method: 'DELETE',
+      headers: this.getAuthHeaders()
+    });
+    return this.handleResponse(response);
+  }
+
   // 年度封存（升班）：管理員專用
   async archiveYearEnd(): Promise<{ message: string; archiveId: string; archivedAt: string; files: Array<{ file: string; existed: boolean; count: number }> }> {
     const response = await fetch(`${this.API_BASE}/admin/year-end/archive`, {

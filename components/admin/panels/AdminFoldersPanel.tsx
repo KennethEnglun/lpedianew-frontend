@@ -1,5 +1,5 @@
 import React from 'react';
-import { ArchiveRestore, Eye } from 'lucide-react';
+import { ArchiveRestore, Eye, Trash2 } from 'lucide-react';
 import Button from '../../Button';
 
 export default function AdminFoldersPanel(props: {
@@ -13,8 +13,9 @@ export default function AdminFoldersPanel(props: {
   getFolderPath: (folderId: string) => string;
   onView: (folder: any) => void;
   onRestore: (folder: any) => void;
+  onHardDelete?: (folder: any) => void;
 }) {
-  const { folderClassName, classOptions, folderLoading, folderError, archivedFolders, onClassChange, onLoad, getFolderPath, onView, onRestore } = props;
+  const { folderClassName, classOptions, folderLoading, folderError, archivedFolders, onClassChange, onLoad, getFolderPath, onView, onRestore, onHardDelete } = props;
 
   return (
     <div className="bg-white border border-gray-200 rounded-2xl p-5 shadow-sm">
@@ -92,6 +93,16 @@ export default function AdminFoldersPanel(props: {
                       <ArchiveRestore className="w-4 h-4" />
                       復原
                     </Button>
+                    {onHardDelete && (
+                      <Button
+                        className="bg-[#F8B5B5] hover:bg-[#F29E9E] flex items-center gap-2 text-[#5C2A2A]"
+                        onClick={() => onHardDelete(f)}
+                        disabled={folderLoading}
+                      >
+                        <Trash2 className="w-4 h-4" />
+                        永久刪除
+                      </Button>
+                    )}
                   </div>
                 </div>
               );
@@ -101,4 +112,3 @@ export default function AdminFoldersPanel(props: {
     </div>
   );
 }
-

@@ -685,6 +685,31 @@ const AdminDashboard: React.FC = () => {
     }
   }, [folderClassName, loadClassFolders]);
 
+  const hardDeleteArchivedFolder = useCallback(async (folder: any) => {
+    const cls = String(folder?.className || folderClassName || '').trim();
+    if (!cls) return;
+    const folderName = String(folder?.name || '').trim();
+    const ok = window.confirm(
+      `確定要永久刪除此封存資料夾${folderName ? `「${folderName}」` : ''}及其子層嗎？\n此操作不可復原。`
+    );
+    if (!ok) return;
+
+    try {
+      setFolderError('');
+      setFolderLoading(true);
+      await authService.deleteArchivedClassFolderPermanently(cls, String(folder.id));
+      if (String(folderDetailFolder?.id || '') === String(folder?.id || '')) {
+        setFolderDetailOpen(false);
+        setFolderDetailFolder(null);
+      }
+      await loadClassFolders(cls);
+    } catch (e: any) {
+      setFolderError(e?.message || '永久刪除失敗');
+    } finally {
+      setFolderLoading(false);
+    }
+  }, [folderClassName, folderDetailFolder?.id, loadClassFolders]);
+
   const sidebarItems: SidebarItem[] = useMemo(() => ([
     { key: 'users', label: '帳號管理', icon: <Users className="w-5 h-5" /> },
     { key: 'assignments', label: '作業管理', icon: <ClipboardList className="w-5 h-5" /> },
@@ -773,6 +798,7 @@ const AdminDashboard: React.FC = () => {
             getFolderPath={getFolderPath}
             onView={(folder) => void openArchivedFolderDetail(folder)}
             onRestore={(folder) => void restoreArchivedFolder(folder)}
+            onHardDelete={(folder) => void hardDeleteArchivedFolder(folder)}
           />
         )}
 
@@ -848,6 +874,27 @@ const AdminDashboard: React.FC = () => {
             await loadClassFolders(cls);
           } catch (e: any) {
             setFolderDetailTasksError(e?.message || '復原失敗');
+          } finally {
+            setFolderLoading(false);
+          }
+        }}
+        onHardDeleteFolder={async (folderId) => {
+          const cls = String(folderDetailFolder?.className || folderClassName || '').trim();
+          if (!cls) return;
+          const folderName = String(folderDetailFolder?.name || '').trim();
+          const ok = window.confirm(
+            `確定要永久刪除此封存資料夾${folderName ? `「${folderName}」` : ''}及其子層嗎？\n此操作不可復原。`
+          );
+          if (!ok) return;
+          try {
+            setFolderDetailTasksError('');
+            setFolderLoading(true);
+            await authService.deleteArchivedClassFolderPermanently(cls, String(folderId));
+            setFolderDetailOpen(false);
+            setFolderDetailFolder(null);
+            await loadClassFolders(cls);
+          } catch (e: any) {
+            setFolderDetailTasksError(e?.message || '永久刪除失敗');
           } finally {
             setFolderLoading(false);
           }

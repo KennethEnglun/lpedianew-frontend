@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { X, Folder, FileText, ArchiveRestore } from 'lucide-react';
+import { X, Folder, FileText, ArchiveRestore, Trash2 } from 'lucide-react';
 import Button from './Button';
 
 type FolderItem = {
@@ -51,8 +51,9 @@ export default function ArchivedFolderDetailsModal(props: {
   tasksLoading?: boolean;
   tasksError?: string;
   onRestoreFolder?: (folderId: string) => Promise<void> | void;
+  onHardDeleteFolder?: (folderId: string) => Promise<void> | void;
 }) {
-  const { open, onClose, className, folder, folders, tasks, tasksLoading, tasksError, onRestoreFolder } = props;
+  const { open, onClose, className, folder, folders, tasks, tasksLoading, tasksError, onRestoreFolder, onHardDeleteFolder } = props;
   const [search, setSearch] = useState('');
 
   const folderById = useMemo(() => {
@@ -196,6 +197,15 @@ export default function ArchivedFolderDetailsModal(props: {
                 >
                   <ArchiveRestore className="w-4 h-4" />
                   復原此資料夾
+                </Button>
+              )}
+              {onHardDeleteFolder && folder?.id && (
+                <Button
+                  className="bg-[#F8B5B5] hover:bg-[#F29E9E] flex items-center gap-2 text-[#5C2A2A]"
+                  onClick={() => void onHardDeleteFolder(String(folder.id))}
+                >
+                  <Trash2 className="w-4 h-4" />
+                  永久刪除
                 </Button>
               )}
             </div>
