@@ -12,6 +12,7 @@ import { ChartGeneratorModal } from '../components/ChartGeneratorModal';
 import ClassFolderManagerModal from '../components/ClassFolderManagerModal';
 import TemplateLibraryModal from '../components/TemplateLibraryModal';
 import CreateTaskModal from '../components/CreateTaskModal';
+import ReviewPackageDraftEditorModal from '../components/ReviewPackageDraftEditorModal';
 import DraftLibraryModal from '../components/DraftLibraryModal';
 import DraftSavePublishWizardModal from '../components/DraftSavePublishWizardModal';
 import ClassFolderSelectInline from '../components/ClassFolderSelectInline';
@@ -142,8 +143,10 @@ const TeacherDashboard: React.FC = () => {
   // 作業管理相關狀態
 	  const [showAssignmentModal, setShowAssignmentModal] = useState(false);
 	  const [showClassFolderManager, setShowClassFolderManager] = useState(false);
-	  const [showTemplateLibrary, setShowTemplateLibrary] = useState(false);
+    const [showTemplateLibrary, setShowTemplateLibrary] = useState(false);
     const [showCreateTaskModal, setShowCreateTaskModal] = useState(false);
+    const [showReviewPackageDraftModal, setShowReviewPackageDraftModal] = useState(false);
+    const [reviewPackageDraftId, setReviewPackageDraftId] = useState('');
     const [showDraftLibraryModal, setShowDraftLibraryModal] = useState(false);
     const [activeDraftId, setActiveDraftId] = useState('');
     const [activeDraftToolType, setActiveDraftToolType] = useState<string>('');
@@ -615,12 +618,13 @@ const TeacherDashboard: React.FC = () => {
       setLoading(true);
 
       // 並行載入自己的作業、小測驗、遊戲和問答比賽
-      const [assignmentData, quizData, gameData, botTaskData, contestData] = await Promise.all([
+      const [assignmentData, quizData, gameData, botTaskData, contestData, reviewPackageData] = await Promise.all([
         authService.getTeacherAssignments(filterSubject || undefined, filterClass || undefined),
         authService.getTeacherQuizzes(filterSubject || undefined, filterClass || undefined),
         authService.getTeacherGames(filterSubject || undefined, filterClass || undefined),
         authService.getTeacherBotTasks(filterSubject || undefined, filterClass || undefined),
-        authService.getTeacherContests(filterSubject || undefined, filterClass || undefined)
+        authService.getTeacherContests(filterSubject || undefined, filterClass || undefined),
+        authService.getTeacherReviewPackages(filterSubject || undefined, filterClass || undefined)
       ]);
 
       const mine = [
@@ -638,6 +642,13 @@ const TeacherDashboard: React.FC = () => {
         ...(contestData.contests || []).map((item: any) => ({
           ...item,
           type: 'contest',
+          responseCount: item.totalAttempts ?? 0,
+          uniqueStudents: item.uniqueParticipants ?? 0,
+          averageScore: item.averageScore ?? 0
+        })),
+        ...(reviewPackageData.packages || []).map((item: any) => ({
+          ...item,
+          type: 'review-package',
           responseCount: item.totalAttempts ?? 0,
           uniqueStudents: item.uniqueParticipants ?? 0,
           averageScore: item.averageScore ?? 0
@@ -1079,7 +1090,17 @@ const TeacherDashboard: React.FC = () => {
 
   // 刪除整個作業或小測驗
   const handleDeleteAssignment = async (assignment: any) => {
-    const itemType = assignment.type === 'quiz' ? '小測驗' : assignment.type === 'game' ? '遊戲' : assignment.type === 'ai-bot' ? 'AI小助手任務' : assignment.type === 'contest' ? '問答比賽' : '作業';
+    const itemType = assignment.type === 'quiz'
+      ? '小測驗'
+      : assignment.type === 'game'
+        ? '遊戲'
+        : assignment.type === 'ai-bot'
+          ? 'AI小助手任務'
+          : assignment.type === 'contest'
+            ? '問答比賽'
+            : assignment.type === 'review-package'
+              ? '温習套件'
+              : '作業';
     if (!confirm(`確定要刪除整個${itemType}及其所有回應嗎？此操作無法復原！`)) return;
 
     try {
@@ -7152,6 +7173,12 @@ const TeacherDashboard: React.FC = () => {
             setShowNoteDraftModal(true);
             return;
           }
+          if (toolType === 'review-package') {
+            setShowDraftLibraryModal(false);
+            setReviewPackageDraftId(id);
+            setShowReviewPackageDraftModal(true);
+            return;
+          }
           alert('此草稿工具尚未支援開啟。');
         }}
       />
@@ -7185,8 +7212,24 @@ const TeacherDashboard: React.FC = () => {
               resetContestEditor();
               return setShowContestModal(true);
             }
+            if (tool === 'reviewPackage') {
+              setReviewPackageDraftId('');
+              return setShowReviewPackageDraftModal(true);
+            }
 	        }}
 	      />
+
+      <ReviewPackageDraftEditorModal
+        open={showReviewPackageDraftModal}
+        draftId={reviewPackageDraftId || null}
+        onClose={() => { setShowReviewPackageDraftModal(false); setReviewPackageDraftId(''); }}
+        availableSubjects={availableSubjects.length ? availableSubjects : VISIBLE_SUBJECTS}
+        availableGrades={teacherGradeOptions}
+        availableClasses={availableClasses}
+        onPublished={() => {
+          void loadAssignments();
+        }}
+      />
 
       <DraftSavePublishWizardModal
         open={discussionWizardOpen}

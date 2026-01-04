@@ -16,6 +16,7 @@ import { StudyAnalyticsModal } from '../components/student/StudyAnalyticsModal';
 import { QuizContestModal } from '../components/QuizContestModal';
 import { StudentQuizModal } from '../components/student/StudentQuizModal';
 import { StudentDiscussionModal } from '../components/student/StudentDiscussionModal';
+import { StudentReviewPackageModal } from '../components/student/StudentReviewPackageModal';
 import NoteEditorModal from '../components/NoteEditorModal';
 import { AiNotesModal } from '../components/student/AiNotesModal';
 import { ChartGeneratorModal } from '../components/ChartGeneratorModal';
@@ -62,6 +63,8 @@ const StudentDashboard: React.FC = () => {
   const [selectedNoteId, setSelectedNoteId] = useState<string | null>(null);
   const [showGameModal, setShowGameModal] = useState(false);
   const [selectedGameId, setSelectedGameId] = useState<string | null>(null);
+  const [showReviewPackageModal, setShowReviewPackageModal] = useState(false);
+  const [selectedReviewPackageId, setSelectedReviewPackageId] = useState<string | null>(null);
 
   // 圖片生成點數（獨立於獎勵積分）
   const loadImagePointsFromStorage = () => {
@@ -491,14 +494,16 @@ const StudentDashboard: React.FC = () => {
         gameResponse,
         botTaskResponse,
         contestResponse,
-        noteResponse
+        noteResponse,
+        reviewPackageResponse
       ] = await Promise.all([
         authService.getStudentDiscussions().catch(() => ({ discussions: [] })),
         authService.getStudentQuizzes().catch(() => ({ quizzes: [], total: 0 })),
         authService.getStudentGames().catch(() => ({ games: [] })),
         authService.getStudentBotTasks().catch(() => ({ tasks: [], total: 0 })),
         authService.getStudentContests().catch(() => ({ contests: [], total: 0 })),
-        authService.getStudentNotes().catch(() => ({ notes: [], total: 0 }))
+        authService.getStudentNotes().catch(() => ({ notes: [], total: 0 })),
+        authService.getStudentReviewPackages().catch(() => ({ packages: [], total: 0 }))
       ]);
 
       const discussionTasks: Task[] = (discussionResponse.discussions || []).map((d: any) => ({
@@ -590,7 +595,21 @@ const StudentDashboard: React.FC = () => {
         ...(n.needsRevision ? { needsRevision: true } : {})
       }));
 
-      const allTasks: Task[] = [...discussionTasks, ...quizTasks, ...gameTasks, ...botTasks, ...contestTasks, ...noteTasks];
+      const reviewPackageTasks: Task[] = (reviewPackageResponse.packages || []).map((p: any) => ({
+        id: String(p.id),
+        title: String(p.title || '温習套件'),
+        type: 'review-package',
+        subject: coerceSubject(p.subject),
+        teacherName: p.teacherName || '教師',
+        teacherAvatar: '/teacher_login.png',
+        createdAt: p.createdAt || p.updatedAt || p.assignedAt,
+        folderId: p.classFolderId || p.folderSnapshot?.folderId || null,
+        folderSnapshot: p.folderSnapshot || null,
+        completed: !!p.completed,
+        score: typeof p.score === 'number' ? p.score : null
+      }));
+
+      const allTasks: Task[] = [...discussionTasks, ...quizTasks, ...gameTasks, ...botTasks, ...contestTasks, ...noteTasks, ...reviewPackageTasks];
       allTasks.sort((a, b) => new Date(String(b.createdAt || 0)).getTime() - new Date(String(a.createdAt || 0)).getTime());
       setTasks(allTasks);
 
@@ -1253,6 +1272,7 @@ const StudentDashboard: React.FC = () => {
                                         : task.type === 'discussion' ? '討論串'
                                           : task.type === 'note' ? '筆記'
                                             : task.type === 'game' ? '遊戲'
+                                              : task.type === 'review-package' ? '温習套件'
                                               : task.type;
 
                                 const pathNames = Array.isArray(task.folderSnapshot?.path)
@@ -1308,6 +1328,9 @@ const StudentDashboard: React.FC = () => {
                                             } else if (task.type === 'note') {
                                               setSelectedNoteId(String(task.id));
                                               setShowNoteModal(true);
+                                            } else if (task.type === 'review-package') {
+                                              setSelectedReviewPackageId(String(task.id));
+                                              setShowReviewPackageModal(true);
                                             } else {
                                               window.alert('此任務類型暫未支援於學生端開啟');
                                             }
@@ -1621,6 +1644,16 @@ const StudentDashboard: React.FC = () => {
         open={showGameModal}
         gameId={selectedGameId}
         onClose={() => { setShowGameModal(false); setSelectedGameId(null); }}
+        onFinished={() => {
+          void loadStudentTasks();
+          void loadRewardsPoints();
+        }}
+      />
+
+      <StudentReviewPackageModal
+        open={showReviewPackageModal}
+        packageId={selectedReviewPackageId}
+        onClose={() => { setShowReviewPackageModal(false); setSelectedReviewPackageId(null); }}
         onFinished={() => {
           void loadStudentTasks();
           void loadRewardsPoints();

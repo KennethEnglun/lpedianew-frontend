@@ -1,10 +1,10 @@
 import React, { useEffect } from 'react';
-import { Calculator, FileText, Gamepad2, HelpCircle, MessageSquare, Trophy, X } from 'lucide-react';
+import { Calculator, FileText, Gamepad2, HelpCircle, MessageSquare, Trophy, Video, X } from 'lucide-react';
 
 type Props = {
   open: boolean;
   onClose: () => void;
-  onSelectTool: (tool: 'discussion' | 'note' | 'quiz' | 'mathQuiz' | 'game' | 'contest') => void;
+  onSelectTool: (tool: 'discussion' | 'note' | 'quiz' | 'mathQuiz' | 'game' | 'contest' | 'reviewPackage') => void;
 };
 
 const CreateTaskModal: React.FC<Props> = ({ open, onClose, onSelectTool }) => {
@@ -120,6 +120,21 @@ const CreateTaskModal: React.FC<Props> = ({ open, onClose, onSelectTool }) => {
                 <div className="text-xl font-black text-brand-brown">問答比賽</div>
               </div>
               <div className="mt-2 text-sm font-bold text-brand-brown/80">限時 / 排名 / 多題目</div>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => {
+                onSelectTool('reviewPackage');
+                onClose();
+              }}
+              className="p-5 rounded-3xl border-4 border-brand-brown bg-[#D2EFFF] hover:bg-[#BCE0FF] text-left shadow-comic"
+            >
+              <div className="flex items-center gap-3">
+                <Video className="w-7 h-7 text-brand-brown" />
+                <div className="text-xl font-black text-brand-brown">温習套件</div>
+              </div>
+              <div className="mt-2 text-sm font-bold text-brand-brown/80">不可快進 / 固定 1x / 到點必答 MCQ</div>
             </button>
           </div>
         </div>

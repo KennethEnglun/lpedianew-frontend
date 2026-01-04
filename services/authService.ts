@@ -1738,6 +1738,24 @@ class AuthService {
     return this.handleResponse(response);
   }
 
+  async getTeacherReviewPackages(subject?: string, targetClass?: string): Promise<{ packages: any[]; total: number }> {
+    const params = new URLSearchParams();
+    if (subject) params.append('subject', subject);
+    if (targetClass) params.append('targetClass', targetClass);
+    const query = params.toString() ? `?${params.toString()}` : '';
+    const response = await fetch(`${this.API_BASE}/review-packages/teacher${query}`, {
+      headers: this.getAuthHeaders()
+    });
+    return this.handleResponse(response);
+  }
+
+  async getReviewPackageResults(packageId: string): Promise<any> {
+    const response = await fetch(`${this.API_BASE}/review-packages/${encodeURIComponent(packageId)}/results`, {
+      headers: this.getAuthHeaders()
+    });
+    return this.handleResponse(response);
+  }
+
   async getSharedContests(params: {
     subject: string;
     grade: string;
@@ -1758,6 +1776,39 @@ class AuthService {
   async getStudentContests(): Promise<{ contests: any[]; total: number }> {
     const response = await fetch(`${this.API_BASE}/contests/student`, {
       headers: this.getAuthHeaders()
+    });
+    return this.handleResponse(response);
+  }
+
+  // === 温習套件（review-packages）===
+  async getStudentReviewPackages(): Promise<{ packages: any[]; total: number }> {
+    const response = await fetch(`${this.API_BASE}/review-packages/student`, {
+      headers: this.getAuthHeaders()
+    });
+    return this.handleResponse(response);
+  }
+
+  async getReviewPackageForStudent(packageId: string): Promise<{ package: any; attempt: any | null }> {
+    const response = await fetch(`${this.API_BASE}/review-packages/${encodeURIComponent(packageId)}/take`, {
+      headers: this.getAuthHeaders()
+    });
+    return this.handleResponse(response);
+  }
+
+  async reportReviewPackageProgress(packageId: string, payload: { maxReachedSec: number; lastPositionSec: number; ended?: boolean }): Promise<{ attempt: any }> {
+    const response = await fetch(`${this.API_BASE}/review-packages/${encodeURIComponent(packageId)}/progress`, {
+      method: 'POST',
+      headers: this.getAuthHeaders(),
+      body: JSON.stringify(payload)
+    });
+    return this.handleResponse(response);
+  }
+
+  async submitReviewPackageCheckpoint(packageId: string, checkpointId: string, selectedIndex: number): Promise<any> {
+    const response = await fetch(`${this.API_BASE}/review-packages/${encodeURIComponent(packageId)}/checkpoints/${encodeURIComponent(checkpointId)}/submit`, {
+      method: 'POST',
+      headers: this.getAuthHeaders(),
+      body: JSON.stringify({ selectedIndex })
     });
     return this.handleResponse(response);
   }
