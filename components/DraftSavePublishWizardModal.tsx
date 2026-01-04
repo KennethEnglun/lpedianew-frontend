@@ -225,7 +225,7 @@ const DraftSavePublishWizardModal: React.FC<Props> = ({
   const folderActionsDisabled = folderEditing || publishing || loadingClassFolders;
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 z-[90] flex items-center justify-center p-4">
+    <div className="fixed inset-0 bg-black bg-opacity-50 z-[140] flex items-center justify-center p-4">
       <div className="bg-white border-4 border-brand-brown rounded-3xl w-full max-w-3xl max-h-[90vh] overflow-y-auto shadow-comic">
         <div className="p-6 border-b-4 border-brand-brown bg-[#C0E2BE] flex items-center justify-between">
           <div>
