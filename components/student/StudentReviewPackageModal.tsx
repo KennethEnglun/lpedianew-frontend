@@ -64,6 +64,9 @@ export function StudentReviewPackageModal({ open, packageId, onClose, onFinished
   const seekingGuardRef = useRef(false);
   const maxReachedRef = useRef(0);
   const lockedRef = useRef(false);
+  const attemptRef = useRef<any | null>(null);
+  const checkpointsRef = useRef<Checkpoint[]>([]);
+  const activeCheckpointIdRef = useRef<string | null>(null);
   const lastReportRef = useRef<{ max: number; pos: number; at: number }>({ max: 0, pos: 0, at: 0 });
   const diagnosedRef = useRef(false);
 
@@ -81,8 +84,11 @@ export function StudentReviewPackageModal({ open, packageId, onClose, onFinished
   const [locked, setLocked] = useState(false);
 
   const [activeCheckpointId, setActiveCheckpointId] = useState<string | null>(null);
+  const [editingCheckpointId, setEditingCheckpointId] = useState<string | null>(null);
   const [selectedIndex, setSelectedIndex] = useState<number>(-1);
   const [submitting, setSubmitting] = useState(false);
+  const [finalSubmitting, setFinalSubmitting] = useState(false);
+  const [report, setReport] = useState<any | null>(null);
 
   const videoProvider = String(pkg?.videoProvider || 'youtube');
   const youtubeVideoId = String(pkg?.youtubeVideoId || '').trim() || parseYouTubeVideoId(String(pkg?.videoUrl || ''));
@@ -95,6 +101,10 @@ export function StudentReviewPackageModal({ open, packageId, onClose, onFinished
   useEffect(() => {
     lockedRef.current = locked;
   }, [locked]);
+
+  useEffect(() => {
+    attemptRef.current = attempt;
+  }, [attempt]);
 
   const checkpoints: Checkpoint[] = useMemo(() => {
     const cps = Array.isArray(pkg?.checkpoints) ? pkg.checkpoints : [];
@@ -112,9 +122,29 @@ export function StudentReviewPackageModal({ open, packageId, onClose, onFinished
       .sort((a, b) => a.timestampSec - b.timestampSec);
   }, [pkg]);
 
+  useEffect(() => {
+    checkpointsRef.current = checkpoints;
+  }, [checkpoints]);
+
+  useEffect(() => {
+    activeCheckpointIdRef.current = activeCheckpointId;
+  }, [activeCheckpointId]);
+
   const answeredIds = useMemo(() => {
     const answers = Array.isArray(attempt?.answers) ? attempt.answers : [];
     return new Set(answers.map((a: any) => String(a?.checkpointId || '')).filter(Boolean));
+  }, [attempt]);
+
+  const selectedByCheckpointId = useMemo(() => {
+    const answers = Array.isArray(attempt?.answers) ? attempt.answers : [];
+    const map = new Map<string, number>();
+    for (const a of answers) {
+      const id = String(a?.checkpointId || '');
+      if (!id) continue;
+      const sel = Number.isInteger(Number(a?.selectedIndex)) ? Number(a.selectedIndex) : -1;
+      map.set(id, sel);
+    }
+    return map;
   }, [attempt]);
 
   const requiredCheckpointIds = useMemo(() => checkpoints.filter((c) => c.required).map((c) => c.id), [checkpoints]);
@@ -266,8 +296,11 @@ export function StudentReviewPackageModal({ open, packageId, onClose, onFinished
     setMaxReached(0);
     setLocked(false);
     setActiveCheckpointId(null);
+    setEditingCheckpointId(null);
     setSelectedIndex(-1);
     setSubmitting(false);
+    setFinalSubmitting(false);
+    setReport(null);
     diagnosedRef.current = false;
     ytContainerIdRef.current = '';
     destroyYouTube();
@@ -278,6 +311,7 @@ export function StudentReviewPackageModal({ open, packageId, onClose, onFinished
         const resp = await authService.getReviewPackageForStudent(packageId);
         setPkg(resp?.package || null);
         setAttempt(resp?.attempt || null);
+        setReport(resp?.report || null);
         const max = Number(resp?.attempt?.maxReachedSec) || 0;
         setMaxReached(max);
         maxReachedRef.current = max;
@@ -481,14 +515,19 @@ export function StudentReviewPackageModal({ open, packageId, onClose, onFinished
 
   const maybeGateAtCheckpoint = (timeSec?: number) => {
     if (lockedRef.current) return;
-    if (activeCheckpointId) return;
-    const next = nextRequiredCheckpoint;
+    if (activeCheckpointIdRef.current) return;
+    const cps = Array.isArray(checkpointsRef.current) ? checkpointsRef.current : [];
+    const answers = Array.isArray(attemptRef.current?.answers) ? attemptRef.current.answers : [];
+    const answeredIdsLocal = new Set(answers.map((a: any) => String(a?.checkpointId || '')).filter(Boolean));
+    const next = cps.filter((c) => c.required).find((c) => !answeredIdsLocal.has(c.id)) || null;
     if (!next) return;
     const t = Number(timeSec ?? currentTime) || 0;
     if (t + 0.05 >= next.timestampSec) {
+      lockedRef.current = true;
       if (isYouTube) ytPause();
       else safePause();
       setLocked(true);
+      activeCheckpointIdRef.current = next.id;
       setActiveCheckpointId(next.id);
       setSelectedIndex(-1);
     }
@@ -501,13 +540,21 @@ export function StudentReviewPackageModal({ open, packageId, onClose, onFinished
     setError('');
     try {
       const resp = await authService.submitReviewPackageCheckpoint(packageId, activeCheckpoint.id, selectedIndex);
-      if (resp?.attempt) setAttempt(resp.attempt);
+      if (resp?.attempt) {
+        attemptRef.current = resp.attempt;
+        setAttempt(resp.attempt);
+      }
+      lockedRef.current = false;
+      activeCheckpointIdRef.current = null;
       setLocked(false);
       setActiveCheckpointId(null);
       setSelectedIndex(-1);
       onFinished?.();
-      if (isYouTube) ytPlay();
-      else await safePlay();
+      if (isYouTube) {
+        ytPlay();
+      } else {
+        await safePlay();
+      }
     } catch (e: any) {
       setError(e?.message || '提交失敗');
     } finally {
@@ -515,12 +562,62 @@ export function StudentReviewPackageModal({ open, packageId, onClose, onFinished
     }
   };
 
+  const saveEditedAnswer = async () => {
+    const checkpoint = checkpoints.find((c) => c.id === editingCheckpointId) || null;
+    if (!checkpoint) return;
+    if (selectedIndex < 0) return;
+    setSubmitting(true);
+    setError('');
+    try {
+      const resp = await authService.submitReviewPackageCheckpoint(packageId, checkpoint.id, selectedIndex);
+      if (resp?.attempt) {
+        attemptRef.current = resp.attempt;
+        setAttempt(resp.attempt);
+      }
+      setEditingCheckpointId(null);
+      setSelectedIndex(-1);
+      onFinished?.();
+    } catch (e: any) {
+      setError(e?.message || '更新答案失敗');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const submitWholePackage = async () => {
+    setFinalSubmitting(true);
+    setError('');
+    try {
+      const resp = await authService.submitReviewPackage(packageId);
+      if (resp?.attempt) {
+        attemptRef.current = resp.attempt;
+        setAttempt(resp.attempt);
+      }
+      setReport(resp?.report || null);
+      showToast('已提交温習套件');
+      onFinished?.();
+    } catch (e: any) {
+      setError(e?.message || '提交失敗');
+    } finally {
+      setFinalSubmitting(false);
+    }
+  };
+
   const progressPct = duration > 0 ? clamp((currentTime / duration) * 100, 0, 100) : 0;
   const watchedPct = duration > 0 ? clamp((maxReached / duration) * 100, 0, 100) : 0;
   const requiredDone = requiredCheckpointIds.every((id) => answeredIds.has(id));
   const watchedToEnd = !!attempt?.watchedToEnd;
-  const completed = requiredDone && watchedToEnd;
+  const readyToSubmit = requiredDone && watchedToEnd;
+  const submitted = !!attempt?.completedAt;
+  const completed = submitted;
   const canPlay = !locked && (!isYouTube || ytReady);
+  const canEditAnswers = !submitted;
+  const unlockedCheckpoints = checkpoints
+    .filter((c) => c.required)
+    .filter((c) => c.timestampSec <= (maxReachedRef.current || maxReached) + 0.5)
+    .slice()
+    .sort((a, b) => a.timestampSec - b.timestampSec);
+  const editingCheckpoint = checkpoints.find((c) => c.id === editingCheckpointId) || null;
 
   return (
     <div className="fixed inset-0 bg-black/50 z-[120] flex items-center justify-center p-4">
@@ -721,15 +818,106 @@ export function StudentReviewPackageModal({ open, packageId, onClose, onFinished
                   />
                 </div>
 
-                <div className="text-sm font-bold text-gray-700">
-                  必答題目：{requiredCheckpointIds.filter((id) => answeredIds.has(id)).length} / {requiredCheckpointIds.length}
-                  <span className="ml-3">結尾：{watchedToEnd ? '已看完' : '未看完'}</span>
-                  {typeof attempt?.score === 'number' && <span className="ml-3">分數：{Math.round(Number(attempt.score) || 0)}%</span>}
-                </div>
-              </div>
+	              <div className="text-sm font-bold text-gray-700">
+	                必答題目：{requiredCheckpointIds.filter((id) => answeredIds.has(id)).length} / {requiredCheckpointIds.length}
+	                <span className="ml-3">結尾：{watchedToEnd ? '已看完' : '未看完'}</span>
+	                {submitted && typeof attempt?.score === 'number' && <span className="ml-3">分數：{Math.round(Number(attempt.score) || 0)}%</span>}
+	                <span className="ml-3">提交：{submitted ? '已提交' : '未提交'}</span>
+	              </div>
+	            </div>
 
-              {locked && activeCheckpoint && (
-                <div className="bg-white border-4 border-brand-brown rounded-3xl p-5 shadow-comic space-y-4">
+              {!submitted && (
+                <div className="flex flex-col md:flex-row gap-3 md:items-center md:justify-between">
+                  <div className="text-sm font-bold text-gray-700">
+                    {readyToSubmit ? '已符合提交條件（看至結尾 + 完成必答）' : '完成條件：看至結尾 + 完成所有必答題目'}
+                  </div>
+                  <button
+                    type="button"
+                    disabled={!readyToSubmit || finalSubmitting || locked}
+                    onClick={submitWholePackage}
+                    className={[
+                      'px-4 py-2 rounded-2xl border-4 border-brand-brown font-black shadow-comic active:translate-y-1 active:shadow-none flex items-center gap-2',
+                      !readyToSubmit || finalSubmitting || locked ? 'bg-gray-200 text-gray-600 cursor-not-allowed' : 'bg-[#93C47D] text-brand-brown hover:bg-[#86b572]'
+                    ].join(' ')}
+                  >
+                    {finalSubmitting ? '提交中...' : '完成並提交'}
+                  </button>
+                </div>
+              )}
+
+              {submitted && report && (
+                <div className="bg-white border-4 border-brand-brown rounded-3xl p-5 shadow-comic space-y-3">
+                  <div className="font-black text-brand-brown text-lg">回饋報告</div>
+                  <div className="text-sm font-bold text-gray-700">
+                    得分：{Number(report.earnedPoints) || 0} / {Number(report.totalPoints) || 0}（{Math.round(Number(report.scorePct) || 0)}%）
+                  </div>
+                  <div className="space-y-2">
+                    {(Array.isArray(report.items) ? report.items : []).map((it: any) => {
+                      const ts = formatTime(Number(it.timestampSec) || 0);
+                      const correctIdx = Number.isInteger(Number(it.correctIndex)) ? Number(it.correctIndex) : -1;
+                      const selectedIdx = Number.isInteger(Number(it.selectedIndex)) ? Number(it.selectedIndex) : -1;
+                      const opts = Array.isArray(it.options) ? it.options : [];
+                      return (
+                        <div key={String(it.checkpointId)} className="border-2 border-brand-brown rounded-2xl p-3 bg-[#FFFDF6]">
+                          <div className="font-black text-brand-brown">
+                            {ts}：{String(it.questionText || '')}
+                          </div>
+                          <div className="text-sm font-bold text-gray-700">
+                            你的答案：{selectedIdx >= 0 ? `${selectedIdx + 1}. ${String(opts[selectedIdx] ?? '')}` : '（未作答）'}
+                          </div>
+                          <div className="text-sm font-bold text-gray-700">
+                            正確答案：{correctIdx >= 0 ? `${correctIdx + 1}. ${String(opts[correctIdx] ?? '')}` : '（無）'}
+                            <span className="ml-2">得分：{Number(it.pointsEarned) || 0}/{Number(it.points) || 0}</span>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {canEditAnswers && unlockedCheckpoints.length > 0 && (
+                <div className="bg-white border-4 border-brand-brown rounded-3xl p-5 shadow-comic space-y-3">
+                  <div className="font-black text-brand-brown">已解鎖題目（可修改答案，提交前不會顯示對錯）</div>
+                  <div className="space-y-2">
+                    {unlockedCheckpoints.map((c) => {
+                      const sel = selectedByCheckpointId.get(c.id) ?? -1;
+                      return (
+                        <div key={c.id} className="flex flex-col md:flex-row md:items-center md:justify-between gap-2 border-2 border-brand-brown rounded-2xl p-3 bg-[#FFFDF6]">
+                          <div className="min-w-0">
+                            <div className="font-black text-brand-brown truncate">
+                              {formatTime(c.timestampSec)}：{c.questionText || '（題目）'}
+                            </div>
+                            <div className="text-sm font-bold text-gray-700">
+                              目前答案：{sel >= 0 ? `${sel + 1}` : '（未作答）'}
+                            </div>
+                          </div>
+                          <button
+                            type="button"
+                            disabled={locked || submitting}
+                            onClick={() => {
+                              if (isYouTube) ytPause();
+                              else safePause();
+                              setEditingCheckpointId(c.id);
+                              const existing = selectedByCheckpointId.get(c.id);
+                              setSelectedIndex(typeof existing === 'number' ? existing : -1);
+                            }}
+                            className={[
+                              'px-4 py-2 rounded-2xl border-4 border-brand-brown font-black shadow-comic active:translate-y-1 active:shadow-none',
+                              locked || submitting ? 'bg-gray-200 text-gray-600 cursor-not-allowed' : 'bg-white text-brand-brown hover:bg-gray-50'
+                            ].join(' ')}
+                          >
+                            修改答案
+                          </button>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+	            {locked && activeCheckpoint && (
+	              <div className="bg-white border-4 border-brand-brown rounded-3xl p-5 shadow-comic space-y-4">
                   <div className="font-black text-brand-brown">
                     時間點 {formatTime(activeCheckpoint.timestampSec)}：{activeCheckpoint.questionText || '請作答'}
                   </div>
@@ -758,25 +946,78 @@ export function StudentReviewPackageModal({ open, packageId, onClose, onFinished
                       <Lock className="w-4 h-4" />
                       需提交答案才可繼續播放（答對/答錯皆可繼續）
                     </div>
-                    <button
-                      type="button"
-                      onClick={submitAnswer}
-                      disabled={submitting || selectedIndex < 0}
+	                    <button
+	                      type="button"
+	                      onClick={submitAnswer}
+	                      disabled={submitting || selectedIndex < 0}
                       className={[
                         'px-4 py-2 rounded-2xl border-4 border-brand-brown font-black shadow-comic active:translate-y-1 active:shadow-none flex items-center gap-2',
                         submitting || selectedIndex < 0 ? 'bg-gray-300 text-gray-600 cursor-not-allowed' : 'bg-[#93C47D] text-brand-brown hover:bg-[#86b572]'
                       ].join(' ')}
-                    >
-                      {submitting ? '提交中...' : '提交'}
-                      {submitting ? null : (selectedIndex < 0 ? <XCircle className="w-5 h-5" /> : <CheckCircle2 className="w-5 h-5" />)}
-                    </button>
-                  </div>
-                </div>
-              )}
+	                    >
+	                      {submitting ? '提交中...' : '提交'}
+	                      {submitting ? null : (selectedIndex < 0 ? <XCircle className="w-5 h-5" /> : <CheckCircle2 className="w-5 h-5" />)}
+	                    </button>
+	                  </div>
+	                </div>
+	              )}
 
-              {!locked && nextRequiredCheckpoint && (
-                <div className="text-sm font-bold text-gray-700">
-                  下一個必答時間點：{formatTime(nextRequiredCheckpoint.timestampSec)}
+                  {!locked && editingCheckpoint && canEditAnswers && (
+                    <div className="bg-white border-4 border-brand-brown rounded-3xl p-5 shadow-comic space-y-4">
+                      <div className="flex items-center justify-between gap-3">
+                        <div className="font-black text-brand-brown">
+                          修改答案（{formatTime(editingCheckpoint.timestampSec)}）：{editingCheckpoint.questionText || '請作答'}
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setEditingCheckpointId(null);
+                            setSelectedIndex(-1);
+                          }}
+                          className="px-3 py-1 rounded-xl border-2 border-brand-brown bg-white font-black text-brand-brown hover:bg-gray-50"
+                        >
+                          關閉
+                        </button>
+                      </div>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                        {(Array.isArray(editingCheckpoint.options) ? editingCheckpoint.options : []).map((opt, idx) => {
+                          const picked = selectedIndex === idx;
+                          return (
+                            <button
+                              key={idx}
+                              type="button"
+                              disabled={submitting}
+                              onClick={() => setSelectedIndex(idx)}
+                              className={[
+                                'text-left px-4 py-3 rounded-2xl border-4 font-bold shadow-comic active:translate-y-1 active:shadow-none transition-all',
+                                picked ? 'bg-[#FDEEAD] border-brand-brown text-brand-brown' : 'bg-white border-brand-brown text-gray-800 hover:-translate-y-1'
+                              ].join(' ')}
+                            >
+                              {opt}
+                            </button>
+                          );
+                        })}
+                      </div>
+                      <div className="flex items-center justify-end gap-2">
+                        <button
+                          type="button"
+                          onClick={saveEditedAnswer}
+                          disabled={submitting || selectedIndex < 0}
+                          className={[
+                            'px-4 py-2 rounded-2xl border-4 border-brand-brown font-black shadow-comic active:translate-y-1 active:shadow-none flex items-center gap-2',
+                            submitting || selectedIndex < 0 ? 'bg-gray-300 text-gray-600 cursor-not-allowed' : 'bg-[#93C47D] text-brand-brown hover:bg-[#86b572]'
+                          ].join(' ')}
+                        >
+                          {submitting ? '更新中...' : '更新答案'}
+                          {submitting ? null : (selectedIndex < 0 ? <XCircle className="w-5 h-5" /> : <CheckCircle2 className="w-5 h-5" />)}
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+	            {!locked && nextRequiredCheckpoint && (
+	              <div className="text-sm font-bold text-gray-700">
+	                下一個必答時間點：{formatTime(nextRequiredCheckpoint.timestampSec)}
                 </div>
               )}
             </>

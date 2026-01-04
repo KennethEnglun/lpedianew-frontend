@@ -1818,6 +1818,14 @@ class AuthService {
     return this.handleResponse(response);
   }
 
+  async submitReviewPackage(packageId: string): Promise<any> {
+    const response = await fetch(`${this.API_BASE}/review-packages/${encodeURIComponent(packageId)}/submit`, {
+      method: 'POST',
+      headers: this.getAuthHeaders()
+    });
+    return this.handleResponse(response);
+  }
+
   async startContest(contestId: string): Promise<{
     contest: any;
     attempt: { id: string; startedAt: string; timeLimitSeconds: number | null; questions: Array<{ id: number; question: string; options: string[] }> };
