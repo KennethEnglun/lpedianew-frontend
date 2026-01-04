@@ -4,6 +4,7 @@ import Button from '../../Button';
 import ResetDataConfirmModal from '../ResetDataConfirmModal';
 import { authService } from '../../../services/authService';
 import AssignmentExplorerModal from '../../AssignmentExplorerModal';
+import YearArchiveStudentContentModal from '../YearArchiveStudentContentModal';
 
 export default function AdminYearEndPanel(props: {
   yearEndLoading: boolean;
@@ -22,6 +23,8 @@ export default function AdminYearEndPanel(props: {
   const [archives, setArchives] = useState<any[]>([]);
   const [archiveExplorerOpen, setArchiveExplorerOpen] = useState(false);
   const [selectedArchiveId, setSelectedArchiveId] = useState('');
+  const [studentContentOpen, setStudentContentOpen] = useState(false);
+  const [selectedStudentContentArchiveId, setSelectedStudentContentArchiveId] = useState('');
 
   const loadArchives = async () => {
     try {
@@ -166,6 +169,16 @@ export default function AdminYearEndPanel(props: {
                       查看
                     </Button>
                     <Button
+                      className="bg-white hover:bg-gray-100 flex items-center gap-2 border border-gray-300 text-gray-800"
+                      onClick={() => {
+                        setSelectedStudentContentArchiveId(id);
+                        setStudentContentOpen(true);
+                      }}
+                    >
+                      <Eye className="w-4 h-4" />
+                      學生內容
+                    </Button>
+                    <Button
                       className="bg-[#E8F5E9] hover:bg-[#C8E6C9] flex items-center gap-2"
                       onClick={() => void downloadArchive(id)}
                     >
@@ -235,6 +248,16 @@ export default function AdminYearEndPanel(props: {
         viewerId="admin"
         readOnly
         title={selectedArchiveId ? `封存作業管理（${selectedArchiveId}）` : '封存作業管理'}
+      />
+
+      <YearArchiveStudentContentModal
+        open={studentContentOpen}
+        onClose={() => {
+          setStudentContentOpen(false);
+          setSelectedStudentContentArchiveId('');
+        }}
+        archiveId={selectedStudentContentArchiveId}
+        authService={authService}
       />
     </>
   );

@@ -1137,6 +1137,79 @@ class AuthService {
     return this.handleResponse(response);
   }
 
+  // 年度封存：學生內容（AI 對話 / AI 筆記 / 自學天地 / AppStudio）
+  async listYearArchiveChatThreads(
+    archiveId: string,
+    params?: { subject?: string; className?: string; search?: string; includeTaskThreads?: boolean }
+  ): Promise<{ threads: any[]; total: number }> {
+    const searchParams = new URLSearchParams();
+    if (params?.subject) searchParams.append('subject', params.subject);
+    if (params?.className) searchParams.append('className', params.className);
+    if (params?.search) searchParams.append('search', params.search);
+    if (params?.includeTaskThreads) searchParams.append('includeTaskThreads', '1');
+    const qs = searchParams.toString() ? `?${searchParams.toString()}` : '';
+    const response = await fetch(`${this.API_BASE}/admin/year-end/archives/${encodeURIComponent(archiveId)}/chats/threads${qs}`, {
+      headers: this.getAuthHeaders()
+    });
+    return this.handleResponse(response);
+  }
+
+  async getYearArchiveChatThreadMessages(archiveId: string, threadId: string): Promise<{ thread: any; student: any; messages: any[] }> {
+    const response = await fetch(`${this.API_BASE}/admin/year-end/archives/${encodeURIComponent(archiveId)}/chats/threads/${encodeURIComponent(threadId)}/messages`, {
+      headers: this.getAuthHeaders()
+    });
+    return this.handleResponse(response);
+  }
+
+  async listYearArchiveAiNotes(archiveId: string, params?: { studentId?: string; className?: string; search?: string }): Promise<{ notes: any[]; total: number }> {
+    const searchParams = new URLSearchParams();
+    if (params?.studentId) searchParams.append('studentId', params.studentId);
+    if (params?.className) searchParams.append('className', params.className);
+    if (params?.search) searchParams.append('search', params.search);
+    const qs = searchParams.toString() ? `?${searchParams.toString()}` : '';
+    const response = await fetch(`${this.API_BASE}/admin/year-end/archives/${encodeURIComponent(archiveId)}/ai-notes${qs}`, {
+      headers: this.getAuthHeaders()
+    });
+    return this.handleResponse(response);
+  }
+
+  async getYearArchiveAiNote(archiveId: string, noteId: string): Promise<{ note: any; student: any }> {
+    const response = await fetch(`${this.API_BASE}/admin/year-end/archives/${encodeURIComponent(archiveId)}/ai-notes/${encodeURIComponent(noteId)}`, {
+      headers: this.getAuthHeaders()
+    });
+    return this.handleResponse(response);
+  }
+
+  async listYearArchiveSelfStudyTransactions(archiveId: string, params?: { studentId?: string; className?: string }): Promise<{ transactions: any[]; total: number }> {
+    const searchParams = new URLSearchParams();
+    if (params?.studentId) searchParams.append('studentId', params.studentId);
+    if (params?.className) searchParams.append('className', params.className);
+    const qs = searchParams.toString() ? `?${searchParams.toString()}` : '';
+    const response = await fetch(`${this.API_BASE}/admin/year-end/archives/${encodeURIComponent(archiveId)}/self-study/transactions${qs}`, {
+      headers: this.getAuthHeaders()
+    });
+    return this.handleResponse(response);
+  }
+
+  async listYearArchiveAppStudioApps(archiveId: string, params?: { studentId?: string; className?: string; search?: string }): Promise<{ apps: any[]; total: number }> {
+    const searchParams = new URLSearchParams();
+    if (params?.studentId) searchParams.append('studentId', params.studentId);
+    if (params?.className) searchParams.append('className', params.className);
+    if (params?.search) searchParams.append('search', params.search);
+    const qs = searchParams.toString() ? `?${searchParams.toString()}` : '';
+    const response = await fetch(`${this.API_BASE}/admin/year-end/archives/${encodeURIComponent(archiveId)}/app-studio/apps${qs}`, {
+      headers: this.getAuthHeaders()
+    });
+    return this.handleResponse(response);
+  }
+
+  async getYearArchiveAppStudioAppDetail(archiveId: string, appId: string): Promise<{ app: any; owner: any; versions: any[]; submissions: any[] }> {
+    const response = await fetch(`${this.API_BASE}/admin/year-end/archives/${encodeURIComponent(archiveId)}/app-studio/apps/${encodeURIComponent(appId)}`, {
+      headers: this.getAuthHeaders()
+    });
+    return this.handleResponse(response);
+  }
+
   // 作業管理（檔案總管）
   async getManageTasks(params?: { subject?: string; className?: string; includeArchived?: boolean }): Promise<{ tasks: any[]; total: number }> {
     const searchParams = new URLSearchParams();
