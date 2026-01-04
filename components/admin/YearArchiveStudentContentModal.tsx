@@ -4,6 +4,7 @@ import Button from '../Button';
 import Input from '../Input';
 
 type TabKey = 'chat' | 'ai-notes' | 'self-study' | 'appstudio';
+type TabKeyV2 = TabKey | 'charts' | 'ai-reports';
 
 export default function YearArchiveStudentContentModal(props: {
   open: boolean;
@@ -13,7 +14,7 @@ export default function YearArchiveStudentContentModal(props: {
 }) {
   const { open, onClose, archiveId, authService } = props;
 
-  const [tab, setTab] = useState<TabKey>('chat');
+  const [tab, setTab] = useState<TabKeyV2>('chat');
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -39,6 +40,14 @@ export default function YearArchiveStudentContentModal(props: {
   const [appDetail, setAppDetail] = useState<any | null>(null);
   const [selectedVersionId, setSelectedVersionId] = useState<string>('');
 
+  const [charts, setCharts] = useState<any[]>([]);
+  const [selectedChartId, setSelectedChartId] = useState<string>('');
+  const [chartDetail, setChartDetail] = useState<any | null>(null);
+
+  const [aiReports, setAiReports] = useState<any[]>([]);
+  const [selectedAiReportKey, setSelectedAiReportKey] = useState<string>('');
+  const [aiReportDetail, setAiReportDetail] = useState<any | null>(null);
+
   useEffect(() => {
     if (!open) return;
     setTab('chat');
@@ -60,11 +69,25 @@ export default function YearArchiveStudentContentModal(props: {
     setSelectedAppId('');
     setAppDetail(null);
     setSelectedVersionId('');
+    setCharts([]);
+    setSelectedChartId('');
+    setChartDetail(null);
+    setAiReports([]);
+    setSelectedAiReportKey('');
+    setAiReportDetail(null);
   }, [open, archiveId]);
 
   const classOptions = useMemo(() => {
     const set = new Set<string>();
-    const source = tab === 'chat' ? chatThreads : (tab === 'ai-notes' ? aiNotes : (tab === 'appstudio' ? apps : selfStudyTx));
+    const source = tab === 'chat'
+      ? chatThreads
+      : (tab === 'ai-notes'
+        ? aiNotes
+        : (tab === 'appstudio'
+          ? apps
+          : (tab === 'charts'
+            ? charts
+            : (tab === 'ai-reports' ? aiReports : selfStudyTx))));
     for (const row of Array.isArray(source) ? source : []) {
       const cls = String(row?.studentClass || row?.className || '');
       if (cls) set.add(cls);
@@ -101,13 +124,30 @@ export default function YearArchiveStudentContentModal(props: {
         setAiNoteDetail(null);
       } else if (tab === 'self-study') {
         const resp = await authService.listYearArchiveSelfStudyTransactions(id, { className: className || undefined });
-        setSelfStudyTx(Array.isArray(resp.transactions) ? resp.transactions : []);
+        const list = Array.isArray(resp.transactions) ? resp.transactions : [];
+        const filtered = !search
+          ? list
+          : list.filter((t: any) => {
+            const hay = `${t?.studentName || ''} ${t?.studentUsername || ''} ${t?.description || ''} ${JSON.stringify(t?.metadata || {}).slice(0, 5000)}`.toLowerCase();
+            return hay.includes(String(search || '').toLowerCase());
+          });
+        setSelfStudyTx(filtered);
       } else if (tab === 'appstudio') {
         const resp = await authService.listYearArchiveAppStudioApps(id, { className: className || undefined, search: search || undefined });
         setApps(Array.isArray(resp.apps) ? resp.apps : []);
         setSelectedAppId('');
         setAppDetail(null);
         setSelectedVersionId('');
+      } else if (tab === 'charts') {
+        const resp = await authService.listYearArchiveCharts(id, { className: className || undefined, search: search || undefined });
+        setCharts(Array.isArray(resp.charts) ? resp.charts : []);
+        setSelectedChartId('');
+        setChartDetail(null);
+      } else if (tab === 'ai-reports') {
+        const resp = await authService.listYearArchiveAiReports(id, { className: className || undefined, search: search || undefined });
+        setAiReports(Array.isArray(resp.reports) ? resp.reports : []);
+        setSelectedAiReportKey('');
+        setAiReportDetail(null);
       }
     } catch (e: any) {
       setError(e?.message || '載入失敗');
@@ -186,6 +226,68 @@ export default function YearArchiveStudentContentModal(props: {
     }
   };
 
+  const openChart = async (chartId: string) => {
+    const id = String(archiveId || '').trim();
+    const cid = String(chartId || '').trim();
+    if (!id || !cid) return;
+    try {
+      setLoading(true);
+      setError('');
+      setSelectedChartId(cid);
+      setChartDetail(null);
+      const resp = await authService.getYearArchiveChartDetail(id, cid);
+      setChartDetail(resp || null);
+    } catch (e: any) {
+      setError(e?.message || '載入圖表失敗');
+      setChartDetail(null);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const openAiReport = async (key: string) => {
+    const id = String(archiveId || '').trim();
+    const k = String(key || '').trim();
+    if (!id || !k) return;
+    try {
+      setLoading(true);
+      setError('');
+      setSelectedAiReportKey(k);
+      setAiReportDetail(null);
+      const resp = await authService.getYearArchiveAiReportDetail(id, k);
+      setAiReportDetail(resp?.report || null);
+    } catch (e: any) {
+      setError(e?.message || '載入 AI 報告失敗');
+      setAiReportDetail(null);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const formatSelfStudySummary = (t: any) => {
+    const meta = t?.metadata && typeof t.metadata === 'object' ? t.metadata : null;
+    const scope = meta?.scope && typeof meta.scope === 'object' ? meta.scope : null;
+    const subjectText = scope?.subject ? String(scope.subject) : '';
+    const topics = Array.isArray(scope?.topics) ? scope.topics.map((x: any) => String(x || '').trim()).filter(Boolean) : [];
+    const correct = meta?.rawCorrectCount ?? null;
+    const qCount = meta?.questionCount ?? meta?.assumedQuestionCount ?? null;
+    const multiplier = meta?.multiplier ?? null;
+    const parts = [];
+    if (subjectText) parts.push(subjectText);
+    if (topics.length > 0) parts.push(`題材：${topics.slice(0, 3).join('、')}${topics.length > 3 ? '…' : ''}`);
+    if (Number.isFinite(Number(correct)) && Number.isFinite(Number(qCount))) parts.push(`答對 ${Number(correct)} / ${Number(qCount)}`);
+    if (Number.isFinite(Number(multiplier))) parts.push(`×${Number(multiplier)}`);
+    return parts.join(' · ');
+  };
+
+  const selfStudyCustomContent = (t: any) => {
+    const meta = t?.metadata && typeof t.metadata === 'object' ? t.metadata : null;
+    const scope = meta?.scope && typeof meta.scope === 'object' ? meta.scope : null;
+    const raw = scope?.customContent;
+    const s = typeof raw === 'string' ? raw : '';
+    return s.replace(/\\n/g, '\n');
+  };
+
   const selectedVersion = useMemo(() => {
     if (!appDetail || !Array.isArray(appDetail.versions)) return null;
     const vid = String(selectedVersionId || '');
@@ -217,7 +319,9 @@ export default function YearArchiveStudentContentModal(props: {
             { k: 'chat', label: 'AI 對話' },
             { k: 'ai-notes', label: 'AI 筆記' },
             { k: 'self-study', label: '自學天地' },
-            { k: 'appstudio', label: 'AppStudio' }
+            { k: 'appstudio', label: 'AppStudio' },
+            { k: 'charts', label: '圖表' },
+            { k: 'ai-reports', label: 'AI 報告' }
           ] as any[]).map((t) => (
             <button
               key={t.k}
@@ -416,10 +520,12 @@ export default function YearArchiveStudentContentModal(props: {
                         </div>
                         <div className="text-[11px] text-gray-500 font-bold">{String(t.createdAt || '')}</div>
                       </div>
-                      <div className="text-sm text-gray-700 font-bold mt-1">{String(t.description || '')}</div>
-                      {t.metadata && (
-                        <div className="text-xs text-gray-600 font-bold mt-2 whitespace-pre-wrap break-words">
-                          {JSON.stringify(t.metadata, null, 2)}
+                      <div className="text-sm text-gray-800 font-bold mt-1">{String(t.description || '')}</div>
+                      <div className="text-xs text-gray-600 font-bold mt-1">{formatSelfStudySummary(t) || '—'}</div>
+                      {selfStudyCustomContent(t).trim() && (
+                        <div className="mt-2 p-2 rounded-xl border-2 border-gray-200 bg-gray-50">
+                          <div className="text-xs font-black text-gray-700 mb-1">題目/內容</div>
+                          <div className="text-xs text-gray-700 font-bold whitespace-pre-wrap break-words">{selfStudyCustomContent(t)}</div>
                         </div>
                       )}
                     </div>
@@ -500,9 +606,116 @@ export default function YearArchiveStudentContentModal(props: {
               </div>
             </div>
           )}
+
+          {tab === 'charts' && (
+            <div className="h-full grid grid-cols-1 md:grid-cols-2">
+              <div className="border-r-2 border-gray-200 overflow-auto p-3 space-y-2">
+                {loading && charts.length === 0 ? (
+                  <div className="text-gray-600 font-bold">載入中...</div>
+                ) : charts.length === 0 ? (
+                  <div className="text-gray-600 font-bold">沒有圖表</div>
+                ) : (
+                  charts.map((c: any) => (
+                    <button
+                      key={String(c.chartId)}
+                      type="button"
+                      onClick={() => void openChart(String(c.chartId))}
+                      className={`w-full text-left p-3 rounded-2xl border-2 ${
+                        selectedChartId === String(c.chartId) ? 'border-brand-brown bg-[#FEF7EC]' : 'border-gray-200 bg-white hover:bg-gray-50'
+                      }`}
+                    >
+                      <div className="font-black text-gray-900 truncate">{String(c.title || '圖表')}</div>
+                      <div className="text-xs text-gray-700 font-bold truncate">
+                        {String(c.studentName || '學生')}{c.studentClass ? `（${c.studentClass}）` : ''}{c.subject ? ` · ${c.subject}` : ''}
+                      </div>
+                      <div className="text-[11px] text-gray-500 font-bold truncate">{String(c.updatedAt || c.createdAt || '')}</div>
+                    </button>
+                  ))
+                )}
+              </div>
+              <div className="overflow-auto p-3">
+                {!selectedChartId ? (
+                  <div className="text-gray-600 font-bold">請在左側選擇一個圖表</div>
+                ) : !chartDetail ? (
+                  <div className="text-gray-600 font-bold">載入中...</div>
+                ) : (
+                  <div className="space-y-3">
+                    <div className="p-3 rounded-2xl border-2 border-gray-200 bg-gray-50">
+                      <div className="font-black text-brand-brown">{String(chartDetail?.chart?.title || '圖表')}</div>
+                      <div className="text-xs text-gray-600 font-bold">
+                        {String(chartDetail?.owner?.name || '學生')}{chartDetail?.owner?.class ? `（${chartDetail.owner.class}）` : ''}
+                      </div>
+                    </div>
+                    <div className="p-3 rounded-2xl border-2 border-gray-200 bg-white">
+                      <div className="font-black text-gray-800 mb-2">chartSpec</div>
+                      <textarea
+                        className="w-full h-[360px] p-2 rounded-xl border-2 border-gray-200 font-mono text-xs"
+                        readOnly
+                        value={JSON.stringify(chartDetail?.chart?.chartSpec || {}, null, 2)}
+                      />
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {tab === 'ai-reports' && (
+            <div className="h-full grid grid-cols-1 md:grid-cols-2">
+              <div className="border-r-2 border-gray-200 overflow-auto p-3 space-y-2">
+                {loading && aiReports.length === 0 ? (
+                  <div className="text-gray-600 font-bold">載入中...</div>
+                ) : aiReports.length === 0 ? (
+                  <div className="text-gray-600 font-bold">沒有 AI 報告</div>
+                ) : (
+                  aiReports.map((r: any) => (
+                    <button
+                      key={String(r.key)}
+                      type="button"
+                      onClick={() => void openAiReport(String(r.key))}
+                      className={`w-full text-left p-3 rounded-2xl border-2 ${
+                        selectedAiReportKey === String(r.key) ? 'border-brand-brown bg-[#FEF7EC]' : 'border-gray-200 bg-white hover:bg-gray-50'
+                      }`}
+                    >
+                      <div className="font-black text-gray-900 truncate">{String(r.toolType || 'AI報告')} · {String(r.scope || '')}</div>
+                      <div className="text-xs text-gray-700 font-bold truncate">
+                        {String(r.toolId || '')}
+                        {r.studentName ? ` · ${r.studentName}${r.studentClass ? `（${r.studentClass}）` : ''}` : ''}
+                      </div>
+                      <div className="text-[11px] text-gray-500 font-bold truncate">{String(r.updatedAt || r.createdAt || '')}</div>
+                    </button>
+                  ))
+                )}
+              </div>
+              <div className="overflow-auto p-3">
+                {!selectedAiReportKey ? (
+                  <div className="text-gray-600 font-bold">請在左側選擇一份 AI 報告</div>
+                ) : !aiReportDetail ? (
+                  <div className="text-gray-600 font-bold">載入中...</div>
+                ) : (
+                  <div className="space-y-3">
+                    <div className="p-3 rounded-2xl border-2 border-gray-200 bg-gray-50">
+                      <div className="font-black text-brand-brown">
+                        {String(aiReportDetail.toolType || 'AI報告')} · {String(aiReportDetail.scope || '')}
+                      </div>
+                      <div className="text-xs text-gray-600 font-bold break-words">{String(aiReportDetail.toolId || '')}</div>
+                      <div className="text-[11px] text-gray-500 font-bold">{String(aiReportDetail.updatedAt || aiReportDetail.createdAt || '')}</div>
+                    </div>
+                    <div className="p-3 rounded-2xl border-2 border-gray-200 bg-white">
+                      <div className="font-black text-gray-800 mb-2">report</div>
+                      <textarea
+                        className="w-full h-[420px] p-2 rounded-xl border-2 border-gray-200 font-mono text-xs"
+                        readOnly
+                        value={JSON.stringify(aiReportDetail.report || {}, null, 2)}
+                      />
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </div>
   );
 }
-

@@ -1137,6 +1137,13 @@ class AuthService {
     return this.handleResponse(response);
   }
 
+  async getYearArchiveNoteSubmissionDetail(archiveId: string, noteId: string, studentId: string): Promise<{ submission: any }> {
+    const response = await fetch(`${this.API_BASE}/admin/year-end/archives/${encodeURIComponent(archiveId)}/notes/${encodeURIComponent(noteId)}/submissions/${encodeURIComponent(studentId)}`, {
+      headers: this.getAuthHeaders()
+    });
+    return this.handleResponse(response);
+  }
+
   // 年度封存：學生內容（AI 對話 / AI 筆記 / 自學天地 / AppStudio）
   async listYearArchiveChatThreads(
     archiveId: string,
@@ -1205,6 +1212,51 @@ class AuthService {
 
   async getYearArchiveAppStudioAppDetail(archiveId: string, appId: string): Promise<{ app: any; owner: any; versions: any[]; submissions: any[] }> {
     const response = await fetch(`${this.API_BASE}/admin/year-end/archives/${encodeURIComponent(archiveId)}/app-studio/apps/${encodeURIComponent(appId)}`, {
+      headers: this.getAuthHeaders()
+    });
+    return this.handleResponse(response);
+  }
+
+  async listYearArchiveCharts(archiveId: string, params?: { studentId?: string; className?: string; search?: string }): Promise<{ charts: any[]; total: number }> {
+    const searchParams = new URLSearchParams();
+    if (params?.studentId) searchParams.append('studentId', params.studentId);
+    if (params?.className) searchParams.append('className', params.className);
+    if (params?.search) searchParams.append('search', params.search);
+    const qs = searchParams.toString() ? `?${searchParams.toString()}` : '';
+    const response = await fetch(`${this.API_BASE}/admin/year-end/archives/${encodeURIComponent(archiveId)}/charts${qs}`, {
+      headers: this.getAuthHeaders()
+    });
+    return this.handleResponse(response);
+  }
+
+  async getYearArchiveChartDetail(archiveId: string, chartId: string): Promise<{ chart: any; owner: any }> {
+    const response = await fetch(`${this.API_BASE}/admin/year-end/archives/${encodeURIComponent(archiveId)}/charts/${encodeURIComponent(chartId)}`, {
+      headers: this.getAuthHeaders()
+    });
+    return this.handleResponse(response);
+  }
+
+  async listYearArchiveAiReports(
+    archiveId: string,
+    params?: { toolType?: string; toolId?: string; scope?: 'overall' | 'student'; studentId?: string; className?: string; search?: string }
+  ): Promise<{ reports: any[]; total: number }> {
+    const searchParams = new URLSearchParams();
+    if (params?.toolType) searchParams.append('toolType', params.toolType);
+    if (params?.toolId) searchParams.append('toolId', params.toolId);
+    if (params?.scope) searchParams.append('scope', params.scope);
+    if (params?.studentId) searchParams.append('studentId', params.studentId);
+    if (params?.className) searchParams.append('className', params.className);
+    if (params?.search) searchParams.append('search', params.search);
+    const qs = searchParams.toString() ? `?${searchParams.toString()}` : '';
+    const response = await fetch(`${this.API_BASE}/admin/year-end/archives/${encodeURIComponent(archiveId)}/ai-reports${qs}`, {
+      headers: this.getAuthHeaders()
+    });
+    return this.handleResponse(response);
+  }
+
+  async getYearArchiveAiReportDetail(archiveId: string, key: string): Promise<{ report: any }> {
+    const qs = `?key=${encodeURIComponent(key)}`;
+    const response = await fetch(`${this.API_BASE}/admin/year-end/archives/${encodeURIComponent(archiveId)}/ai-reports/detail${qs}`, {
       headers: this.getAuthHeaders()
     });
     return this.handleResponse(response);

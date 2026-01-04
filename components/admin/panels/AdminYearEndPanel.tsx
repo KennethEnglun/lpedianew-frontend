@@ -63,7 +63,8 @@ export default function AdminYearEndPanel(props: {
       getBotTaskThreadMessages: (taskId: string, threadId: string) => authService.getYearArchiveBotTaskThreadMessages(archiveId, taskId, threadId),
       getReviewPackageResults: (packageId: string) => authService.getYearArchiveReviewPackageResults(archiveId, packageId),
       getNoteDetail: (noteId: string) => authService.getYearArchiveNoteDetail(archiveId, noteId),
-      listNoteSubmissions: (noteId: string) => authService.listYearArchiveNoteSubmissions(archiveId, noteId)
+      listNoteSubmissions: (noteId: string) => authService.listYearArchiveNoteSubmissions(archiveId, noteId),
+      getNoteSubmissionDetail: (noteId: string, studentId: string) => authService.getYearArchiveNoteSubmissionDetail(archiveId, noteId, studentId)
     };
   }, [selectedArchiveId]);
 
