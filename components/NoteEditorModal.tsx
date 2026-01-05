@@ -96,6 +96,7 @@ const getPageIndexFromY = (y: number, pageH: number, pageCount: number) => {
 };
 const LOCAL_KEY_PREFIX = 'lpedia_note_draft_v2_fabric';
 const buildLocalKey = (noteId: string, userId: string) => `${LOCAL_KEY_PREFIX}:${noteId}:${userId}`;
+const LOCAL_WRITE_INPUT_KEY = 'lpedia_note_write_input'; // 'pencil' | 'touch'
 
 type FabricDocSnapshot = {
   format: 'fabric-v1';
@@ -505,6 +506,8 @@ const NoteEditorModal = React.forwardRef<NoteEditorHandle, Props>(
   const [pageOrientation, setPageOrientation] = useState<PageOrientation>('portrait');
   const [penColor, setPenColor] = useState('#111827');
   const [penWidth, setPenWidth] = useState(2);
+  const [writeInput, setWriteInput] = useState<'pencil' | 'touch'>('pencil');
+  const [touchCapable, setTouchCapable] = useState(false);
   const [layersOpen, setLayersOpen] = useState(false);
   const [layersVersion, setLayersVersion] = useState(0);
   const [zoomPct, setZoomPct] = useState(100);
@@ -532,6 +535,15 @@ const NoteEditorModal = React.forwardRef<NoteEditorHandle, Props>(
   const spaceDownRef = useRef(false);
   const isPanningRef = useRef(false);
   const panLastRef = useRef<{ x: number; y: number } | null>(null);
+  const touchCapableRef = useRef(false);
+  const pointersRef = useRef(new Map<number, { x: number; y: number; startX: number; startY: number; downAt: number; pointerType: string }>());
+  const gestureRef = useRef<
+    | { mode: 'none' }
+    | { mode: 'pan'; pointerId: number; lastX: number; lastY: number }
+    | { mode: 'pinch'; pointerIds: [number, number]; lastMidX: number; lastMidY: number; startDist: number; startZoom: number }
+    | { mode: 'draw'; pointerId: number; pointerType: string }
+  >({ mode: 'none' });
+  const lastTapRef = useRef<{ at: number; obj: fabric.Object | null } | null>(null);
 
   const latestStateRef = useRef({
     open,
@@ -540,7 +552,9 @@ const NoteEditorModal = React.forwardRef<NoteEditorHandle, Props>(
     submittedAt,
     resubmitOpen: false,
     annotationMode,
-    canTemplateEdit: false
+    canTemplateEdit: false,
+    tool: 'select' as 'select' | 'pen',
+    writeInput: 'pencil' as 'pencil' | 'touch'
   });
 
   const canTemplateEdit = (mode === 'template' || mode === 'draft') && canEdit;
@@ -552,7 +566,36 @@ const NoteEditorModal = React.forwardRef<NoteEditorHandle, Props>(
 
   pageSizeRef.current = getA4Size(pageOrientation);
   penStateRef.current = { color: String(penColor || '#111827'), width: Math.max(1, Number(penWidth) || 2) };
-  latestStateRef.current = { open, mode, canEdit, submittedAt, resubmitOpen, annotationMode, canTemplateEdit };
+  latestStateRef.current = { open, mode, canEdit, submittedAt, resubmitOpen, annotationMode, canTemplateEdit, tool, writeInput };
+  if (typeof navigator !== 'undefined') touchCapableRef.current = Number((navigator as any).maxTouchPoints || 0) > 0;
+
+  const persistWriteInput = (next: 'pencil' | 'touch') => {
+    setWriteInput(next);
+    try {
+      if (typeof window !== 'undefined') window.localStorage.setItem(LOCAL_WRITE_INPUT_KEY, next);
+    } catch {
+      // ignore
+    }
+  };
+
+  const isTextObject = (obj: any) => {
+    const t = String(obj?.type || '');
+    return t === 'textbox' || t === 'i-text' || t === 'text';
+  };
+
+  const enterTextEditing = (canvas: fabric.Canvas, obj: any) => {
+    if (!obj || !isTextObject(obj)) return;
+    if (!obj.enterEditing) return;
+    obj.enterEditing();
+    if (typeof obj.selectAll === 'function') obj.selectAll();
+    try {
+      obj.hiddenTextarea?.focus?.();
+    } catch {
+      // ignore
+    }
+    canvas.setActiveObject(obj);
+    canvas.requestRenderAll();
+  };
 
   const applyPermissionsToObjects = (canvas: fabric.Canvas) => {
     const objs = canvas.getObjects();
@@ -1027,7 +1070,7 @@ const NoteEditorModal = React.forwardRef<NoteEditorHandle, Props>(
     const worldX = (centerX - tx) / s;
     const worldY = (centerY - ty) / s;
 
-    const tb = new fabric.Textbox('雙擊編輯文字', {
+    const tb = new fabric.Textbox('輸入文字', {
       left: worldX - 210,
       top: worldY - 40,
       width: 420,
@@ -1039,6 +1082,7 @@ const NoteEditorModal = React.forwardRef<NoteEditorHandle, Props>(
     if (mode === 'teacher') (tb as any).lpediaLayer = 'annotation';
     canvas.add(tb);
     canvas.setActiveObject(tb);
+    enterTextEditing(canvas, tb as any);
     canvas.requestRenderAll();
     setLayersVersion((v) => v + 1);
   };
@@ -1444,6 +1488,18 @@ const NoteEditorModal = React.forwardRef<NoteEditorHandle, Props>(
     else if (mode === 'template') void loadForTemplate();
     else if (mode === 'draft') void loadForDraft();
     else void loadForTeacher();
+    try {
+      const saved = typeof window !== 'undefined' ? window.localStorage.getItem(LOCAL_WRITE_INPUT_KEY) : null;
+      if (saved === 'touch' || saved === 'pencil') setWriteInput(saved);
+      else setWriteInput('pencil');
+    } catch {
+      setWriteInput('pencil');
+    }
+    try {
+      setTouchCapable(typeof navigator !== 'undefined' && Number((navigator as any).maxTouchPoints || 0) > 0);
+    } catch {
+      setTouchCapable(false);
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, mode, noteId, draftId, draftSnapshot]);
 
@@ -1467,6 +1523,275 @@ const NoteEditorModal = React.forwardRef<NoteEditorHandle, Props>(
     });
     fabricRef.current = canvas;
     canvas.backgroundColor = undefined;
+
+    const upperEl = ((canvas as any).upperCanvasEl as HTMLCanvasElement | undefined) || el;
+
+    const getLocalXY = (evt: PointerEvent) => {
+      const rect = upperEl.getBoundingClientRect();
+      return { x: evt.clientX - rect.left, y: evt.clientY - rect.top };
+    };
+
+    const allowEditNow = () => {
+      const st = latestStateRef.current;
+      if (!st.canEdit) return false;
+      if (st.mode === 'student' && st.submittedAt && !st.resubmitOpen) return false;
+      if (st.mode === 'teacher' && !st.annotationMode) return false;
+      if ((st.mode === 'template' || st.mode === 'draft') && !st.canTemplateEdit) return false;
+      return true;
+    };
+
+    const setBrushForCanvas = () => {
+      const brush = new fabric.PencilBrush(canvas);
+      brush.width = penStateRef.current.width;
+      brush.color = penStateRef.current.color;
+      canvas.freeDrawingBrush = brush;
+    };
+
+    const enableDrawing = () => {
+      if (!allowEditNow()) return;
+      canvas.isDrawingMode = true;
+      canvas.selection = false;
+      setBrushForCanvas();
+    };
+
+    const disableDrawing = () => {
+      canvas.isDrawingMode = false;
+      canvas.selection = true;
+    };
+
+    const startPan = (pointerId: number, x: number, y: number) => {
+      gestureRef.current = { mode: 'pan', pointerId, lastX: x, lastY: y };
+      canvas.selection = false;
+      canvas.defaultCursor = 'grabbing';
+      canvas.discardActiveObject();
+      canvas.requestRenderAll();
+    };
+
+    const startPinch = () => {
+      const entries = [...pointersRef.current.entries()].filter(([, p]) => p.pointerType === 'touch');
+      if (entries.length < 2) return;
+      const [a, b] = entries.slice(0, 2);
+      const p1 = a[1];
+      const p2 = b[1];
+      const midX = (p1.x + p2.x) / 2;
+      const midY = (p1.y + p2.y) / 2;
+      const dist = Math.hypot(p2.x - p1.x, p2.y - p1.y) || 1;
+      const zoom = canvas.getZoom() || 1;
+      gestureRef.current = { mode: 'pinch', pointerIds: [a[0], b[0]], lastMidX: midX, lastMidY: midY, startDist: dist, startZoom: zoom };
+      disableDrawing();
+      canvas.discardActiveObject();
+      canvas.requestRenderAll();
+    };
+
+    const shouldDrawForPointer = (pointerType: string) => {
+      if (!allowEditNow()) return false;
+      const st = latestStateRef.current;
+      if (pointerType === 'pen') return true; // Pencil always writes (even in select tool)
+      if (pointerType === 'touch') return st.tool === 'pen' && st.writeInput === 'touch';
+      return false;
+    };
+
+    const handleTapMaybeEditText = (evt: PointerEvent, target: fabric.Object | null) => {
+      if (!target || !isTextObject(target)) {
+        lastTapRef.current = null;
+        return;
+      }
+      if (latestStateRef.current.tool !== 'select') return; // only allow editing from select tool
+
+      const now = Date.now();
+      const prev = lastTapRef.current;
+      if (prev && prev.obj === target && now - prev.at <= 450) {
+        lastTapRef.current = null;
+        enterTextEditing(canvas, target as any);
+        try {
+          evt.preventDefault();
+          evt.stopPropagation();
+        } catch {}
+        return;
+      }
+      lastTapRef.current = { at: now, obj: target };
+    };
+
+    const onPointerDownCapture = (evt: PointerEvent) => {
+      if (!open) return;
+      if (!touchCapableRef.current) return;
+      if (evt.pointerType !== 'touch' && evt.pointerType !== 'pen') return;
+
+      const { x, y } = getLocalXY(evt);
+      pointersRef.current.set(evt.pointerId, { x, y, startX: x, startY: y, downAt: Date.now(), pointerType: evt.pointerType });
+
+      // Two-finger gestures (always)
+      const touchPointers = [...pointersRef.current.values()].filter((p) => p.pointerType === 'touch').length;
+      if (touchPointers >= 2) {
+        startPinch();
+        try {
+          evt.preventDefault();
+          evt.stopPropagation();
+          upperEl.setPointerCapture(evt.pointerId);
+        } catch {}
+        return;
+      }
+
+      // Drawing (pen, or touch when enabled and in pen tool)
+      if (shouldDrawForPointer(evt.pointerType)) {
+        gestureRef.current = { mode: 'draw', pointerId: evt.pointerId, pointerType: evt.pointerType };
+        enableDrawing();
+        try {
+          upperEl.setPointerCapture(evt.pointerId);
+        } catch {}
+        return;
+      }
+
+      // Touch panning on blank (select tool only)
+      if (evt.pointerType === 'touch' && latestStateRef.current.tool === 'select') {
+        let target: fabric.Object | null = null;
+        try {
+          target = (canvas.findTarget(evt as any) as any) || null;
+        } catch {
+          target = null;
+        }
+        if (target && (target as any).lpediaPaper) target = null;
+        if (!target) {
+          startPan(evt.pointerId, x, y);
+          try {
+            evt.preventDefault();
+            evt.stopPropagation();
+            upperEl.setPointerCapture(evt.pointerId);
+          } catch {}
+          return;
+        }
+      }
+    };
+
+    const onPointerMoveCapture = (evt: PointerEvent) => {
+      if (!open) return;
+      if (!touchCapableRef.current) return;
+      if (evt.pointerType !== 'touch' && evt.pointerType !== 'pen') return;
+
+      const { x, y } = getLocalXY(evt);
+      const prev = pointersRef.current.get(evt.pointerId);
+      pointersRef.current.set(
+        evt.pointerId,
+        prev
+          ? { ...prev, x, y, pointerType: evt.pointerType }
+          : { x, y, startX: x, startY: y, downAt: Date.now(), pointerType: evt.pointerType }
+      );
+
+      const g = gestureRef.current;
+      if (g.mode === 'pan' && g.pointerId === evt.pointerId) {
+        const dx = x - g.lastX;
+        const dy = y - g.lastY;
+        gestureRef.current = { ...g, lastX: x, lastY: y };
+        canvas.relativePan(new fabric.Point(dx, dy));
+        canvas.requestRenderAll();
+        syncCurrentPageFromViewport();
+        try {
+          evt.preventDefault();
+          evt.stopPropagation();
+        } catch {}
+        return;
+      }
+
+      if (g.mode === 'pinch') {
+        const pA = pointersRef.current.get(g.pointerIds[0]);
+        const pB = pointersRef.current.get(g.pointerIds[1]);
+        if (!pA || !pB) return;
+        const midX = (pA.x + pB.x) / 2;
+        const midY = (pA.y + pB.y) / 2;
+        const dist = Math.hypot(pB.x - pA.x, pB.y - pA.y) || 1;
+        const factor = dist / g.startDist;
+        const nextZoom = clamp(g.startZoom * factor, 0.25, 4);
+        canvas.zoomToPoint(new fabric.Point(midX, midY), nextZoom);
+        const dx = midX - g.lastMidX;
+        const dy = midY - g.lastMidY;
+        gestureRef.current = { ...g, lastMidX: midX, lastMidY: midY };
+        canvas.relativePan(new fabric.Point(dx, dy));
+        setZoomPct(Math.round((canvas.getZoom() || 1) * 100));
+        canvas.requestRenderAll();
+        syncCurrentPageFromViewport();
+        try {
+          evt.preventDefault();
+          evt.stopPropagation();
+        } catch {}
+        return;
+      }
+
+      // If currently drawing with touch/pen, block other pointer move from interfering.
+      if (g.mode === 'draw' && g.pointerId !== evt.pointerId) {
+        try {
+          evt.preventDefault();
+          evt.stopPropagation();
+        } catch {}
+        return;
+      }
+
+      // suppress default browser interactions
+      if (!prev) {
+        try {
+          evt.preventDefault();
+        } catch {}
+      }
+    };
+
+    const endGestureIfNeeded = () => {
+      const g = gestureRef.current;
+      if (g.mode === 'pinch') {
+        const touchPointers = [...pointersRef.current.values()].filter((p) => p.pointerType === 'touch').length;
+        if (touchPointers < 2) gestureRef.current = { mode: 'none' };
+      }
+      if (g.mode === 'pan') {
+        const still = pointersRef.current.has(g.pointerId);
+        if (!still) gestureRef.current = { mode: 'none' };
+      }
+      if (g.mode === 'draw') {
+        const still = pointersRef.current.has(g.pointerId);
+        if (!still) {
+          gestureRef.current = { mode: 'none' };
+          disableDrawing();
+        }
+      }
+      if (gestureRef.current.mode === 'none') {
+        canvas.selection = true;
+        canvas.defaultCursor = 'default';
+        canvas.requestRenderAll();
+        syncCurrentPageFromViewport();
+      }
+    };
+
+    const onPointerUpCapture = (evt: PointerEvent) => {
+      if (!open) return;
+      if (!touchCapableRef.current) return;
+      if (evt.pointerType !== 'touch' && evt.pointerType !== 'pen') return;
+
+      const { x, y } = getLocalXY(evt);
+      const rec = pointersRef.current.get(evt.pointerId);
+      if (rec) pointersRef.current.set(evt.pointerId, { ...rec, x, y });
+      pointersRef.current.delete(evt.pointerId);
+
+      // Text: tap-tap to edit (touch only; pencil is for writing)
+      if (evt.pointerType === 'touch') {
+        let target: fabric.Object | null = null;
+        try {
+          target = (canvas.findTarget(evt as any) as any) || null;
+        } catch {
+          target = null;
+        }
+        if (target && (target as any).lpediaPaper) target = null;
+
+        // Detect tap by movement/time (fabric event isn't reliable on iOS).
+        const moved = rec ? Math.hypot(x - rec.startX, y - rec.startY) : 0;
+        const dt = rec ? Date.now() - rec.downAt : 0;
+        if (moved <= 12 && dt <= 280) handleTapMaybeEditText(evt, target);
+        else lastTapRef.current = null;
+      }
+
+      endGestureIfNeeded();
+    };
+
+    const onPointerCancelCapture = (evt: PointerEvent) => {
+      pointersRef.current.delete(evt.pointerId);
+      endGestureIfNeeded();
+    };
 
     const onResize = () => {
       const { w: pageW, h: pageH } = pageSizeRef.current;
@@ -1503,6 +1828,7 @@ const NoteEditorModal = React.forwardRef<NoteEditorHandle, Props>(
     const onMouseDown = (opt: any) => {
       const e = opt?.e as MouseEvent | undefined;
       if (!e) return;
+      if (touchCapableRef.current && ((e as any).pointerType === 'touch' || (e as any).pointerType === 'pen')) return;
       if (!spaceDownRef.current) return;
       isPanningRef.current = true;
       panLastRef.current = { x: e.clientX, y: e.clientY };
@@ -1516,6 +1842,7 @@ const NoteEditorModal = React.forwardRef<NoteEditorHandle, Props>(
       const e = opt?.e as MouseEvent | undefined;
       const last = panLastRef.current;
       if (!e || !last) return;
+      if (touchCapableRef.current && ((e as any).pointerType === 'touch' || (e as any).pointerType === 'pen')) return;
       const dx = e.clientX - last.x;
       const dy = e.clientY - last.y;
       panLastRef.current = { x: e.clientX, y: e.clientY };
@@ -1535,17 +1862,13 @@ const NoteEditorModal = React.forwardRef<NoteEditorHandle, Props>(
     canvas.on('mouse:move', onMouseMove);
     canvas.on('mouse:up', onMouseUp);
 
-    const allowEdit = () => {
-      const st = latestStateRef.current;
-      if (!st.canEdit) return false;
-      if (st.mode === 'student' && st.submittedAt && !st.resubmitOpen) return false;
-      if (st.mode === 'teacher' && !st.annotationMode) return false;
-      if ((st.mode === 'template' || st.mode === 'draft') && !st.canTemplateEdit) return false;
-      return true;
-    };
-
     const setDrawingMode = () => {
-      if (!allowEdit()) {
+      // For touch devices we dynamically enable drawing per-pointer (pen/touch write mode).
+      if (touchCapableRef.current) {
+        canvas.isDrawingMode = false;
+        return;
+      }
+      if (!allowEditNow()) {
         canvas.isDrawingMode = false;
         return;
       }
@@ -1660,6 +1983,11 @@ const NoteEditorModal = React.forwardRef<NoteEditorHandle, Props>(
       goToPage(docRef.current.currentPage);
     });
 
+    upperEl.addEventListener('pointerdown', onPointerDownCapture, { capture: true, passive: false });
+    upperEl.addEventListener('pointermove', onPointerMoveCapture, { capture: true, passive: false });
+    upperEl.addEventListener('pointerup', onPointerUpCapture, { capture: true, passive: false });
+    upperEl.addEventListener('pointercancel', onPointerCancelCapture, { capture: true, passive: false });
+
     return () => {
       window.removeEventListener('keydown', onKeyDown);
       window.removeEventListener('keyup', onKeyUp);
@@ -1668,6 +1996,10 @@ const NoteEditorModal = React.forwardRef<NoteEditorHandle, Props>(
       canvas.off('mouse:down', onMouseDown);
       canvas.off('mouse:move', onMouseMove);
       canvas.off('mouse:up', onMouseUp);
+      upperEl.removeEventListener('pointerdown', onPointerDownCapture, { capture: true } as any);
+      upperEl.removeEventListener('pointermove', onPointerMoveCapture, { capture: true } as any);
+      upperEl.removeEventListener('pointerup', onPointerUpCapture, { capture: true } as any);
+      upperEl.removeEventListener('pointercancel', onPointerCancelCapture, { capture: true } as any);
       canvas.off('object:added', onAdded);
       canvas.off('object:modified', onModified);
       canvas.off('object:removed', onModified);
@@ -1705,6 +2037,17 @@ const NoteEditorModal = React.forwardRef<NoteEditorHandle, Props>(
       !(mode === 'student' && !!submittedAt && !resubmitOpen) &&
       !(mode === 'teacher' && !annotationMode) &&
       !((mode === 'template' || mode === 'draft') && !canTemplateEdit);
+
+    if (touchCapableRef.current) {
+      // Touch devices: enable drawing per-pointer (pen/touch), not globally.
+      if (gestureRef.current.mode !== 'draw') canvas.isDrawingMode = false;
+      const brush = new fabric.PencilBrush(canvas);
+      brush.width = penStateRef.current.width;
+      brush.color = penStateRef.current.color;
+      canvas.freeDrawingBrush = brush;
+      canvas.requestRenderAll();
+      return;
+    }
 
     if (allowEdit && tool === 'pen') {
       canvas.isDrawingMode = true;
@@ -2032,6 +2375,17 @@ const NoteEditorModal = React.forwardRef<NoteEditorHandle, Props>(
               >
                 <Pencil className="w-4 h-4" />
               </button>
+              {touchCapable && (
+                <button
+                  type="button"
+                  className="px-2 py-1 rounded-lg border-2 border-brand-brown hover:bg-gray-50 text-xs font-black"
+                  onClick={() => persistWriteInput(writeInput === 'pencil' ? 'touch' : 'pencil')}
+                  title={writeInput === 'pencil' ? '書寫輸入：Apple Pencil（手指用來選取/平移；雙指縮放）' : '書寫輸入：手指/觸控筆（筆工具下用手指書寫；雙指縮放/平移）'}
+                  disabled={loading}
+                >
+                  {writeInput === 'pencil' ? 'Pencil' : '手指'}
+                </button>
+              )}
               <button
                 type="button"
                 className="p-1 rounded-lg hover:bg-gray-100"
@@ -2383,8 +2737,8 @@ const NoteEditorModal = React.forwardRef<NoteEditorHandle, Props>(
           </div>
         )}
 
-        <div ref={containerRef} className="flex-1 min-h-0 relative bg-gray-200">
-          <canvas ref={canvasElRef} className="w-full h-full" />
+        <div ref={containerRef} className="flex-1 min-h-0 relative bg-gray-200" style={{ touchAction: 'none' }}>
+          <canvas ref={canvasElRef} className="w-full h-full" style={{ touchAction: 'none' }} />
           <input
             ref={fileInputRef}
             type="file"
