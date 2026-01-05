@@ -3042,7 +3042,7 @@ const NoteEditorModal = React.forwardRef<NoteEditorHandle, Props>(
         )}
 
         <div ref={containerRef} className="flex-1 min-h-0 relative bg-gray-200" style={{ touchAction: 'none' }}>
-          <canvas ref={canvasElRef} className="w-full h-full" style={{ touchAction: 'none' }} />
+          <canvas ref={canvasElRef} className="w-full h-full" style={{ touchAction: 'none', background: '#ffffff' }} />
           <input
             ref={fileInputRef}
             type="file"
