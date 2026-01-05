@@ -1785,12 +1785,23 @@ const NoteEditorModal = React.forwardRef<NoteEditorHandle, Props>(
         else lastTapRef.current = null;
       }
 
-      endGestureIfNeeded();
+      const g = gestureRef.current;
+      if (g.mode === 'draw' && g.pointerId === evt.pointerId) {
+        // Let Fabric finalize the stroke on pointerup (it runs after capture handlers).
+        window.setTimeout(() => endGestureIfNeeded(), 0);
+      } else {
+        endGestureIfNeeded();
+      }
     };
 
     const onPointerCancelCapture = (evt: PointerEvent) => {
       pointersRef.current.delete(evt.pointerId);
-      endGestureIfNeeded();
+      const g = gestureRef.current;
+      if (g.mode === 'draw' && g.pointerId === evt.pointerId) {
+        window.setTimeout(() => endGestureIfNeeded(), 0);
+      } else {
+        endGestureIfNeeded();
+      }
     };
 
     const onResize = () => {
@@ -1801,6 +1812,16 @@ const NoteEditorModal = React.forwardRef<NoteEditorHandle, Props>(
     };
     window.addEventListener('resize', onResize);
     onResize();
+    const ro = (() => {
+      if (typeof ResizeObserver === 'undefined') return null;
+      const obs = new ResizeObserver(() => onResize());
+      try {
+        obs.observe(container);
+      } catch {
+        // ignore
+      }
+      return obs;
+    })();
 
     const onWheel = (opt: any) => {
       const e = opt?.e as WheelEvent | undefined;
@@ -1898,7 +1919,7 @@ const NoteEditorModal = React.forwardRef<NoteEditorHandle, Props>(
       if (!obj) return;
       if ((obj as any).lpediaPaper) return;
       if (suppressSaveRef.current) return;
-      if (!allowEdit()) {
+      if (!allowEditNow()) {
         canvas.remove(obj);
         return;
       }
@@ -1911,7 +1932,7 @@ const NoteEditorModal = React.forwardRef<NoteEditorHandle, Props>(
     };
     const onModified = (e: any) => {
       if (suppressSaveRef.current) return;
-      if (!allowEdit()) return;
+      if (!allowEditNow()) return;
       const obj = e?.target as fabric.Object | undefined;
       if (obj && !(obj as any).lpediaPaper) {
         const { h: pageH } = pageSizeRef.current;
@@ -1992,6 +2013,7 @@ const NoteEditorModal = React.forwardRef<NoteEditorHandle, Props>(
       window.removeEventListener('keydown', onKeyDown);
       window.removeEventListener('keyup', onKeyUp);
       window.removeEventListener('resize', onResize);
+      if (ro) ro.disconnect();
       canvas.off('mouse:wheel', onWheel);
       canvas.off('mouse:down', onMouseDown);
       canvas.off('mouse:move', onMouseMove);
@@ -2020,10 +2042,17 @@ const NoteEditorModal = React.forwardRef<NoteEditorHandle, Props>(
     const canvas = fabricRef.current;
     const container = containerRef.current;
     if (!canvas || !container) return;
-    const { w: pageW, h: pageH } = pageSizeRef.current;
-    ensurePaperPages(canvas, pageW, pageH, docRef.current.pages.length);
-    fitPaperToContainer(canvas, container, pageW, pageH);
-    setZoomPct(Math.round((canvas.getZoom() || 1) * 100));
+    const doFit = () => {
+      const { w: pageW, h: pageH } = pageSizeRef.current;
+      ensurePaperPages(canvas, pageW, pageH, docRef.current.pages.length);
+      fitPaperToContainer(canvas, container, pageW, pageH);
+      setZoomPct(Math.round((canvas.getZoom() || 1) * 100));
+    };
+    // Wait for layout to settle (fullscreen toggles may report 0 height immediately).
+    requestAnimationFrame(() => {
+      doFit();
+      requestAnimationFrame(doFit);
+    });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, fullscreen, pageOrientation]);
 
@@ -2379,7 +2408,11 @@ const NoteEditorModal = React.forwardRef<NoteEditorHandle, Props>(
                 <button
                   type="button"
                   className="px-2 py-1 rounded-lg border-2 border-brand-brown hover:bg-gray-50 text-xs font-black"
-                  onClick={() => persistWriteInput(writeInput === 'pencil' ? 'touch' : 'pencil')}
+                  onClick={() => {
+                    const next = writeInput === 'pencil' ? 'touch' : 'pencil';
+                    persistWriteInput(next);
+                    if (next === 'touch') setTool('pen');
+                  }}
                   title={writeInput === 'pencil' ? '書寫輸入：Apple Pencil（手指用來選取/平移；雙指縮放）' : '書寫輸入：手指/觸控筆（筆工具下用手指書寫；雙指縮放/平移）'}
                   disabled={loading}
                 >
