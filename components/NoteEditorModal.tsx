@@ -7,6 +7,7 @@ import {
   ChevronDown,
   ChevronUp,
   Bold,
+  Eraser,
   FileDown,
   Image as ImageIcon,
   Lock,
@@ -18,12 +19,14 @@ import {
   MousePointer2,
   Pencil,
   Plus,
+  Redo2,
   RotateCw,
   Scan,
   Save,
   Send,
   Trash2,
   Type,
+  Undo2,
   X,
   ZoomIn,
   ZoomOut
@@ -36,7 +39,7 @@ import { VISIBLE_SUBJECTS } from '../platform';
 
 // Ensure Fabric restores our custom fields from JSON snapshots.
 try {
-  const customProps = ['lpediaLocked', 'lpediaLayer', 'crossOrigin', 'lpediaPaper', 'lpediaPageIndex'];
+  const customProps = ['lpediaLocked', 'lpediaLayer', 'crossOrigin', 'lpediaPaper', 'lpediaPageIndex', 'lpediaEraser', 'globalCompositeOperation'];
   const existing = Array.isArray((fabric as any).Object?.customProperties) ? (fabric as any).Object.customProperties : [];
   (fabric as any).Object.customProperties = Array.from(new Set([...existing, ...customProps]));
 } catch {
@@ -500,12 +503,13 @@ const NoteEditorModal = React.forwardRef<NoteEditorHandle, Props>(
   const [fullscreen, setFullscreen] = useState(false);
   const [annotationMode, setAnnotationMode] = useState(false);
   const [annotationsVisible, setAnnotationsVisible] = useState(true);
-  const [tool, setTool] = useState<'select' | 'pen'>('select');
+  const [tool, setTool] = useState<'select' | 'pen' | 'eraser'>('select');
   const [pageIndex, setPageIndex] = useState(0);
   const [pageCount, setPageCount] = useState(1);
   const [pageOrientation, setPageOrientation] = useState<PageOrientation>('portrait');
   const [penColor, setPenColor] = useState('#111827');
   const [penWidth, setPenWidth] = useState(2);
+  const [eraserWidth, setEraserWidth] = useState(18);
   const [writeInput, setWriteInput] = useState<'pencil' | 'touch'>('pencil');
   const [touchCapable, setTouchCapable] = useState(false);
   const [layersOpen, setLayersOpen] = useState(false);
@@ -514,6 +518,7 @@ const NoteEditorModal = React.forwardRef<NoteEditorHandle, Props>(
   const [activeTextColor, setActiveTextColor] = useState('#111827');
   const [docLoadedToken, setDocLoadedToken] = useState(0);
   const [selectionVersion, setSelectionVersion] = useState(0);
+  const [, setHistoryVersion] = useState(0);
 
   const effectiveNoteId = mode === 'draft' ? `draft:${String(draftId || 'new')}` : String(noteId || '').trim();
   const isDraft = mode === 'draft';
@@ -532,6 +537,7 @@ const NoteEditorModal = React.forwardRef<NoteEditorHandle, Props>(
   const pendingLoadAbortRef = useRef<AbortController | null>(null);
   const pageSizeRef = useRef(getA4Size('portrait'));
   const penStateRef = useRef({ color: '#111827', width: 2 });
+  const eraserStateRef = useRef({ width: 18 });
   const spaceDownRef = useRef(false);
   const isPanningRef = useRef(false);
   const panLastRef = useRef<{ x: number; y: number } | null>(null);
@@ -544,6 +550,12 @@ const NoteEditorModal = React.forwardRef<NoteEditorHandle, Props>(
     | { mode: 'draw'; pointerId: number; pointerType: string }
   >({ mode: 'none' });
   const lastTapRef = useRef<{ at: number; obj: fabric.Object | null } | null>(null);
+  const historyRef = useRef<{
+    states: Array<{ doc: FabricDocSnapshot; ann: FabricDocSnapshot | null }>;
+    index: number;
+    applying: boolean;
+    commitTimer: number | null;
+  }>({ states: [], index: -1, applying: false, commitTimer: null });
 
   const latestStateRef = useRef({
     open,
@@ -553,7 +565,7 @@ const NoteEditorModal = React.forwardRef<NoteEditorHandle, Props>(
     resubmitOpen: false,
     annotationMode,
     canTemplateEdit: false,
-    tool: 'select' as 'select' | 'pen',
+    tool: 'select' as 'select' | 'pen' | 'eraser',
     writeInput: 'pencil' as 'pencil' | 'touch'
   });
 
@@ -566,8 +578,126 @@ const NoteEditorModal = React.forwardRef<NoteEditorHandle, Props>(
 
   pageSizeRef.current = getA4Size(pageOrientation);
   penStateRef.current = { color: String(penColor || '#111827'), width: Math.max(1, Number(penWidth) || 2) };
+  eraserStateRef.current = { width: Math.max(6, Number(eraserWidth) || 18) };
   latestStateRef.current = { open, mode, canEdit, submittedAt, resubmitOpen, annotationMode, canTemplateEdit, tool, writeInput };
   if (typeof navigator !== 'undefined') touchCapableRef.current = Number((navigator as any).maxTouchPoints || 0) > 0;
+
+  const bumpHistory = () => setHistoryVersion(Date.now());
+
+  const cloneJson = <T,>(value: T): T => {
+    try {
+      return JSON.parse(JSON.stringify(value)) as T;
+    } catch {
+      return value;
+    }
+  };
+
+  const setHistoryToCurrent = () => {
+    historyRef.current.states = [{ doc: cloneJson(docRef.current), ann: annotationDocRef.current ? cloneJson(annotationDocRef.current) : null }];
+    historyRef.current.index = 0;
+    historyRef.current.applying = false;
+    if (historyRef.current.commitTimer) window.clearTimeout(historyRef.current.commitTimer);
+    historyRef.current.commitTimer = null;
+    bumpHistory();
+  };
+
+  const commitHistory = (snapshot: { doc: FabricDocSnapshot; ann: FabricDocSnapshot | null }) => {
+    const canvas = fabricRef.current;
+    if (!canvas) return;
+    const h = historyRef.current;
+    if (h.applying) return;
+    if (suppressSaveRef.current) return;
+    const nextStates = h.index >= 0 ? h.states.slice(0, h.index + 1) : [];
+    nextStates.push(snapshot);
+    const MAX = 30;
+    const overflow = Math.max(0, nextStates.length - MAX);
+    if (overflow > 0) nextStates.splice(0, overflow);
+    h.states = nextStates;
+    h.index = h.states.length - 1;
+    bumpHistory();
+  };
+
+  const commitHistoryFromRefs = () => {
+    const snapshot = { doc: cloneJson(docRef.current), ann: annotationDocRef.current ? cloneJson(annotationDocRef.current) : null };
+    commitHistory(snapshot);
+  };
+
+  const commitHistoryFromCanvas = () => {
+    if (mode === 'teacher') {
+      saveCanvasBaseToDocForTeacher();
+      saveCanvasAnnotationsToRef();
+    } else {
+      saveCanvasToDoc();
+    }
+    commitHistoryFromRefs();
+  };
+
+  const scheduleHistoryCommit = (ms = 350) => {
+    const h = historyRef.current;
+    if (h.commitTimer) window.clearTimeout(h.commitTimer);
+    h.commitTimer = window.setTimeout(() => {
+      h.commitTimer = null;
+      commitHistoryFromCanvas();
+    }, ms);
+  };
+
+  const canUndo = historyRef.current.index > 0;
+  const canRedo = historyRef.current.index >= 0 && historyRef.current.index < historyRef.current.states.length - 1;
+
+  const applyHistorySnapshot = async (snap: { doc: FabricDocSnapshot; ann: FabricDocSnapshot | null }) => {
+    const canvas = fabricRef.current;
+    if (!canvas) return;
+
+    const normalizedDoc = normalizeDoc(snap.doc);
+    const normalizedAnn = snap.ann ? normalizeDoc(snap.ann) : null;
+    const alignedAnn = (() => {
+      if (!normalizedAnn) return null;
+      const pages = normalizedDoc.pages.map((_, idx) => normalizedAnn.pages[idx] || emptyPage());
+      return { ...normalizedAnn, page: normalizedDoc.page, currentPage: normalizedDoc.currentPage, pages };
+    })();
+
+    docRef.current = normalizedDoc;
+    annotationDocRef.current = alignedAnn;
+
+    const orientation: PageOrientation = docRef.current?.page?.orientation === 'landscape' ? 'landscape' : 'portrait';
+    setPageOrientation(orientation);
+    pageSizeRef.current = getA4Size(orientation);
+    setPageCount(docRef.current.pages.length);
+    setPageIndex(clamp(docRef.current.currentPage ?? 0, 0, docRef.current.pages.length - 1));
+
+    const { w: pageW, h: pageH } = pageSizeRef.current;
+    historyRef.current.applying = true;
+    suppressSaveRef.current = true;
+    try {
+      await reloadCanvas({ fit: false, pageW, pageH });
+      goToPage(docRef.current.currentPage);
+      setLayersVersion((v) => v + 1);
+      setSelectionVersion((v) => v + 1);
+    } finally {
+      suppressSaveRef.current = false;
+      historyRef.current.applying = false;
+      bumpHistory();
+    }
+    void scheduleAutoSave();
+  };
+
+  const undo = async () => {
+    const h = historyRef.current;
+    if (h.index <= 0) return;
+    h.index -= 1;
+    bumpHistory();
+    const snap = h.states[h.index];
+    await applyHistorySnapshot(snap);
+  };
+
+  const redo = async () => {
+    const h = historyRef.current;
+    if (h.index < 0 || h.index >= h.states.length - 1) return;
+    h.index += 1;
+    bumpHistory();
+    const snap = h.states[h.index];
+    await applyHistorySnapshot(snap);
+  };
 
   const persistWriteInput = (next: 'pencil' | 'touch') => {
     setWriteInput(next);
@@ -615,13 +745,14 @@ const NoteEditorModal = React.forwardRef<NoteEditorHandle, Props>(
       }
       const locked = Boolean((o as any).lpediaLocked);
       const layer = String((o as any).lpediaLayer || 'base');
+      const isEraser = Boolean((o as any).lpediaEraser) || String((o as any).globalCompositeOperation || '') === 'destination-out';
 
       if (mode === 'teacher') {
         const isAnnotation = layer === 'annotation';
         o.visible = !isAnnotation || annotationsVisible;
         const editable = annotationMode && (!isAnnotation || annotationsVisible);
-        o.selectable = editable;
-        o.evented = editable;
+        o.selectable = editable && !isEraser;
+        o.evented = editable && !isEraser;
         if (editable) {
           (o as any).hasControls = true;
           (o as any).hasBorders = true;
@@ -634,6 +765,15 @@ const NoteEditorModal = React.forwardRef<NoteEditorHandle, Props>(
             (o as any).editable = true;
           }
         }
+        if (isEraser) {
+          (o as any).hasControls = false;
+          (o as any).hasBorders = false;
+          (o as any).lockMovementX = true;
+          (o as any).lockMovementY = true;
+          (o as any).lockScalingX = true;
+          (o as any).lockScalingY = true;
+          (o as any).lockRotation = true;
+        }
         continue;
       }
 
@@ -642,7 +782,7 @@ const NoteEditorModal = React.forwardRef<NoteEditorHandle, Props>(
         const isAnnotation = layer === 'annotation';
         const shouldLock = readOnly || locked || isAnnotation;
         if (isAnnotation) o.visible = true;
-        if (shouldLock) {
+        if (shouldLock || isEraser) {
           o.selectable = false;
           o.evented = false;
           (o as any).hasControls = false;
@@ -675,8 +815,8 @@ const NoteEditorModal = React.forwardRef<NoteEditorHandle, Props>(
       }
 
       // template
-      o.selectable = true;
-      o.evented = true;
+      o.selectable = !isEraser;
+      o.evented = !isEraser;
       (o as any).hasBorders = true;
       (o as any).hasControls = !locked;
       (o as any).lockMovementX = locked;
@@ -685,6 +825,15 @@ const NoteEditorModal = React.forwardRef<NoteEditorHandle, Props>(
       (o as any).lockScalingY = locked;
       (o as any).lockRotation = locked;
       o.opacity = locked ? 0.95 : 1;
+      if (isEraser) {
+        (o as any).hasControls = false;
+        (o as any).hasBorders = false;
+        (o as any).lockMovementX = true;
+        (o as any).lockMovementY = true;
+        (o as any).lockScalingX = true;
+        (o as any).lockScalingY = true;
+        (o as any).lockRotation = true;
+      }
     }
   };
 
@@ -1012,6 +1161,7 @@ const NoteEditorModal = React.forwardRef<NoteEditorHandle, Props>(
     saveCanvasToDoc();
     docRef.current.pages.push(emptyPage());
     setPageCount(docRef.current.pages.length);
+    commitHistoryFromRefs();
     await reloadCanvas();
     await scheduleAutoSave();
   };
@@ -1049,6 +1199,7 @@ const NoteEditorModal = React.forwardRef<NoteEditorHandle, Props>(
     setPageOrientation(next);
     const nextSize = getA4Size(next);
     pageSizeRef.current = nextSize;
+    commitHistoryFromRefs();
     void reloadCanvas({ fit: true, pageW: nextSize.w, pageH: nextSize.h }).then(() => {
       goToPage(docRef.current.currentPage);
     });
@@ -1350,6 +1501,7 @@ const NoteEditorModal = React.forwardRef<NoteEditorHandle, Props>(
       setPenWidth(2);
       setPageIndex(docRef.current.currentPage);
       setPageCount(docRef.current.pages.length);
+      setHistoryToCurrent();
       setDocLoadedToken(Date.now());
     } catch (e: any) {
       setError(e?.message || '載入失敗');
@@ -1382,6 +1534,7 @@ const NoteEditorModal = React.forwardRef<NoteEditorHandle, Props>(
       setPenWidth(2);
       setPageIndex(docRef.current.currentPage);
       setPageCount(docRef.current.pages.length);
+      setHistoryToCurrent();
       setDocLoadedToken(Date.now());
     } catch (e: any) {
       setError(e?.message || '載入失敗');
@@ -1427,6 +1580,7 @@ const NoteEditorModal = React.forwardRef<NoteEditorHandle, Props>(
       setPenWidth(3);
       setPageIndex(docRef.current.currentPage);
       setPageCount(docRef.current.pages.length);
+      setHistoryToCurrent();
       setDocLoadedToken(Date.now());
     } catch (e: any) {
       setError(e?.message || '載入失敗');
@@ -1461,6 +1615,7 @@ const NoteEditorModal = React.forwardRef<NoteEditorHandle, Props>(
       setPenWidth(2);
       setPageIndex(docRef.current.currentPage);
       setPageCount(docRef.current.pages.length);
+      setHistoryToCurrent();
       setDocLoadedToken(Date.now());
     } finally {
       setLoading(false);
@@ -1475,6 +1630,12 @@ const NoteEditorModal = React.forwardRef<NoteEditorHandle, Props>(
     setAnnotationMode(false);
     setAnnotationsVisible(true);
     setLayersOpen(false);
+    historyRef.current.states = [];
+    historyRef.current.index = -1;
+    historyRef.current.applying = false;
+    if (historyRef.current.commitTimer) window.clearTimeout(historyRef.current.commitTimer);
+    historyRef.current.commitTimer = null;
+    bumpHistory();
     annotationDocRef.current = null;
     if (pendingImgAbortRef.current) {
       pendingImgAbortRef.current.abort();
@@ -1540,18 +1701,44 @@ const NoteEditorModal = React.forwardRef<NoteEditorHandle, Props>(
       return true;
     };
 
-    const setBrushForCanvas = () => {
+    const setBrushForCanvas = (pointerType?: string) => {
+      const st = latestStateRef.current;
+      const wantsEraser = st.tool === 'eraser';
+      // Apple Pencil always writes; "select" tool still writes (pen), unless user explicitly picks eraser.
+      const effectiveTool: 'pen' | 'eraser' = wantsEraser ? 'eraser' : 'pen';
+
+      if (effectiveTool === 'eraser') {
+        const brush: any = new fabric.PencilBrush(canvas);
+        brush.width = eraserStateRef.current.width;
+        brush.color = '#000000';
+        const origCreatePath = brush.createPath?.bind(brush);
+        brush.createPath = (pathData: any) => {
+          const path = origCreatePath ? origCreatePath(pathData) : new fabric.Path(pathData);
+          (path as any).lpediaEraser = true;
+          (path as any).globalCompositeOperation = 'destination-out';
+          (path as any).stroke = '#000000';
+          (path as any).strokeWidth = eraserStateRef.current.width;
+          (path as any).selectable = false;
+          (path as any).evented = false;
+          (path as any).hasControls = false;
+          (path as any).hasBorders = false;
+          return path;
+        };
+        canvas.freeDrawingBrush = brush;
+        return;
+      }
+
       const brush = new fabric.PencilBrush(canvas);
       brush.width = penStateRef.current.width;
       brush.color = penStateRef.current.color;
       canvas.freeDrawingBrush = brush;
     };
 
-    const enableDrawing = () => {
+    const enableDrawing = (pointerType?: string) => {
       if (!allowEditNow()) return;
       canvas.isDrawingMode = true;
       canvas.selection = false;
-      setBrushForCanvas();
+      setBrushForCanvas(pointerType);
     };
 
     const disableDrawing = () => {
@@ -1587,7 +1774,7 @@ const NoteEditorModal = React.forwardRef<NoteEditorHandle, Props>(
       if (!allowEditNow()) return false;
       const st = latestStateRef.current;
       if (pointerType === 'pen') return true; // Pencil always writes (even in select tool)
-      if (pointerType === 'touch') return st.tool === 'pen' && st.writeInput === 'touch';
+      if (pointerType === 'touch') return (st.tool === 'pen' || st.tool === 'eraser') && st.writeInput === 'touch';
       return false;
     };
 
@@ -1635,7 +1822,7 @@ const NoteEditorModal = React.forwardRef<NoteEditorHandle, Props>(
       // Drawing (pen, or touch when enabled and in pen tool)
       if (shouldDrawForPointer(evt.pointerType)) {
         gestureRef.current = { mode: 'draw', pointerId: evt.pointerId, pointerType: evt.pointerType };
-        enableDrawing();
+        enableDrawing(evt.pointerType);
         try {
           upperEl.setPointerCapture(evt.pointerId);
         } catch {}
@@ -1893,15 +2080,12 @@ const NoteEditorModal = React.forwardRef<NoteEditorHandle, Props>(
         canvas.isDrawingMode = false;
         return;
       }
-      if (tool !== 'pen') {
+      if (tool !== 'pen' && tool !== 'eraser') {
         canvas.isDrawingMode = false;
         return;
       }
       canvas.isDrawingMode = true;
-      const brush = new fabric.PencilBrush(canvas);
-      brush.width = penStateRef.current.width;
-      brush.color = penStateRef.current.color;
-      canvas.freeDrawingBrush = brush;
+      setBrushForCanvas('mouse');
     };
 
     setDrawingMode();
@@ -1929,6 +2113,7 @@ const NoteEditorModal = React.forwardRef<NoteEditorHandle, Props>(
       applyPermissionsToObjects(canvas);
       setLayersVersion((v) => v + 1);
       void scheduleAutoSave();
+      if (String((obj as any).type || '') !== 'path') commitHistoryFromCanvas();
     };
     const onModified = (e: any) => {
       if (suppressSaveRef.current) return;
@@ -1940,12 +2125,20 @@ const NoteEditorModal = React.forwardRef<NoteEditorHandle, Props>(
       }
       setLayersVersion((v) => v + 1);
       void scheduleAutoSave();
+      scheduleHistoryCommit();
+    };
+
+    const onPathCreated = () => {
+      if (suppressSaveRef.current) return;
+      if (!allowEditNow()) return;
+      commitHistoryFromCanvas();
     };
 
     canvas.on('object:added', onAdded);
     canvas.on('object:modified', onModified);
     canvas.on('object:removed', onModified);
     canvas.on('text:changed', onModified as any);
+    canvas.on('path:created', onPathCreated as any);
 
     const bumpSelection = () => {
       setSelectionVersion((v) => v + 1);
@@ -1965,6 +2158,17 @@ const NoteEditorModal = React.forwardRef<NoteEditorHandle, Props>(
 
     const onKeyDown = (evt: KeyboardEvent) => {
       if (!open) return;
+      if ((evt.metaKey || evt.ctrlKey) && (evt.key === 'z' || evt.key === 'Z')) {
+        evt.preventDefault();
+        if (evt.shiftKey) void redo();
+        else void undo();
+        return;
+      }
+      if ((evt.metaKey || evt.ctrlKey) && (evt.key === 'y' || evt.key === 'Y')) {
+        evt.preventDefault();
+        void redo();
+        return;
+      }
       if (evt.code === 'Space') {
         const active = canvas.getActiveObject() as any;
         const isEditingText = !!active && !!(active as any).isEditing;
@@ -2026,11 +2230,13 @@ const NoteEditorModal = React.forwardRef<NoteEditorHandle, Props>(
       canvas.off('object:modified', onModified);
       canvas.off('object:removed', onModified);
       canvas.off('text:changed', onModified as any);
+      canvas.off('path:created', onPathCreated as any);
       canvas.off('selection:created', bumpSelection);
       canvas.off('selection:updated', bumpSelection);
       canvas.off('selection:cleared', bumpSelection);
       if (saveTimerRef.current) window.clearTimeout(saveTimerRef.current);
       if (templateSaveTimerRef.current) window.clearTimeout(templateSaveTimerRef.current);
+      if (historyRef.current.commitTimer) window.clearTimeout(historyRef.current.commitTimer);
       canvas.dispose();
       fabricRef.current = null;
     };
@@ -2070,6 +2276,7 @@ const NoteEditorModal = React.forwardRef<NoteEditorHandle, Props>(
     if (touchCapableRef.current) {
       // Touch devices: enable drawing per-pointer (pen/touch), not globally.
       if (gestureRef.current.mode !== 'draw') canvas.isDrawingMode = false;
+      // Default brush (will be overridden when user starts drawing)
       const brush = new fabric.PencilBrush(canvas);
       brush.width = penStateRef.current.width;
       brush.color = penStateRef.current.color;
@@ -2078,18 +2285,38 @@ const NoteEditorModal = React.forwardRef<NoteEditorHandle, Props>(
       return;
     }
 
-    if (allowEdit && tool === 'pen') {
+    if (allowEdit && (tool === 'pen' || tool === 'eraser')) {
       canvas.isDrawingMode = true;
-      const brush = new fabric.PencilBrush(canvas);
-      brush.width = penStateRef.current.width;
-      brush.color = penStateRef.current.color;
-      canvas.freeDrawingBrush = brush;
+      if (tool === 'eraser') {
+        const brush: any = new fabric.PencilBrush(canvas);
+        brush.width = eraserStateRef.current.width;
+        brush.color = '#000000';
+        const origCreatePath = brush.createPath?.bind(brush);
+        brush.createPath = (pathData: any) => {
+          const path = origCreatePath ? origCreatePath(pathData) : new fabric.Path(pathData);
+          (path as any).lpediaEraser = true;
+          (path as any).globalCompositeOperation = 'destination-out';
+          (path as any).stroke = '#000000';
+          (path as any).strokeWidth = eraserStateRef.current.width;
+          (path as any).selectable = false;
+          (path as any).evented = false;
+          (path as any).hasControls = false;
+          (path as any).hasBorders = false;
+          return path;
+        };
+        canvas.freeDrawingBrush = brush;
+      } else {
+        const brush = new fabric.PencilBrush(canvas);
+        brush.width = penStateRef.current.width;
+        brush.color = penStateRef.current.color;
+        canvas.freeDrawingBrush = brush;
+      }
     } else {
       canvas.isDrawingMode = false;
     }
     canvas.requestRenderAll();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [annotationMode, annotationsVisible, tool, canEdit, submittedAt, resubmitOpen, penColor, penWidth]);
+  }, [annotationMode, annotationsVisible, tool, canEdit, submittedAt, resubmitOpen, penColor, penWidth, eraserWidth]);
 
   useEffect(() => {
     if (!open) return;
@@ -2324,6 +2551,25 @@ const NoteEditorModal = React.forwardRef<NoteEditorHandle, Props>(
               <button
                 type="button"
                 className="p-1 rounded-lg hover:bg-gray-100 disabled:opacity-40"
+                onClick={() => void undo()}
+                disabled={loading || !canUndo}
+                title="上一步（Ctrl/Cmd+Z）"
+              >
+                <Undo2 className="w-4 h-4" />
+              </button>
+              <button
+                type="button"
+                className="p-1 rounded-lg hover:bg-gray-100 disabled:opacity-40"
+                onClick={() => void redo()}
+                disabled={loading || !canRedo}
+                title="回復（Ctrl/Cmd+Shift+Z / Ctrl/Cmd+Y）"
+              >
+                <Redo2 className="w-4 h-4" />
+              </button>
+              <div className="w-px h-6 bg-brand-brown/30 mx-1" />
+              <button
+                type="button"
+                className="p-1 rounded-lg hover:bg-gray-100 disabled:opacity-40"
                 onClick={() => zoomBy(1 / 1.15)}
                 disabled={loading}
                 title="縮小"
@@ -2403,6 +2649,15 @@ const NoteEditorModal = React.forwardRef<NoteEditorHandle, Props>(
                 disabled={loading}
               >
                 <Pencil className="w-4 h-4" />
+              </button>
+              <button
+                type="button"
+                className={`p-1 rounded-lg hover:bg-gray-100 ${tool === 'eraser' ? 'bg-gray-100' : ''}`}
+                onClick={() => setTool('eraser')}
+                title="擦膠"
+                disabled={loading}
+              >
+                <Eraser className="w-4 h-4" />
               </button>
               {touchCapable && (
                 <button
@@ -2506,6 +2761,22 @@ const NoteEditorModal = React.forwardRef<NoteEditorHandle, Props>(
                   disabled={loading || !canEditOnCanvas}
                 />
                 <div className="text-xs w-10 text-right">{penWidth}px</div>
+              </div>
+            )}
+
+            {tool === 'eraser' && (
+              <div className="px-3 py-2 rounded-2xl border-4 border-brand-brown bg-white text-brand-brown font-black shadow-comic flex items-center gap-2">
+                <div className="text-sm">擦膠</div>
+                <input
+                  type="range"
+                  min={6}
+                  max={48}
+                  value={eraserWidth}
+                  onChange={(e) => setEraserWidth(Number(e.target.value))}
+                  title="擦膠大小"
+                  disabled={loading || !canEditOnCanvas}
+                />
+                <div className="text-xs w-10 text-right">{eraserWidth}px</div>
               </div>
             )}
 
