@@ -39,7 +39,7 @@ import { VISIBLE_SUBJECTS } from '../platform';
 
 // Ensure Fabric restores our custom fields from JSON snapshots.
 try {
-  const customProps = ['lpediaLocked', 'lpediaLayer', 'crossOrigin', 'lpediaPaper', 'lpediaPageIndex', 'lpediaEraser', 'globalCompositeOperation'];
+  const customProps = ['lpediaLocked', 'lpediaLayer', 'crossOrigin', 'lpediaPaper', 'lpediaPageIndex'];
   const existing = Array.isArray((fabric as any).Object?.customProperties) ? (fabric as any).Object.customProperties : [];
   (fabric as any).Object.customProperties = Array.from(new Set([...existing, ...customProps]));
 } catch {
@@ -164,7 +164,38 @@ const sanitizePageJson = (pageJson: any, pageW: number, pageH: number) => {
   };
 
   const nextObjects = objects.filter((o: any) => !isPaperLikeRect(o));
-  return { ...base, objects: nextObjects };
+
+  // Back-compat: older "eraser" implementation stored destination-out paths on canvas,
+  // which could punch holes through everything and make pages look blank.
+  // Convert them into "delete intersecting pen strokes" (coarse erasing) and drop the eraser paths.
+  const isLegacyEraserObj = (o: any) =>
+    Boolean(o?.lpediaEraser) || String(o?.globalCompositeOperation || '') === 'destination-out';
+
+  const rectOf = (o: any) => {
+    const left = Number(o?.left) || 0;
+    const top = Number(o?.top) || 0;
+    const w = Number(o?.width) || 0;
+    const h = Number(o?.height) || 0;
+    const sx = Number(o?.scaleX ?? 1);
+    const sy = Number(o?.scaleY ?? 1);
+    const effW = Number.isFinite(sx) ? w * sx : w;
+    const effH = Number.isFinite(sy) ? h * sy : h;
+    return { l: left, t: top, r: left + effW, b: top + effH };
+  };
+  const intersects = (a: any, b: any) => a.l < b.r && a.r > b.l && a.t < b.b && a.b > b.t;
+
+  const legacyErasers = nextObjects.filter(isLegacyEraserObj);
+  if (legacyErasers.length === 0) return { ...base, objects: nextObjects };
+
+  const eraserRects = legacyErasers.map(rectOf);
+  const cleaned = nextObjects.filter((o: any) => !isLegacyEraserObj(o));
+  const finalObjects = cleaned.filter((o: any) => {
+    const type = String(o?.type || '');
+    if (type !== 'path') return true; // only erase pen strokes
+    const r = rectOf(o);
+    return !eraserRects.some((er) => intersects(r, er));
+  });
+  return { ...base, objects: finalObjects };
 };
 
 const normalizeDoc = (snap: any): FabricDocSnapshot => {
@@ -745,14 +776,13 @@ const NoteEditorModal = React.forwardRef<NoteEditorHandle, Props>(
       }
       const locked = Boolean((o as any).lpediaLocked);
       const layer = String((o as any).lpediaLayer || 'base');
-      const isEraser = Boolean((o as any).lpediaEraser) || String((o as any).globalCompositeOperation || '') === 'destination-out';
 
       if (mode === 'teacher') {
         const isAnnotation = layer === 'annotation';
         o.visible = !isAnnotation || annotationsVisible;
         const editable = annotationMode && (!isAnnotation || annotationsVisible);
-        o.selectable = editable && !isEraser;
-        o.evented = editable && !isEraser;
+        o.selectable = editable;
+        o.evented = editable;
         if (editable) {
           (o as any).hasControls = true;
           (o as any).hasBorders = true;
@@ -765,15 +795,6 @@ const NoteEditorModal = React.forwardRef<NoteEditorHandle, Props>(
             (o as any).editable = true;
           }
         }
-        if (isEraser) {
-          (o as any).hasControls = false;
-          (o as any).hasBorders = false;
-          (o as any).lockMovementX = true;
-          (o as any).lockMovementY = true;
-          (o as any).lockScalingX = true;
-          (o as any).lockScalingY = true;
-          (o as any).lockRotation = true;
-        }
         continue;
       }
 
@@ -782,7 +803,7 @@ const NoteEditorModal = React.forwardRef<NoteEditorHandle, Props>(
         const isAnnotation = layer === 'annotation';
         const shouldLock = readOnly || locked || isAnnotation;
         if (isAnnotation) o.visible = true;
-        if (shouldLock || isEraser) {
+        if (shouldLock) {
           o.selectable = false;
           o.evented = false;
           (o as any).hasControls = false;
@@ -815,8 +836,8 @@ const NoteEditorModal = React.forwardRef<NoteEditorHandle, Props>(
       }
 
       // template
-      o.selectable = !isEraser;
-      o.evented = !isEraser;
+      o.selectable = true;
+      o.evented = true;
       (o as any).hasBorders = true;
       (o as any).hasControls = !locked;
       (o as any).lockMovementX = locked;
@@ -825,15 +846,6 @@ const NoteEditorModal = React.forwardRef<NoteEditorHandle, Props>(
       (o as any).lockScalingY = locked;
       (o as any).lockRotation = locked;
       o.opacity = locked ? 0.95 : 1;
-      if (isEraser) {
-        (o as any).hasControls = false;
-        (o as any).hasBorders = false;
-        (o as any).lockMovementX = true;
-        (o as any).lockMovementY = true;
-        (o as any).lockScalingX = true;
-        (o as any).lockScalingY = true;
-        (o as any).lockRotation = true;
-      }
     }
   };
 
@@ -1701,44 +1713,21 @@ const NoteEditorModal = React.forwardRef<NoteEditorHandle, Props>(
       return true;
     };
 
-    const setBrushForCanvas = (pointerType?: string) => {
+    const setBrushForCanvas = () => {
       const st = latestStateRef.current;
       const wantsEraser = st.tool === 'eraser';
-      // Apple Pencil always writes; "select" tool still writes (pen), unless user explicitly picks eraser.
-      const effectiveTool: 'pen' | 'eraser' = wantsEraser ? 'eraser' : 'pen';
-
-      if (effectiveTool === 'eraser') {
-        const brush: any = new fabric.PencilBrush(canvas);
-        brush.width = eraserStateRef.current.width;
-        brush.color = '#000000';
-        const origCreatePath = brush.createPath?.bind(brush);
-        brush.createPath = (pathData: any) => {
-          const path = origCreatePath ? origCreatePath(pathData) : new fabric.Path(pathData);
-          (path as any).lpediaEraser = true;
-          (path as any).globalCompositeOperation = 'destination-out';
-          (path as any).stroke = '#000000';
-          (path as any).strokeWidth = eraserStateRef.current.width;
-          (path as any).selectable = false;
-          (path as any).evented = false;
-          (path as any).hasControls = false;
-          (path as any).hasBorders = false;
-          return path;
-        };
-        canvas.freeDrawingBrush = brush;
-        return;
-      }
-
       const brush = new fabric.PencilBrush(canvas);
-      brush.width = penStateRef.current.width;
-      brush.color = penStateRef.current.color;
+      brush.width = wantsEraser ? eraserStateRef.current.width : penStateRef.current.width;
+      // Eraser draws a temporary (white) stroke that we immediately turn into deletion; keep it visually subtle.
+      brush.color = wantsEraser ? '#ffffff' : penStateRef.current.color;
       canvas.freeDrawingBrush = brush;
     };
 
-    const enableDrawing = (pointerType?: string) => {
+    const enableDrawing = () => {
       if (!allowEditNow()) return;
       canvas.isDrawingMode = true;
       canvas.selection = false;
-      setBrushForCanvas(pointerType);
+      setBrushForCanvas();
     };
 
     const disableDrawing = () => {
@@ -1822,7 +1811,7 @@ const NoteEditorModal = React.forwardRef<NoteEditorHandle, Props>(
       // Drawing (pen, or touch when enabled and in pen tool)
       if (shouldDrawForPointer(evt.pointerType)) {
         gestureRef.current = { mode: 'draw', pointerId: evt.pointerId, pointerType: evt.pointerType };
-        enableDrawing(evt.pointerType);
+        enableDrawing();
         try {
           upperEl.setPointerCapture(evt.pointerId);
         } catch {}
@@ -2085,7 +2074,7 @@ const NoteEditorModal = React.forwardRef<NoteEditorHandle, Props>(
         return;
       }
       canvas.isDrawingMode = true;
-      setBrushForCanvas('mouse');
+      setBrushForCanvas();
     };
 
     setDrawingMode();
@@ -2112,8 +2101,10 @@ const NoteEditorModal = React.forwardRef<NoteEditorHandle, Props>(
       markNewObjectLayer(obj);
       applyPermissionsToObjects(canvas);
       setLayersVersion((v) => v + 1);
-      void scheduleAutoSave();
-      if (String((obj as any).type || '') !== 'path') commitHistoryFromCanvas();
+      const isPath = String((obj as any).type || '') === 'path';
+      const isEraserStroke = isPath && latestStateRef.current.tool === 'eraser';
+      if (!isEraserStroke) void scheduleAutoSave();
+      if (!isPath) commitHistoryFromCanvas();
     };
     const onModified = (e: any) => {
       if (suppressSaveRef.current) return;
@@ -2128,9 +2119,50 @@ const NoteEditorModal = React.forwardRef<NoteEditorHandle, Props>(
       scheduleHistoryCommit();
     };
 
-    const onPathCreated = () => {
+    const rectsIntersect = (a: any, b: any) => a.left < b.left + b.width && a.left + a.width > b.left && a.top < b.top + b.height && a.top + a.height > b.top;
+
+    const eraseStrokesByPath = (eraserPath: fabric.Object) => {
+      if (!allowEditNow()) return;
+      const layer = String((eraserPath as any).lpediaLayer || (latestStateRef.current.mode === 'teacher' ? 'annotation' : 'base'));
+      const er = (eraserPath as any).getBoundingRect?.(true, true) || (eraserPath as any).getBoundingRect?.(true) || { left: 0, top: 0, width: 0, height: 0 };
+
+      suppressSaveRef.current = true;
+      try {
+        // Remove the temporary eraser stroke itself
+        canvas.remove(eraserPath);
+
+        const candidates = canvas.getObjects().filter((o) => {
+          if (!o || (o as any).lpediaPaper) return false;
+          if (String((o as any).type || '') !== 'path') return false; // only erase pen strokes
+          if (String((o as any).lpediaLayer || 'base') !== layer) return false;
+          if (Boolean((o as any).lpediaLocked)) return false;
+          return true;
+        });
+
+        for (const o of candidates) {
+          const r = (o as any).getBoundingRect?.(true, true) || (o as any).getBoundingRect?.(true) || { left: 0, top: 0, width: 0, height: 0 };
+          if (rectsIntersect(er, r)) canvas.remove(o);
+        }
+      } finally {
+        suppressSaveRef.current = false;
+      }
+
+      applyPermissionsToObjects(canvas);
+      canvas.requestRenderAll();
+      setLayersVersion((v) => v + 1);
+      commitHistoryFromCanvas();
+      void scheduleAutoSave();
+    };
+
+    const onPathCreated = (e: any) => {
       if (suppressSaveRef.current) return;
       if (!allowEditNow()) return;
+      const path = e?.path as fabric.Object | undefined;
+      if (!path) return;
+      if (latestStateRef.current.tool === 'eraser') {
+        eraseStrokesByPath(path);
+        return;
+      }
       commitHistoryFromCanvas();
     };
 
@@ -2287,30 +2319,10 @@ const NoteEditorModal = React.forwardRef<NoteEditorHandle, Props>(
 
     if (allowEdit && (tool === 'pen' || tool === 'eraser')) {
       canvas.isDrawingMode = true;
-      if (tool === 'eraser') {
-        const brush: any = new fabric.PencilBrush(canvas);
-        brush.width = eraserStateRef.current.width;
-        brush.color = '#000000';
-        const origCreatePath = brush.createPath?.bind(brush);
-        brush.createPath = (pathData: any) => {
-          const path = origCreatePath ? origCreatePath(pathData) : new fabric.Path(pathData);
-          (path as any).lpediaEraser = true;
-          (path as any).globalCompositeOperation = 'destination-out';
-          (path as any).stroke = '#000000';
-          (path as any).strokeWidth = eraserStateRef.current.width;
-          (path as any).selectable = false;
-          (path as any).evented = false;
-          (path as any).hasControls = false;
-          (path as any).hasBorders = false;
-          return path;
-        };
-        canvas.freeDrawingBrush = brush;
-      } else {
-        const brush = new fabric.PencilBrush(canvas);
-        brush.width = penStateRef.current.width;
-        brush.color = penStateRef.current.color;
-        canvas.freeDrawingBrush = brush;
-      }
+      const brush = new fabric.PencilBrush(canvas);
+      brush.width = tool === 'eraser' ? eraserStateRef.current.width : penStateRef.current.width;
+      brush.color = tool === 'eraser' ? '#ffffff' : penStateRef.current.color;
+      canvas.freeDrawingBrush = brush;
     } else {
       canvas.isDrawingMode = false;
     }
@@ -3042,7 +3054,7 @@ const NoteEditorModal = React.forwardRef<NoteEditorHandle, Props>(
         )}
 
         <div ref={containerRef} className="flex-1 min-h-0 relative bg-gray-200" style={{ touchAction: 'none' }}>
-          <canvas ref={canvasElRef} className="w-full h-full" style={{ touchAction: 'none', background: '#ffffff' }} />
+          <canvas ref={canvasElRef} className="w-full h-full" style={{ touchAction: 'none' }} />
           <input
             ref={fileInputRef}
             type="file"
