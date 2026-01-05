@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Download, Edit3, Eye, Settings, Trash2, Upload, UserPlus } from 'lucide-react';
 import Button from '../../Button';
 import Input from '../../Input';
@@ -40,6 +40,7 @@ export default function AdminUsersPanel(props: {
   filterRole: UserRoleFilter;
   setFilterRole: (v: UserRoleFilter) => void;
   users: AdminUser[];
+  loading?: boolean;
   onOpenAddUser: () => void;
   onExportCSV: () => void;
   onImportCSVFile: (file: File) => void;
@@ -47,6 +48,7 @@ export default function AdminUsersPanel(props: {
   onEditUser: (userId: string) => void;
   onToggleUserStatus: (userId: string) => void;
   onDeleteUser: (userId: string) => void;
+  onDeleteUsers: (userIds: string[]) => Promise<boolean>;
 }) {
   const {
     searchTerm,
@@ -54,14 +56,70 @@ export default function AdminUsersPanel(props: {
     filterRole,
     setFilterRole,
     users,
+    loading,
     onOpenAddUser,
     onExportCSV,
     onImportCSVFile,
     onViewUser,
     onEditUser,
     onToggleUserStatus,
-    onDeleteUser
+    onDeleteUser,
+    onDeleteUsers
   } = props;
+
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const allIds = useMemo(() => users.map((u) => String(u.id)), [users]);
+  const selectedCount = selectedIds.size;
+  const allSelected = allIds.length > 0 && selectedCount === allIds.length;
+  const partiallySelected = selectedCount > 0 && selectedCount < allIds.length;
+  const selectAllRef = useRef<HTMLInputElement | null>(null);
+
+  useEffect(() => {
+    if (!selectAllRef.current) return;
+    selectAllRef.current.indeterminate = partiallySelected;
+  }, [partiallySelected]);
+
+  useEffect(() => {
+    // Drop selections that are no longer in the current list (filter/search changed).
+    setSelectedIds((prev) => {
+      const next = new Set<string>();
+      const valid = new Set(allIds);
+      for (const id of prev) {
+        if (valid.has(id)) next.add(id);
+      }
+      return next;
+    });
+  }, [allIds]);
+
+  const toggleOne = (userId: string) => {
+    const id = String(userId || '');
+    if (!id) return;
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const toggleAll = () => {
+    setSelectedIds((prev) => {
+      if (allIds.length === 0) return new Set();
+      if (prev.size === allIds.length) return new Set();
+      return new Set(allIds);
+    });
+  };
+
+  const clearSelection = () => setSelectedIds(new Set());
+
+  const handleDeleteSelected = () => {
+    const ids = Array.from(selectedIds);
+    if (ids.length === 0) return;
+    void (async () => {
+      const ok = await onDeleteUsers(ids);
+      if (ok) clearSelection();
+    })();
+  };
 
   return (
     <div className="space-y-4">
@@ -119,16 +177,37 @@ export default function AdminUsersPanel(props: {
       </div>
 
       <div className="bg-white border border-gray-200 rounded-2xl p-5 shadow-sm">
-        <div className="flex justify-between items-center mb-4">
+        <div className="flex flex-wrap justify-between items-center gap-3 mb-4">
           <h3 className="text-lg font-black text-brand-brown">
             用戶列表 ({users.length})
           </h3>
+          <div className="flex flex-wrap items-center gap-3">
+            <label className="flex items-center gap-2 font-bold text-gray-700">
+              <input
+                ref={selectAllRef}
+                type="checkbox"
+                checked={allSelected}
+                onChange={toggleAll}
+                disabled={loading || users.length === 0}
+              />
+              全選（已選 {selectedCount}）
+            </label>
+            <Button
+              className="bg-red-600 hover:bg-red-700 text-white flex items-center gap-2"
+              onClick={handleDeleteSelected}
+              disabled={loading || selectedCount === 0}
+            >
+              <Trash2 className="w-4 h-4" />
+              刪除已選
+            </Button>
+          </div>
         </div>
 
         <div className="overflow-x-auto">
           <table className="w-full">
             <thead>
               <tr className="border-b border-gray-200">
+                <th className="text-left py-3 px-4 font-bold text-gray-700 w-[56px]">選取</th>
                 <th className="text-left py-3 px-4 font-bold text-gray-700">用戶名</th>
                 <th className="text-left py-3 px-4 font-bold text-gray-700">角色</th>
                 <th className="text-left py-3 px-4 font-bold text-gray-700">姓名</th>
@@ -143,6 +222,14 @@ export default function AdminUsersPanel(props: {
             <tbody>
               {users.map((user) => (
                 <tr key={user.id} className="border-b border-gray-100 hover:bg-gray-50">
+                  <td className="py-3 px-4">
+                    <input
+                      type="checkbox"
+                      checked={selectedIds.has(String(user.id))}
+                      onChange={() => toggleOne(user.id)}
+                      disabled={loading}
+                    />
+                  </td>
                   <td className="py-3 px-4 font-mono text-sm">{user.username}</td>
                   <td className="py-3 px-4">
                     <span className={`px-2 py-1 rounded-full text-xs font-bold ${

@@ -108,14 +108,22 @@ const AdminDashboard: React.FC = () => {
   const loadUsers = useCallback(async () => {
     try {
       setUsersLoading(true);
-      const response = await authService.getUsers({
-        role: filterRole === 'all' ? undefined : filterRole,
-        search: searchTerm || undefined,
-        page: 1,
-        limit: 100
-      });
+      const role = filterRole === 'all' ? undefined : filterRole;
+      const search = searchTerm || undefined;
+      const limit = 500;
 
-      const adminUsers: AdminUser[] = response.users.map((user) => ({
+      const all: any[] = [];
+      let page = 1;
+      let totalPages = 1;
+      do {
+        const response = await authService.getUsers({ role, search, page, limit });
+        const rows = Array.isArray(response.users) ? response.users : [];
+        all.push(...rows);
+        totalPages = Math.max(1, Number(response.pagination?.totalPages || 1) || 1);
+        page += 1;
+      } while (page <= totalPages);
+
+      const adminUsers: AdminUser[] = all.map((user) => ({
         id: user.id,
         username: user.username,
         role: user.role,
@@ -415,6 +423,36 @@ const AdminDashboard: React.FC = () => {
     } catch (error) {
       setUsersError('刪除用戶失敗');
       console.error(error);
+    }
+  }, [loadUsers]);
+
+  const deleteUsersBulk = useCallback(async (userIds: string[]) => {
+    const ids = (Array.isArray(userIds) ? userIds : []).map(String).filter(Boolean);
+    if (ids.length === 0) return false;
+    if (!window.confirm(`確定要永久刪除已選的 ${ids.length} 位用戶？此操作無法復原！`)) return false;
+
+    try {
+      setUsersLoading(true);
+      setUsersError('');
+      const failed: string[] = [];
+      for (const id of ids) {
+        try {
+          await authService.deleteUser(id, true);
+        } catch {
+          failed.push(id);
+        }
+      }
+      await loadUsers();
+      if (failed.length > 0) {
+        alert(`已嘗試刪除 ${ids.length} 位，用戶刪除失敗：${failed.length} 位。`);
+      }
+      return true;
+    } catch (error) {
+      setUsersError('批次刪除用戶失敗');
+      console.error(error);
+      return false;
+    } finally {
+      setUsersLoading(false);
     }
   }, [loadUsers]);
 
@@ -768,6 +806,7 @@ const AdminDashboard: React.FC = () => {
               filterRole={filterRole}
               setFilterRole={setFilterRole}
               users={users}
+              loading={usersLoading}
               onOpenAddUser={() => {
                 setAddUserError('');
                 setShowAddUser(true);
@@ -778,6 +817,7 @@ const AdminDashboard: React.FC = () => {
               onEditUser={(userId) => void openUserModal(userId, 'edit')}
               onToggleUserStatus={(userId) => void toggleUserStatus(userId)}
               onDeleteUser={(userId) => void deleteUser(userId)}
+              onDeleteUsers={deleteUsersBulk}
             />
           </div>
         )}
