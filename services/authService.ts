@@ -2494,6 +2494,15 @@ class AuthService {
     return this.handleResponse(response);
   }
 
+  async appStudioAiChat(payload: { prompt?: string; system?: string; messages?: Array<{ role: 'system' | 'user' | 'assistant'; content: string }>; temperature?: number; maxTokens?: number }): Promise<{ content: string; model: string }> {
+    const response = await fetch(`${this.API_BASE}/app-studio/ai/chat`, {
+      method: 'POST',
+      headers: this.getAuthHeaders(),
+      body: JSON.stringify(payload || {})
+    });
+    return this.handleResponse(response);
+  }
+
   // === 點數系統相關API ===
 
   // Student端圖片生成點數方法

@@ -961,15 +961,54 @@ const AppStudioModal: React.FC<{
     URL.revokeObjectURL(url);
   };
 
-  const buildPreviewHtml = (html: string, opts?: { appId?: string; versionId?: string; submitEnabled?: boolean }) => {
-    const appId = String(opts?.appId ?? selectedAppId ?? '');
-    const versionId = String(opts?.versionId ?? selectedVersionId ?? '');
-    const submitEnabled = typeof opts?.submitEnabled === 'boolean' ? opts.submitEnabled : true;
-    const canSubmit = submitEnabled && Boolean(appId) && user?.role === 'student';
-    const injector = `
-<style>
-  .lpedia-submit-btn{position:fixed;right:14px;bottom:14px;z-index:2147483647;border:3px solid #5E4C40;background:#10B981;color:#fff;font-weight:900;border-radius:16px;padding:10px 14px;box-shadow:0 6px 0 rgba(0,0,0,.2);cursor:pointer}
-  .lpedia-submit-btn:active{transform:translateY(2px);box-shadow:0 3px 0 rgba(0,0,0,.2)}
+	  const buildPreviewHtml = (html: string, opts?: { appId?: string; versionId?: string; submitEnabled?: boolean }) => {
+	    const appId = String(opts?.appId ?? selectedAppId ?? '');
+	    const versionId = String(opts?.versionId ?? selectedVersionId ?? '');
+	    const submitEnabled = typeof opts?.submitEnabled === 'boolean' ? opts.submitEnabled : true;
+	    const canSubmit = submitEnabled && Boolean(appId) && user?.role === 'student';
+	    const aiBridge = `
+	<script>
+	  (function(){
+	    try{
+	      if(window.LPediaAI && typeof window.LPediaAI.chat === 'function') return;
+	      var pending = new Map();
+	      var seq = 0;
+	      function send(msg){
+	        try{ parent.postMessage(msg, '*'); }catch(e){}
+	      }
+	      window.LPediaAI = {
+	        chat: function(input){
+	          var requestId = 'ai_' + (++seq) + '_' + Date.now();
+	          return new Promise(function(resolve, reject){
+	            pending.set(requestId, { resolve: resolve, reject: reject });
+	            send({ type: 'LPEDIA_AI_CHAT', requestId: requestId, payload: input });
+	            setTimeout(function(){
+	              if(!pending.has(requestId)) return;
+	              pending.delete(requestId);
+	              reject(new Error('AI request timeout'));
+	            }, 60000);
+	          });
+	        }
+	      };
+	      window.addEventListener('message', function(evt){
+	        try{
+	          if(evt.source !== parent) return;
+	          var d = evt.data;
+	          if(!d || d.type !== 'LPEDIA_AI_CHAT_RESULT') return;
+	          var h = pending.get(d.requestId);
+	          if(!h) return;
+	          pending.delete(d.requestId);
+	          if(d.error) h.reject(new Error(String(d.error)));
+	          else h.resolve(d.content);
+	        }catch(e){}
+	      });
+	    }catch(e){}
+	  })();
+	</script>`;
+	    const injector = `
+	<style>
+	  .lpedia-submit-btn{position:fixed;right:14px;bottom:14px;z-index:2147483647;border:3px solid #5E4C40;background:#10B981;color:#fff;font-weight:900;border-radius:16px;padding:10px 14px;box-shadow:0 6px 0 rgba(0,0,0,.2);cursor:pointer}
+	  .lpedia-submit-btn:active{transform:translateY(2px);box-shadow:0 3px 0 rgba(0,0,0,.2)}
 </style>
 <script>
   (function(){
@@ -986,33 +1025,73 @@ const AppStudioModal: React.FC<{
       if(document.readyState==='interactive'||document.readyState==='complete'){ document.body.appendChild(btn); }
     }catch(e){}
   })();
-</script>`;
-    const raw = String(html || '');
-    const hasSubmitInjector = raw.includes('lpedia-submit-btn');
-    const submitPart = (!submitEnabled || hasSubmitInjector) ? '' : injector;
-    if (raw.includes('</body>')) return raw.replace('</body>', `${submitPart}</body>`);
-    return `${raw}${submitPart}`;
-  };
+	    </script>`;
+	    const raw = String(html || '');
+	    const hasSubmitInjector = raw.includes('lpedia-submit-btn');
+	    const submitPart = (!submitEnabled || hasSubmitInjector) ? '' : injector;
+	    const hasAiBridge = raw.includes('LPEDIA_AI_CHAT');
+	    const aiPart = hasAiBridge ? '' : aiBridge;
+	    const all = `${aiPart}${submitPart}`;
+	    if (!all) return raw;
+	    if (raw.includes('</body>')) return raw.replace('</body>', `${all}</body>`);
+	    return `${raw}${all}`;
+	  };
 
   // in-app submit bridge
-  useEffect(() => {
-    if (!open) return;
-    const onMsg = (evt: MessageEvent) => {
-      const srcWin = iframeRef.current?.contentWindow;
-      const fullWin = fullscreenIframeRef.current?.contentWindow;
-      if ((!srcWin && !fullWin) || (evt.source !== srcWin && evt.source !== fullWin)) return;
-      const data: any = evt.data;
-      if (!data || !data.type) return;
-      if (data.type === 'LPEDIA_APP_SUBMIT') {
-        if (!selectedAppId) return;
-        openSubmitPicker();
-        return;
-      }
-    };
-    window.addEventListener('message', onMsg);
-    return () => window.removeEventListener('message', onMsg);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, selectedAppId, selectedVersionId, submitting, user?.role]);
+	  useEffect(() => {
+	    if (!open) return;
+	    const onMsg = (evt: MessageEvent) => {
+	      const srcWin = iframeRef.current?.contentWindow;
+	      const fullWin = fullscreenIframeRef.current?.contentWindow;
+	      if ((!srcWin && !fullWin) || (evt.source !== srcWin && evt.source !== fullWin)) return;
+	      const data: any = evt.data;
+	      if (!data || !data.type) return;
+	      if (data.type === 'LPEDIA_APP_SUBMIT') {
+	        if (!selectedAppId) return;
+	        openSubmitPicker();
+	        return;
+	      }
+	      if (data.type === 'LPEDIA_AI_CHAT') {
+	        const requestId = String(data.requestId || '');
+	        const payload = data.payload;
+	        const prompt = typeof payload === 'string'
+	          ? payload
+	          : (typeof payload?.prompt === 'string' ? payload.prompt : '');
+	        const messages = Array.isArray(payload?.messages) ? payload.messages : undefined;
+	        const system = typeof payload?.system === 'string' ? payload.system : undefined;
+	        const temperature = typeof payload?.temperature === 'number' ? payload.temperature : undefined;
+	        const maxTokens = typeof payload?.maxTokens === 'number' ? payload.maxTokens : undefined;
+
+	        (async () => {
+	          try {
+	            const resp = await authService.appStudioAiChat({
+	              ...(prompt ? { prompt } : null),
+	              ...(messages ? { messages } : null),
+	              ...(system ? { system } : null),
+	              ...(temperature !== undefined ? { temperature } : null),
+	              ...(maxTokens !== undefined ? { maxTokens } : null)
+	            });
+	            try {
+	              (evt.source as any)?.postMessage({ type: 'LPEDIA_AI_CHAT_RESULT', requestId, content: resp?.content || '' }, '*');
+	            } catch {
+	              // ignore
+	            }
+	          } catch (e: any) {
+	            const msg = e?.message || 'AI 連線失敗';
+	            try {
+	              (evt.source as any)?.postMessage({ type: 'LPEDIA_AI_CHAT_RESULT', requestId, error: msg }, '*');
+	            } catch {
+	              // ignore
+	            }
+	          }
+	        })();
+	        return;
+	      }
+	    };
+	    window.addEventListener('message', onMsg);
+	    return () => window.removeEventListener('message', onMsg);
+	    // eslint-disable-next-line react-hooks/exhaustive-deps
+	  }, [open, selectedAppId, selectedVersionId, submitting, user?.role]);
 
   if (!open) return null;
 
