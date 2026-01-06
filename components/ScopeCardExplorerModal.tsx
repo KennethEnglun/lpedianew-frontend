@@ -32,6 +32,7 @@ export const ScopeCardExplorerModal: React.FC<ScopeCardExplorerModalProps> = ({ 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [scopeCards, setScopeCards] = useState<ScopeCard[]>([]);
+  const [sortKey, setSortKey] = useState<'subject' | 'class' | 'stage' | 'recent'>('subject');
 
   const [analyticsOpen, setAnalyticsOpen] = useState(false);
   const [analyticsData, setAnalyticsData] = useState<StudyAnalytics | null>(null);
@@ -57,6 +58,101 @@ export const ScopeCardExplorerModal: React.FC<ScopeCardExplorerModalProps> = ({ 
       })
       .finally(() => setLoading(false));
   }, [isOpen]);
+
+  const getStageName = (card: ScopeCard) => {
+    const fromSnapshot = String(card.folderSnapshot?.path?.[0]?.name || '').trim();
+    if (fromSnapshot) return fromSnapshot;
+    const label = String(card.folderPathLabel || '').trim();
+    if (!label) return '';
+    return label.split('→')[0]?.trim() || '';
+  };
+
+  const stageOrder = (stageName: string) => {
+    const s = String(stageName || '').trim();
+    const m = s.match(/^第([一二三四五六七八九十])學段$/);
+    if (!m) return Number.POSITIVE_INFINITY;
+    const map: Record<string, number> = { 一: 1, 二: 2, 三: 3, 四: 4, 五: 5, 六: 6, 七: 7, 八: 8, 九: 9, 十: 10 };
+    return map[m[1]] ?? Number.POSITIVE_INFINITY;
+  };
+
+  const classOrder = (className: string) => {
+    const s = String(className || '').trim();
+    const m = s.match(/^(\d+)\s*([A-Za-z]*)/);
+    const grade = m ? Number(m[1]) : Number.POSITIVE_INFINITY;
+    const suffix = (m?.[2] || '').toUpperCase();
+    return { grade, suffix };
+  };
+
+  const sortedScopeCards = useMemo(() => {
+    const list = Array.isArray(scopeCards) ? scopeCards.slice() : [];
+    const indexed = list.map((c, idx) => ({ c, idx }));
+
+    const cmpText = (a: string, b: string) => String(a || '').localeCompare(String(b || ''), 'zh-Hant');
+    const cmpStage = (a: ScopeCard, b: ScopeCard) => {
+      const sa = getStageName(a);
+      const sb = getStageName(b);
+      const oa = stageOrder(sa);
+      const ob = stageOrder(sb);
+      if (oa !== ob) return oa - ob;
+      return cmpText(sa, sb);
+    };
+    const cmpClass = (a: ScopeCard, b: ScopeCard) => {
+      const ca = classOrder(a.className);
+      const cb = classOrder(b.className);
+      if (ca.grade !== cb.grade) return ca.grade - cb.grade;
+      return cmpText(ca.suffix, cb.suffix);
+    };
+
+    const cmpCore = (a: ScopeCard, b: ScopeCard, key: typeof sortKey) => {
+      if (key === 'recent') {
+        const ta = a.lastTaskAt ? new Date(String(a.lastTaskAt)).getTime() : 0;
+        const tb = b.lastTaskAt ? new Date(String(b.lastTaskAt)).getTime() : 0;
+        if (ta !== tb) return tb - ta;
+        // fallback
+        const s = cmpText(a.subject, b.subject);
+        if (s) return s;
+        const c = cmpClass(a, b);
+        if (c) return c;
+        const st = cmpStage(a, b);
+        if (st) return st;
+      } else if (key === 'subject') {
+        const s = cmpText(a.subject, b.subject);
+        if (s) return s;
+        const c = cmpClass(a, b);
+        if (c) return c;
+        const st = cmpStage(a, b);
+        if (st) return st;
+      } else if (key === 'class') {
+        const c = cmpClass(a, b);
+        if (c) return c;
+        const s = cmpText(a.subject, b.subject);
+        if (s) return s;
+        const st = cmpStage(a, b);
+        if (st) return st;
+      } else if (key === 'stage') {
+        const st = cmpStage(a, b);
+        if (st) return st;
+        const s = cmpText(a.subject, b.subject);
+        if (s) return s;
+        const c = cmpClass(a, b);
+        if (c) return c;
+      }
+
+      const p = cmpText(a.folderPathLabel || '', b.folderPathLabel || '');
+      if (p) return p;
+      const t = cmpText(a.scopeText || '', b.scopeText || '');
+      if (t) return t;
+      return cmpText(a.cardId, b.cardId);
+    };
+
+    indexed.sort((aa, bb) => {
+      const r = cmpCore(aa.c, bb.c, sortKey);
+      if (r) return r;
+      return aa.idx - bb.idx;
+    });
+
+    return indexed.map((x) => x.c);
+  }, [scopeCards, sortKey]);
 
   const closeAll = () => {
     setPickStudentOpen(false);
@@ -129,21 +225,37 @@ export const ScopeCardExplorerModal: React.FC<ScopeCardExplorerModalProps> = ({ 
             </button>
           </div>
 
-          <div className="p-6 overflow-y-auto max-h-[calc(90vh-120px)]">
-            {error ? (
-              <div className="mb-4 p-3 rounded-2xl border-2 border-red-200 bg-red-50 text-red-700 font-bold">{error}</div>
-            ) : null}
+	          <div className="p-6 overflow-y-auto max-h-[calc(90vh-120px)]">
+	            {error ? (
+	              <div className="mb-4 p-3 rounded-2xl border-2 border-red-200 bg-red-50 text-red-700 font-bold">{error}</div>
+	            ) : null}
 
-            {loading ? (
-              <div className="text-center py-10 text-gray-600 font-bold">載入中…</div>
-            ) : scopeCards.length === 0 ? (
-              <div className="text-center py-10 text-gray-600 font-bold">暫無範圍卡</div>
-            ) : (
-              <div className="space-y-4">
-                {scopeCards.map((card) => (
-                  <div key={card.cardId} className="bg-white rounded-2xl p-5 shadow-comic border-2 border-gray-100">
-                    <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-                      <div className="min-w-0">
+              {!loading && scopeCards.length > 0 && (
+                <div className="mb-4 flex flex-wrap items-center gap-3">
+                  <div className="text-sm font-black text-brand-brown">排序</div>
+                  <select
+                    className="px-3 py-2 rounded-2xl border-2 border-brand-brown bg-white font-bold"
+                    value={sortKey}
+                    onChange={(e) => setSortKey(e.target.value as any)}
+                  >
+                    <option value="subject">科目 → 班別 → 學段</option>
+                    <option value="class">班別 → 科目 → 學段</option>
+                    <option value="stage">學段 → 科目 → 班別</option>
+                    <option value="recent">最近更新</option>
+                  </select>
+                </div>
+              )}
+
+	            {loading ? (
+	              <div className="text-center py-10 text-gray-600 font-bold">載入中…</div>
+	            ) : scopeCards.length === 0 ? (
+	              <div className="text-center py-10 text-gray-600 font-bold">暫無範圍卡</div>
+	            ) : (
+	              <div className="space-y-4">
+	                {sortedScopeCards.map((card) => (
+	                  <div key={card.cardId} className="bg-white rounded-2xl p-5 shadow-comic border-2 border-gray-100">
+	                    <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+	                      <div className="min-w-0">
                         <div className="font-bold text-brand-brown text-lg truncate">
                           {card.subject} - {card.className} {card.folderPathLabel ? `（${card.folderPathLabel}）` : ''}
                         </div>
