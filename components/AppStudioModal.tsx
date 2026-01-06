@@ -13,7 +13,7 @@ type StudioApp = {
   latestVersionId?: string | null;
   folderId?: string | null;
   updatedAt?: string;
-  stats?: { forks?: number; submissions?: number; lastSubmissionAt?: number | null };
+  stats?: { forks?: number; submissions?: number; lastSubmissionAt?: number | null; likes?: number; likedByMe?: boolean };
   owner?: any;
 };
 
@@ -38,6 +38,7 @@ const AppStudioModal: React.FC<{
   const [loadingApps, setLoadingApps] = useState(false);
   const [appsError, setAppsError] = useState('');
   const [publicSort, setPublicSort] = useState<'popular' | 'updated' | 'forks' | 'submits'>('popular');
+  const [likingAppId, setLikingAppId] = useState<string>('');
 
   const [selectedAppId, setSelectedAppId] = useState<string | null>(null);
   const [versions, setVersions] = useState<any[]>([]);
@@ -508,10 +509,10 @@ const AppStudioModal: React.FC<{
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [publicSort]);
 
-  const visibleApps = useMemo(() => {
-    if (tab === 'inbox') return [];
-    const pool = tab === 'public' ? publicApps : apps;
-    const q = search.trim().toLowerCase();
+	  const visibleApps = useMemo(() => {
+	    if (tab === 'inbox') return [];
+	    const pool = tab === 'public' ? publicApps : apps;
+	    const q = search.trim().toLowerCase();
     return pool.filter((a: any) => {
       if (tab === 'my' && folderId !== 'all') {
         const aFolder = String(a?.folderId || '');
@@ -522,7 +523,27 @@ const AppStudioModal: React.FC<{
       if (!q) return true;
       return String(a.title || '').toLowerCase().includes(q);
     });
-  }, [apps, publicApps, search, tab]);
+	  }, [apps, publicApps, search, tab]);
+
+  const likePublicApp = async (appId: string) => {
+    if (!appId) return;
+    if (likingAppId) return;
+    setLikingAppId(appId);
+    try {
+      const resp = await authService.likeAppStudioApp(appId);
+      setPublicApps((prev) => prev.map((a) => {
+        if (String(a.id) !== String(appId)) return a;
+        const nextStats = { ...(a.stats || {}) };
+        nextStats.likes = Number(resp?.likes ?? nextStats.likes ?? 0);
+        nextStats.likedByMe = true;
+        return { ...a, stats: nextStats };
+      }));
+    } catch (e: any) {
+      alert(e?.message || '讚好失敗');
+    } finally {
+      setLikingAppId('');
+    }
+  };
 
   // Load a few thumbnails for the current list (lightweight: small number, sandboxed iframes)
   useEffect(() => {
@@ -1227,17 +1248,24 @@ const AppStudioModal: React.FC<{
               <div className="text-sm text-gray-500 font-bold flex items-center gap-2">
                 <Loader2 className="w-4 h-4 animate-spin" /> 載入中...
               </div>
-            ) : tab !== 'inbox' ? (
-              <div className="space-y-2">
-                {visibleApps.map((a) => (
-                  <button
-                    key={a.id}
-                    type="button"
-                    onClick={() => openApp(a.id)}
-                    className={`w-full text-left px-3 py-3 rounded-2xl border-2 font-black ${selectedAppId === a.id ? 'bg-[#FEF7EC] border-brand-brown' : 'bg-white border-gray-200 hover:border-brand-brown'}`}
-                  >
-                    {tab === 'public' && (
-                      <div className="mb-2 bg-white border border-gray-200 rounded-xl overflow-hidden">
+	            ) : tab !== 'inbox' ? (
+	              <div className="space-y-2">
+	                {visibleApps.map((a) => (
+	                  <div
+	                    key={a.id}
+	                    onClick={() => openApp(a.id)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.preventDefault();
+                          openApp(a.id);
+                        }
+                      }}
+                      role="button"
+                      tabIndex={0}
+	                    className={`w-full text-left px-3 py-3 rounded-2xl border-2 font-black ${selectedAppId === a.id ? 'bg-[#FEF7EC] border-brand-brown' : 'bg-white border-gray-200 hover:border-brand-brown'}`}
+	                  >
+	                    {tab === 'public' && (
+	                      <div className="mb-2 bg-white border border-gray-200 rounded-xl overflow-hidden">
                         <div className="h-20 overflow-hidden relative">
                           {thumbHtmlByAppId[String(a.id)] ? (
                             <div className="absolute inset-0 origin-top-left" style={{ transform: 'scale(0.25)' }}>
@@ -1256,25 +1284,52 @@ const AppStudioModal: React.FC<{
                         </div>
                       </div>
                     )}
-                    <div className="flex items-center gap-2">
-                      <span className="flex-1 text-brand-brown">{a.title || '作品'}</span>
-                      {a.visibility === 'public' ? <Globe className="w-4 h-4 text-emerald-700" /> : <Folder className="w-4 h-4 text-gray-500" />}
-                    </div>
-                    {tab === 'public' && a.owner?.profile?.name && (
-                      <div className="text-xs text-gray-500 font-bold mt-1">作者：{String(a.owner.profile.name)}</div>
-                    )}
-                    {a.stats && (
-                      <div className="text-xs text-gray-500 font-bold mt-1">Fork {Number(a.stats.forks || 0)} • 提交 {Number(a.stats.submissions || 0)}</div>
-                    )}
-                    <div className="text-xs text-gray-500 font-bold mt-1">
-                      {a.updatedAt ? new Date(a.updatedAt).toLocaleString() : ''}
-                    </div>
-                  </button>
-                ))}
-                {visibleApps.length === 0 && (
-                  <div className="text-sm text-gray-500 font-bold">沒有作品</div>
-                )}
-              </div>
+	                    <div className="flex items-center gap-2">
+	                      <span className="flex-1 text-brand-brown">{a.title || '作品'}</span>
+	                      {a.visibility === 'public' ? <Globe className="w-4 h-4 text-emerald-700" /> : <Folder className="w-4 h-4 text-gray-500" />}
+	                    </div>
+	                    {tab === 'public' && a.owner?.profile?.name && (
+	                      <div className="text-xs text-gray-500 font-bold mt-1">作者：{String(a.owner.profile.name)}</div>
+	                    )}
+	                    {a.stats && (
+	                      <div className="text-xs text-gray-500 font-bold mt-1">Fork {Number(a.stats.forks || 0)} • 提交 {Number(a.stats.submissions || 0)}</div>
+	                    )}
+                      {tab === 'public' && (
+                        <div className="mt-2 flex items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              void likePublicApp(String(a.id));
+                            }}
+                            disabled={
+                              likingAppId === String(a.id)
+                              || a.ownerId === String(user?.id || '')
+                              || a.stats?.likedByMe
+                            }
+                            className={`px-3 py-1 rounded-full border-2 font-black text-xs ${
+                              (a.ownerId === String(user?.id || '') || a.stats?.likedByMe)
+                                ? 'border-gray-200 bg-gray-100 text-gray-400 cursor-not-allowed'
+                                : 'border-brand-brown bg-white text-brand-brown hover:bg-gray-50'
+                            }`}
+                            title={a.ownerId === String(user?.id || '') ? '不可讚好自己的作品' : (a.stats?.likedByMe ? '你已讚好過' : '讚好')}
+                          >
+                            👍 {Number(a.stats?.likes || 0)}
+                            {a.stats?.likedByMe ? '（已讚好）' : ''}
+                            {likingAppId === String(a.id) ? '…' : ''}
+                          </button>
+                        </div>
+                      )}
+	                    <div className="text-xs text-gray-500 font-bold mt-1">
+	                      {a.updatedAt ? new Date(a.updatedAt).toLocaleString() : ''}
+	                    </div>
+	                  </div>
+	                ))}
+	                {visibleApps.length === 0 && (
+	                  <div className="text-sm text-gray-500 font-bold">沒有作品</div>
+	                )}
+	              </div>
             ) : (
               <div className="space-y-2">
                 {loadingInbox ? (

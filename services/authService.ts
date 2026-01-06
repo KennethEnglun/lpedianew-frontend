@@ -2503,6 +2503,14 @@ class AuthService {
     return this.handleResponse(response);
   }
 
+  async likeAppStudioApp(appId: string): Promise<{ liked: boolean; likes: number; alreadyLiked?: boolean }> {
+    const response = await fetch(`${this.API_BASE}/app-studio/apps/${encodeURIComponent(String(appId))}/like`, {
+      method: 'POST',
+      headers: this.getAuthHeaders()
+    });
+    return this.handleResponse(response);
+  }
+
   // === 點數系統相關API ===
 
   // Student端圖片生成點數方法
