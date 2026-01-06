@@ -228,9 +228,14 @@ const StudentDashboard: React.FC = () => {
   const tasksInTopic = useMemo(() => {
     if (!selectedTopicId) return [];
     return tasks.filter((t: any) => {
+      const folderId = String(t?.folderId || '');
+      if (folderId && folderId === String(selectedTopicId)) return true;
       const snap = t?.folderSnapshot;
       const path = Array.isArray(snap?.path) ? snap.path : [];
-      return path.some((p: any) => String(p?.id) === String(selectedTopicId));
+      const topic = path[1];
+      const sub = path[2];
+      if (String(topic?.id || '') !== String(selectedTopicId)) return false;
+      return !sub?.id;
     });
   }, [tasks, selectedTopicId]);
 
@@ -1257,7 +1262,7 @@ const StudentDashboard: React.FC = () => {
                           if (list.length === 0) {
                             return (
                               <div className="text-center py-10 text-gray-500 border-4 border-dashed border-gray-300 rounded-3xl">
-                                此處暫無任務
+                                {!selectedSubfolderId && subFolders.length > 0 ? '此層沒有任務，請進入子資料夾查看' : '此處暫無任務'}
                               </div>
                             );
                           }

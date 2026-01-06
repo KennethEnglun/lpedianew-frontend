@@ -174,6 +174,7 @@ const AssignmentExplorerModal: React.FC<Props> = ({ open, onClose, authService, 
   const [className, setClassName] = useState<string>('');
   const [stageId, setStageId] = useState<string>('');
   const [topicId, setTopicId] = useState<string>('');
+  const [subId, setSubId] = useState<string>('');
   const [selectedTask, setSelectedTask] = useState<any | null>(null);
   const [taskLoading, setTaskLoading] = useState(false);
   const [taskResponses, setTaskResponses] = useState<any[]>([]);
@@ -281,6 +282,7 @@ const AssignmentExplorerModal: React.FC<Props> = ({ open, onClose, authService, 
     setClassName('');
     setStageId('');
     setTopicId('');
+    setSubId('');
     setSelectedTask(null);
     setTaskResponses([]);
     setReviewPackageStats(null);
@@ -295,7 +297,7 @@ const AssignmentExplorerModal: React.FC<Props> = ({ open, onClose, authService, 
     if (!open) return;
     setSelectMode(false);
     setSelectedTaskKeys(new Set());
-  }, [open, subject, className, stageId, topicId]);
+  }, [open, subject, className, stageId, topicId, subId]);
 
   useEffect(() => {
     if (!open) return;
@@ -402,20 +404,50 @@ const AssignmentExplorerModal: React.FC<Props> = ({ open, onClose, authService, 
     });
   }, [stageTasks, topicId]);
 
+  const subfolderOptions = useMemo(() => {
+    const map = new Map<string, { id: string; name: string; count: number }>();
+    for (const t of topicTasks) {
+      const { sub } = parseFolder(t);
+      if (!sub?.id) continue;
+      const row = map.get(sub.id) || { id: sub.id, name: sub.name || '子folder', count: 0 };
+      row.count += 1;
+      map.set(sub.id, row);
+    }
+    return Array.from(map.values()).sort((a, b) => a.name.localeCompare(b.name, 'zh-Hant'));
+  }, [topicTasks]);
+
+  const selectedSubfolderName = useMemo(() => {
+    if (!subId) return '';
+    return subfolderOptions.find((s) => String(s.id) === String(subId))?.name || '';
+  }, [subId, subfolderOptions]);
+
+  const visibleTopicTasks = useMemo(() => {
+    if (!topicId) return [];
+    if (subId) {
+      return topicTasks.filter((t) => String(parseFolder(t).sub?.id || '') === String(subId));
+    }
+    return topicTasks.filter((t) => !parseFolder(t).sub?.id);
+  }, [topicId, topicTasks, subId]);
+
   const breadcrumbs = useMemo(() => {
     const parts: string[] = [];
     if (subject) parts.push(subject);
     if (className) parts.push(className);
     if (stageId) parts.push(stageOptions.find((s) => s.id === stageId)?.name || '學段');
     if (topicId) parts.push(topicOptions.find((t) => t.id === topicId)?.name || '課題');
+    if (subId) parts.push(selectedSubfolderName || '子folder');
     if (selectedTask) parts.push(String(selectedTask.title || '任務'));
     return parts.join(' / ');
-  }, [className, stageId, stageOptions, subject, topicId, topicOptions, selectedTask]);
+  }, [className, stageId, stageOptions, subject, topicId, topicOptions, selectedTask, subId, selectedSubfolderName]);
 
   const goBackOne = () => {
     if (selectedTask) {
       setSelectedTask(null);
       setTaskResponses([]);
+      return;
+    }
+    if (subId) {
+      setSubId('');
       return;
     }
     if (topicId) {
@@ -652,13 +684,14 @@ const AssignmentExplorerModal: React.FC<Props> = ({ open, onClose, authService, 
       const classes = normalizeStringArray(t?.targetClasses);
       const classCandidate = (classes.length === 1 && classes[0] !== '全部') ? classes[0] : '';
       if (String(classCandidate) !== String(className || '')) return false;
-      const { stage, topic } = parseFolder(t);
+      const { stage, topic, sub } = parseFolder(t);
       if (stageId && String(stage?.id || '') !== String(stageId)) return false;
       if (topicId && String(topic?.id || '') !== String(topicId)) return false;
-      return true;
+      if (subId) return String(sub?.id || '') === String(subId);
+      return !sub?.id;
     });
     return filtered.filter(canDeleteTask).map(taskKey).filter(Boolean);
-  }, [tasks, subject, className, stageId, topicId]);
+  }, [tasks, subject, className, stageId, topicId, subId]);
 
   const allSelectableSelected = useMemo(() => {
     if (bulkDeletableTaskKeys.length === 0) return false;
@@ -777,16 +810,16 @@ const AssignmentExplorerModal: React.FC<Props> = ({ open, onClose, authService, 
         </div>
 
         <div className="p-6 space-y-4">
-          {(subject || className || stageId || topicId || selectedTask) && (
-            <button
-              type="button"
-              onClick={goBackOne}
+	          {(subject || className || stageId || topicId || subId || selectedTask) && (
+	            <button
+	              type="button"
+	              onClick={goBackOne}
               className="px-4 py-2 rounded-2xl border-4 border-brand-brown bg-gray-100 text-brand-brown font-black shadow-comic hover:bg-gray-200 inline-flex items-center gap-2"
             >
               <ChevronLeft className="w-4 h-4" />
-              上一層
-            </button>
-          )}
+	              上一層
+	            </button>
+	          )}
 
           {error && (
             <div className="text-red-700 font-bold">{error}</div>
@@ -1284,19 +1317,19 @@ const AssignmentExplorerModal: React.FC<Props> = ({ open, onClose, authService, 
                 )}
               </div>
             </div>
-          ) : !subject ? (
-            <div>
-              <div className="text-lg font-black text-brand-brown mb-3">科目</div>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                {availableSubjects.map((s) => {
-                  const count = (tasksBySubject.get(s) || []).length;
-                  return (
-                    <button
-                      key={s}
-                      type="button"
-                      onClick={() => { setSubject(s); setClassName(''); setStageId(''); setTopicId(''); }}
-                      className="text-left bg-white border-4 border-brand-brown rounded-3xl p-4 shadow-comic hover:-translate-y-1 transition-transform"
-                    >
+	          ) : !subject ? (
+	            <div>
+	              <div className="text-lg font-black text-brand-brown mb-3">科目</div>
+	              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+	                {availableSubjects.map((s) => {
+	                  const count = (tasksBySubject.get(s) || []).length;
+	                  return (
+	                    <button
+	                      key={s}
+	                      type="button"
+	                      onClick={() => { setSubject(s); setClassName(''); setStageId(''); setTopicId(''); setSubId(''); }}
+	                      className="text-left bg-white border-4 border-brand-brown rounded-3xl p-4 shadow-comic hover:-translate-y-1 transition-transform"
+	                    >
                       <div className="text-xl font-black text-brand-brown">📚 {s}</div>
                       <div className="text-xs font-bold text-gray-600 mt-1">{count} 個任務</div>
                     </button>
@@ -1304,51 +1337,51 @@ const AssignmentExplorerModal: React.FC<Props> = ({ open, onClose, authService, 
                 })}
               </div>
             </div>
-          ) : !className ? (
-            <div>
-              <div className="text-lg font-black text-brand-brown mb-3">班別</div>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                {classOptions.map((c) => (
-                  <button
-                    key={c}
-                    type="button"
-                    onClick={() => { setClassName(c); setStageId(''); setTopicId(''); }}
-                    className="text-left bg-white border-4 border-brand-brown rounded-3xl p-4 shadow-comic hover:-translate-y-1 transition-transform"
-                  >
+	          ) : !className ? (
+	            <div>
+	              <div className="text-lg font-black text-brand-brown mb-3">班別</div>
+	              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+	                {classOptions.map((c) => (
+	                  <button
+	                    key={c}
+	                    type="button"
+	                    onClick={() => { setClassName(c); setStageId(''); setTopicId(''); setSubId(''); }}
+	                    className="text-left bg-white border-4 border-brand-brown rounded-3xl p-4 shadow-comic hover:-translate-y-1 transition-transform"
+	                  >
                     <div className="text-xl font-black text-brand-brown">🏫 {c}</div>
                     <div className="text-xs font-bold text-gray-600 mt-1">{classCounts.get(c) || 0} 個任務</div>
                   </button>
                 ))}
               </div>
             </div>
-          ) : !stageId ? (
-            <div>
-              <div className="text-lg font-black text-brand-brown mb-3">學段</div>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                {stageOptions.map((s) => (
-                  <button
-                    key={s.id}
-                    type="button"
-                    onClick={() => { setStageId(s.id); setTopicId(''); }}
-                    className="text-left bg-white border-4 border-brand-brown rounded-3xl p-4 shadow-comic hover:-translate-y-1 transition-transform"
-                  >
+	          ) : !stageId ? (
+	            <div>
+	              <div className="text-lg font-black text-brand-brown mb-3">學段</div>
+	              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+	                {stageOptions.map((s) => (
+	                  <button
+	                    key={s.id}
+	                    type="button"
+	                    onClick={() => { setStageId(s.id); setTopicId(''); setSubId(''); }}
+	                    className="text-left bg-white border-4 border-brand-brown rounded-3xl p-4 shadow-comic hover:-translate-y-1 transition-transform"
+	                  >
                     <div className="text-xl font-black text-brand-brown">📁 {s.name}</div>
                     <div className="text-xs font-bold text-gray-600 mt-1">{s.count} 個任務</div>
                   </button>
                 ))}
               </div>
             </div>
-          ) : !topicId ? (
-            <div>
-              <div className="text-lg font-black text-brand-brown mb-3">課題</div>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {topicOptions.map((t) => (
-                  <button
-                    key={t.id}
-                    type="button"
-                    onClick={() => setTopicId(t.id)}
-                    className="text-left bg-white border-4 border-brand-brown rounded-3xl p-4 shadow-comic hover:-translate-y-1 transition-transform"
-                  >
+	          ) : !topicId ? (
+	            <div>
+	              <div className="text-lg font-black text-brand-brown mb-3">課題</div>
+	              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+	                {topicOptions.map((t) => (
+	                  <button
+	                    key={t.id}
+	                    type="button"
+	                    onClick={() => { setTopicId(t.id); setSubId(''); }}
+	                    className="text-left bg-white border-4 border-brand-brown rounded-3xl p-4 shadow-comic hover:-translate-y-1 transition-transform"
+	                  >
                     <div className="text-xl font-black text-brand-brown">📁 {t.name}</div>
                     <div className="text-xs font-bold text-gray-600 mt-1">{t.count} 個任務</div>
                   </button>
@@ -1357,9 +1390,9 @@ const AssignmentExplorerModal: React.FC<Props> = ({ open, onClose, authService, 
             </div>
 	          ) : (
 	            <div>
-	              <div className="flex items-center justify-between gap-2 mb-3">
-	                <div className="text-lg font-black text-brand-brown">任務</div>
-	                {topicId && (
+		              <div className="flex items-center justify-between gap-2 mb-3">
+		                <div className="text-lg font-black text-brand-brown">任務</div>
+		                {topicId && (
 	                  <div className="flex items-center gap-2">
 	                    {selectMode ? (
 	                      <>
@@ -1410,24 +1443,48 @@ const AssignmentExplorerModal: React.FC<Props> = ({ open, onClose, authService, 
 	                        多選刪除
 	                      </button>
 	                    )}
-	                  </div>
-	                )}
-	              </div>
-	              {topicTasks.length === 0 ? (
-	                <div className="text-gray-500 font-bold border-4 border-dashed border-gray-300 rounded-3xl p-8 text-center">
-	                  目前沒有任務
-	                </div>
-	              ) : (
-	                <div className="space-y-3">
-	                  {topicTasks.map((t) => {
-	                    const archived = !!t.archivedAt || t.isActive === false;
-	                    const deletable = canDeleteTask(t);
-	                    const { sub } = parseFolder(t);
-                      const label = getTaskLabel(t);
-                      const colors = getTaskCardColor(t);
-	                    const key = taskKey(t);
-	                    const isSelected = selectedTaskKeys.has(key);
-	                    return (
+		                  </div>
+		                )}
+		              </div>
+		              {topicTasks.length === 0 ? (
+		                <div className="text-gray-500 font-bold border-4 border-dashed border-gray-300 rounded-3xl p-8 text-center">
+		                  目前沒有任務
+		                </div>
+		              ) : (
+		                <div className="space-y-3">
+		                  {!subId && subfolderOptions.length > 0 && (
+		                    <div className="mb-6">
+		                      <div className="text-md font-black text-brand-brown mb-3">子folder</div>
+		                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+		                        {subfolderOptions.map((s) => (
+		                          <button
+		                            key={s.id}
+		                            type="button"
+		                            onClick={() => setSubId(s.id)}
+		                            className="text-left bg-white border-4 border-brand-brown rounded-3xl p-4 shadow-comic hover:-translate-y-1 transition-transform"
+		                          >
+		                            <div className="text-xl font-black text-brand-brown">📁 {s.name}</div>
+		                            <div className="text-xs font-bold text-gray-600 mt-1">{s.count} 個任務</div>
+		                          </button>
+		                        ))}
+		                      </div>
+		                    </div>
+		                  )}
+
+		                  {visibleTopicTasks.length === 0 ? (
+		                    <div className="text-gray-500 font-bold border-4 border-dashed border-gray-300 rounded-3xl p-8 text-center">
+		                      {!subId && subfolderOptions.length > 0 ? '此層沒有任務，請進入子folder查看' : '此處暫無任務'}
+		                    </div>
+		                  ) : (
+		                  visibleTopicTasks.map((t) => {
+		                    const archived = !!t.archivedAt || t.isActive === false;
+		                    const deletable = canDeleteTask(t);
+		                    const { sub } = parseFolder(t);
+	                      const label = getTaskLabel(t);
+	                      const colors = getTaskCardColor(t);
+		                    const key = taskKey(t);
+		                    const isSelected = selectedTaskKeys.has(key);
+		                    return (
 	                      <div
 	                        key={key}
 	                        className={`border-4 rounded-3xl p-4 shadow-comic flex flex-wrap items-center justify-between gap-3 ${colors.bg} ${archived ? 'opacity-70' : ''} ${selectMode && isSelected ? 'border-blue-500 ring-4 ring-blue-300' : 'border-brand-brown'}`}
@@ -1459,10 +1516,10 @@ const AssignmentExplorerModal: React.FC<Props> = ({ open, onClose, authService, 
 	                              {label}
 	                            </span>
 	                          </div>
-	                          <div className="text-sm text-gray-600 font-bold mt-1">
-	                            {String(t.teacherName || '教師')}
-	                            {!!sub?.name && <span className="ml-2 text-xs">（子folder：{sub.name}）</span>}
-	                          </div>
+		                          <div className="text-sm text-gray-600 font-bold mt-1">
+		                            {String(t.teacherName || '教師')}
+		                            {!!sub?.name && <span className="ml-2 text-xs">（子folder：{sub.name}）</span>}
+		                          </div>
 	                          <div className="text-xs text-gray-600 font-bold mt-1">
 	                            回應/結果：{Number(t.responseCount) || 0} ・ 學生：{Number(t.uniqueStudents) || 0}
 	                          </div>
@@ -1506,13 +1563,13 @@ const AssignmentExplorerModal: React.FC<Props> = ({ open, onClose, authService, 
 	                          >
 	                            查看
 	                          </button>
-	                        </div>
-	                      </div>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
+		                        </div>
+		                      </div>
+		                    );
+		                  }))}
+		                </div>
+		              )}
+		            </div>
           )}
 	        </div>
 	        </div>
