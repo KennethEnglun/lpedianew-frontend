@@ -97,6 +97,21 @@ const getPageIndexFromY = (y: number, pageH: number, pageCount: number) => {
   const idx = Math.floor((Number.isFinite(y) ? y : 0) / (pageH + PAGE_GAP));
   return clamp(idx, 0, pageCount - 1);
 };
+
+const inferObjectPageIndex = (obj: any, pageH: number, pageCount: number) => {
+  if (!obj) return null;
+  const explicit = Number(obj.lpediaPageIndex);
+  if (Number.isFinite(explicit)) return clamp(explicit, 0, pageCount - 1);
+
+  const objs = Array.isArray(obj._objects) ? obj._objects : null; // activeSelection / group
+  if (objs && objs.length > 0) {
+    const idxs = objs.map((o: any) => Number(o?.lpediaPageIndex)).filter((n: any) => Number.isFinite(n));
+    if (idxs.length > 0) return clamp(Math.min(...idxs), 0, pageCount - 1);
+  }
+
+  // If we can't reliably infer from lpediaPageIndex, do not change current page to avoid "jumping".
+  return null;
+};
 const LOCAL_KEY_PREFIX = 'lpedia_note_draft_v2_fabric';
 const buildLocalKey = (noteId: string, userId: string) => `${LOCAL_KEY_PREFIX}:${noteId}:${userId}`;
 const LOCAL_WRITE_INPUT_KEY = 'lpedia_note_write_input'; // 'pencil' | 'touch'
@@ -1159,7 +1174,8 @@ const NoteEditorModal = React.forwardRef<NoteEditorHandle, Props>(
     const active = canvas.getActiveObject() as any;
     if (active && !active.lpediaPaper) {
       const { h: pageH } = pageSizeRef.current;
-      const idx = getPageIndexFromY(Number(active.top) || 0, pageH, docRef.current.pages.length);
+      const idx = inferObjectPageIndex(active, pageH, docRef.current.pages.length);
+      if (idx === null) return;
       if (idx !== pageIndex) {
         docRef.current.currentPage = idx;
         setPageIndex(idx);
@@ -2276,7 +2292,8 @@ const NoteEditorModal = React.forwardRef<NoteEditorHandle, Props>(
       const active = canvas.getActiveObject() as any;
       if (active && !active.lpediaPaper) {
         const { h: pageH } = pageSizeRef.current;
-        const idx = getPageIndexFromY(Number(active.top) || 0, pageH, docRef.current.pages.length);
+        const idx = inferObjectPageIndex(active, pageH, docRef.current.pages.length);
+        if (idx === null) return;
         docRef.current.currentPage = idx;
         setPageIndex(idx);
       } else {
