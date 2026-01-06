@@ -1156,6 +1156,16 @@ const NoteEditorModal = React.forwardRef<NoteEditorHandle, Props>(
   const syncCurrentPageFromViewport = () => {
     const canvas = fabricRef.current;
     if (!canvas) return;
+    const active = canvas.getActiveObject() as any;
+    if (active && !active.lpediaPaper) {
+      const { h: pageH } = pageSizeRef.current;
+      const idx = getPageIndexFromY(Number(active.top) || 0, pageH, docRef.current.pages.length);
+      if (idx !== pageIndex) {
+        docRef.current.currentPage = idx;
+        setPageIndex(idx);
+      }
+      return;
+    }
     const v = canvas.viewportTransform;
     if (!Array.isArray(v)) return;
     const s = v[0] || 1;
@@ -1563,6 +1573,8 @@ const NoteEditorModal = React.forwardRef<NoteEditorHandle, Props>(
       } else {
         docRef.current = normalizeDoc(chosen);
       }
+      // Default to first page when opening (student view)
+      docRef.current.currentPage = 0;
 
       // Load teacher annotations (批改層) for student to view (read-only overlay)
       if (serverAnn && !looksLikeLegacyTldrawSnapshot(serverAnn)) {
@@ -1571,7 +1583,7 @@ const NoteEditorModal = React.forwardRef<NoteEditorHandle, Props>(
           format: 'fabric-v1',
           version: 1,
           page: { orientation: docRef.current?.page?.orientation === 'landscape' ? 'landscape' : 'portrait' },
-          currentPage: docRef.current.currentPage,
+          currentPage: 0,
           pages: docRef.current.pages.map((_, idx) => annDoc.pages[idx] || emptyPage())
         };
         annotationDocRef.current = aligned;
@@ -1586,7 +1598,7 @@ const NoteEditorModal = React.forwardRef<NoteEditorHandle, Props>(
       setPageOrientation(docRef.current?.page?.orientation === 'landscape' ? 'landscape' : 'portrait');
       setPenColor('#111827');
       setPenWidth(2);
-      setPageIndex(docRef.current.currentPage);
+      setPageIndex(0);
       setPageCount(docRef.current.pages.length);
       setHistoryToCurrent();
       setDocLoadedToken(Date.now());
@@ -1647,13 +1659,15 @@ const NoteEditorModal = React.forwardRef<NoteEditorHandle, Props>(
       } else {
         docRef.current = normalizeDoc(snap);
       }
+      // Default to first page when opening (teacher view)
+      docRef.current.currentPage = 0;
       const rawAnn = submission?.annotations;
       const annDoc = looksLikeLegacyTldrawSnapshot(rawAnn) ? emptyDoc() : normalizeDoc(rawAnn);
       const aligned: FabricDocSnapshot = {
         format: 'fabric-v1',
         version: 1,
         page: { orientation: docRef.current?.page?.orientation === 'landscape' ? 'landscape' : 'portrait' },
-        currentPage: docRef.current.currentPage,
+        currentPage: 0,
         pages: docRef.current.pages.map((_, idx) => annDoc.pages[idx] || emptyPage())
       };
       annotationDocRef.current = aligned;
@@ -1665,7 +1679,7 @@ const NoteEditorModal = React.forwardRef<NoteEditorHandle, Props>(
       setPageOrientation(docRef.current?.page?.orientation === 'landscape' ? 'landscape' : 'portrait');
       setPenColor('#ef4444');
       setPenWidth(3);
-      setPageIndex(docRef.current.currentPage);
+      setPageIndex(0);
       setPageCount(docRef.current.pages.length);
       setHistoryToCurrent();
       setDocLoadedToken(Date.now());
