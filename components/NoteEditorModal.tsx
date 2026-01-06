@@ -550,6 +550,7 @@ const NoteEditorModal = React.forwardRef<NoteEditorHandle, Props>(
   const [docLoadedToken, setDocLoadedToken] = useState(0);
   const [selectionVersion, setSelectionVersion] = useState(0);
   const [, setHistoryVersion] = useState(0);
+  const [teacherLayerLocks, setTeacherLayerLocks] = useState<{ base: boolean; annotation: boolean }>({ base: false, annotation: false });
 
   const effectiveNoteId = mode === 'draft' ? `draft:${String(draftId || 'new')}` : String(noteId || '').trim();
   const isDraft = mode === 'draft';
@@ -597,20 +598,22 @@ const NoteEditorModal = React.forwardRef<NoteEditorHandle, Props>(
     annotationMode,
     canTemplateEdit: false,
     tool: 'select' as 'select' | 'pen' | 'eraser',
-    writeInput: 'pencil' as 'pencil' | 'touch'
+    writeInput: 'pencil' as 'pencil' | 'touch',
+    teacherLayerLocks: { base: false, annotation: false } as { base: boolean; annotation: boolean }
   });
 
   const canTemplateEdit = (mode === 'template' || mode === 'draft') && canEdit;
+  const canAnnotate = mode === 'teacher' && (viewerRole === 'teacher' || viewerRole === 'admin');
   const canAddPage =
     ((mode === 'template' || mode === 'draft') && canEdit) ||
-    (mode === 'student' && canEdit && (!submittedAt || resubmitOpen));
+    (mode === 'student' && canEdit && (!submittedAt || resubmitOpen)) ||
+    (mode === 'teacher' && canAnnotate && annotationMode);
   const canSubmit = mode === 'student' && canEdit && (!submittedAt || resubmitOpen);
-  const canAnnotate = mode === 'teacher' && (viewerRole === 'teacher' || viewerRole === 'admin');
 
   pageSizeRef.current = getA4Size(pageOrientation);
   penStateRef.current = { color: String(penColor || '#111827'), width: Math.max(1, Number(penWidth) || 2) };
   eraserStateRef.current = { width: Math.max(6, Number(eraserWidth) || 18) };
-  latestStateRef.current = { open, mode, canEdit, submittedAt, resubmitOpen, annotationMode, canTemplateEdit, tool, writeInput };
+  latestStateRef.current = { open, mode, canEdit, submittedAt, resubmitOpen, annotationMode, canTemplateEdit, tool, writeInput, teacherLayerLocks };
   if (typeof navigator !== 'undefined') touchCapableRef.current = Number((navigator as any).maxTouchPoints || 0) > 0;
 
   const bumpHistory = () => setHistoryVersion(Date.now());
@@ -779,8 +782,9 @@ const NoteEditorModal = React.forwardRef<NoteEditorHandle, Props>(
 
       if (mode === 'teacher') {
         const isAnnotation = layer === 'annotation';
+        const layerLocked = isAnnotation ? teacherLayerLocks.annotation : teacherLayerLocks.base;
         o.visible = !isAnnotation || annotationsVisible;
-        const editable = annotationMode && (!isAnnotation || annotationsVisible);
+        const editable = annotationMode && (!isAnnotation || annotationsVisible) && !layerLocked && !locked;
         o.selectable = editable;
         o.evented = editable;
         if (editable) {
@@ -793,6 +797,17 @@ const NoteEditorModal = React.forwardRef<NoteEditorHandle, Props>(
           (o as any).lockRotation = false;
           if ((o as any).type === 'textbox' || (o as any).type === 'i-text' || (o as any).type === 'text') {
             (o as any).editable = true;
+          }
+        } else {
+          (o as any).hasControls = false;
+          (o as any).hasBorders = false;
+          (o as any).lockMovementX = true;
+          (o as any).lockMovementY = true;
+          (o as any).lockScalingX = true;
+          (o as any).lockScalingY = true;
+          (o as any).lockRotation = true;
+          if ((o as any).type === 'textbox' || (o as any).type === 'i-text' || (o as any).type === 'text') {
+            (o as any).editable = false;
           }
         }
         continue;
@@ -1170,6 +1185,31 @@ const NoteEditorModal = React.forwardRef<NoteEditorHandle, Props>(
 
   const addPage = async () => {
     if (!canAddPage) return;
+    if (mode === 'teacher') {
+      if (!annotationMode || !canAnnotate) return;
+      // Teacher grading: persist both layers into refs before mutating pages.
+      saveCanvasBaseToDocForTeacher();
+      if (!annotationDocRef.current) {
+        annotationDocRef.current = {
+          format: 'fabric-v1',
+          version: 1,
+          currentPage: docRef.current.currentPage,
+          pages: docRef.current.pages.map(() => emptyPage())
+        };
+      }
+      saveCanvasAnnotationsToRef();
+      docRef.current.pages.push(emptyPage());
+      annotationDocRef.current.pages.push(emptyPage());
+      const nextIdx = docRef.current.pages.length - 1;
+      docRef.current.currentPage = nextIdx;
+      annotationDocRef.current.currentPage = nextIdx;
+      setPageCount(docRef.current.pages.length);
+      commitHistoryFromRefs();
+      await reloadCanvas();
+      goToPage(nextIdx);
+      return;
+    }
+
     saveCanvasToDoc();
     docRef.current.pages.push(emptyPage());
     setPageCount(docRef.current.pages.length);
@@ -1223,6 +1263,7 @@ const NoteEditorModal = React.forwardRef<NoteEditorHandle, Props>(
     if (!canEdit) return;
     if (mode === 'student' && submittedAt && !resubmitOpen) return;
     if (mode === 'teacher' && !annotationMode) return;
+    if (mode === 'teacher' && teacherLayerLocks.annotation) return;
 
     const v = canvas.viewportTransform || [1, 0, 0, 1, 0, 0];
     const s = v[0] || 1;
@@ -1313,14 +1354,22 @@ const NoteEditorModal = React.forwardRef<NoteEditorHandle, Props>(
       const layer = String((o as any).lpediaLayer || 'base');
       if (mode === 'student') return !locked && (!submittedAt || resubmitOpen);
       if (mode === 'template') return canTemplateEdit;
-      if (mode === 'teacher') return annotationMode;
+      if (mode === 'teacher') {
+        if (!annotationMode) return false;
+        if (locked) return false;
+        if (layer === 'annotation' && teacherLayerLocks.annotation) return false;
+        if (layer !== 'annotation' && teacherLayerLocks.base) return false;
+        return true;
+      }
       return false;
     });
     deletable.forEach((o) => canvas.remove(o));
     canvas.discardActiveObject();
+    applyPermissionsToObjects(canvas);
     canvas.requestRenderAll();
     setLayersVersion((v) => v + 1);
-    void scheduleAutoSave();
+    if (mode === 'teacher') commitHistoryFromCanvas();
+    else void scheduleAutoSave();
   };
 
   const bringToFront = () => {
@@ -1329,13 +1378,18 @@ const NoteEditorModal = React.forwardRef<NoteEditorHandle, Props>(
     const obj = canvas.getActiveObject();
     if (!obj) return;
     const locked = Boolean((obj as any).lpediaLocked);
+    const layer = String((obj as any).lpediaLayer || 'base');
     if (mode === 'student' && (locked || (submittedAt && !resubmitOpen))) return;
     if ((mode === 'template' || mode === 'draft') && !canTemplateEdit) return;
     if (mode === 'teacher' && !annotationMode) return;
+    if (mode === 'teacher' && locked) return;
+    if (mode === 'teacher' && layer === 'annotation' && teacherLayerLocks.annotation) return;
+    if (mode === 'teacher' && layer !== 'annotation' && teacherLayerLocks.base) return;
     bringToFrontCompat(canvas, obj);
     canvas.requestRenderAll();
     setLayersVersion((v) => v + 1);
-    void scheduleAutoSave();
+    if (mode === 'teacher') scheduleHistoryCommit();
+    else void scheduleAutoSave();
   };
 
   const sendToBack = () => {
@@ -1344,13 +1398,18 @@ const NoteEditorModal = React.forwardRef<NoteEditorHandle, Props>(
     const obj = canvas.getActiveObject();
     if (!obj) return;
     const locked = Boolean((obj as any).lpediaLocked);
+    const layer = String((obj as any).lpediaLayer || 'base');
     if (mode === 'student' && (locked || (submittedAt && !resubmitOpen))) return;
     if ((mode === 'template' || mode === 'draft') && !canTemplateEdit) return;
     if (mode === 'teacher' && !annotationMode) return;
+    if (mode === 'teacher' && locked) return;
+    if (mode === 'teacher' && layer === 'annotation' && teacherLayerLocks.annotation) return;
+    if (mode === 'teacher' && layer !== 'annotation' && teacherLayerLocks.base) return;
     sendToBackAbovePaper(canvas, obj);
     canvas.requestRenderAll();
     setLayersVersion((v) => v + 1);
-    void scheduleAutoSave();
+    if (mode === 'teacher') scheduleHistoryCommit();
+    else void scheduleAutoSave();
   };
 
   const bringForward = () => {
@@ -1359,13 +1418,18 @@ const NoteEditorModal = React.forwardRef<NoteEditorHandle, Props>(
     const obj = canvas.getActiveObject();
     if (!obj) return;
     const locked = Boolean((obj as any).lpediaLocked);
+    const layer = String((obj as any).lpediaLayer || 'base');
     if (mode === 'student' && (locked || (submittedAt && !resubmitOpen))) return;
     if ((mode === 'template' || mode === 'draft') && !canTemplateEdit) return;
     if (mode === 'teacher' && !annotationMode) return;
+    if (mode === 'teacher' && locked) return;
+    if (mode === 'teacher' && layer === 'annotation' && teacherLayerLocks.annotation) return;
+    if (mode === 'teacher' && layer !== 'annotation' && teacherLayerLocks.base) return;
     (canvas as any).bringObjectForward?.(obj);
     canvas.requestRenderAll();
     setLayersVersion((v) => v + 1);
-    void scheduleAutoSave();
+    if (mode === 'teacher') scheduleHistoryCommit();
+    else void scheduleAutoSave();
   };
 
   const sendBackward = () => {
@@ -1374,17 +1438,25 @@ const NoteEditorModal = React.forwardRef<NoteEditorHandle, Props>(
     const obj = canvas.getActiveObject();
     if (!obj) return;
     const locked = Boolean((obj as any).lpediaLocked);
+    const layer = String((obj as any).lpediaLayer || 'base');
     if (mode === 'student' && (locked || (submittedAt && !resubmitOpen))) return;
     if ((mode === 'template' || mode === 'draft') && !canTemplateEdit) return;
     if (mode === 'teacher' && !annotationMode) return;
+    if (mode === 'teacher' && locked) return;
+    if (mode === 'teacher' && layer === 'annotation' && teacherLayerLocks.annotation) return;
+    if (mode === 'teacher' && layer !== 'annotation' && teacherLayerLocks.base) return;
     (canvas as any).sendObjectBackwards?.(obj);
     canvas.requestRenderAll();
     setLayersVersion((v) => v + 1);
-    void scheduleAutoSave();
+    if (mode === 'teacher') scheduleHistoryCommit();
+    else void scheduleAutoSave();
   };
 
   const toggleLockSelected = () => {
-    if (!canTemplateEdit) return;
+    const canLockNow =
+      ((mode === 'template' || mode === 'draft') && canTemplateEdit) ||
+      (mode === 'teacher' && annotationMode && canAnnotate);
+    if (!canLockNow) return;
     const canvas = fabricRef.current;
     if (!canvas) return;
     const objs = canvas.getActiveObjects();
@@ -1404,7 +1476,9 @@ const NoteEditorModal = React.forwardRef<NoteEditorHandle, Props>(
     }
     applyPermissionsToObjects(canvas);
     canvas.requestRenderAll();
-    void scheduleAutoSave();
+    setLayersVersion((v) => v + 1);
+    if (mode === 'teacher') commitHistoryFromCanvas();
+    else void scheduleAutoSave();
   };
 
   const insertImageFromFile = async (file: File) => {
@@ -1413,6 +1487,7 @@ const NoteEditorModal = React.forwardRef<NoteEditorHandle, Props>(
     if (!canEdit) return;
     if (mode === 'student' && submittedAt && !resubmitOpen) return;
     if (mode === 'teacher' && !annotationMode) return;
+    if (mode === 'teacher' && teacherLayerLocks.annotation) return;
 
     setLoading(true);
     setError('');
@@ -1642,6 +1717,7 @@ const NoteEditorModal = React.forwardRef<NoteEditorHandle, Props>(
     setAnnotationMode(false);
     setAnnotationsVisible(true);
     setLayersOpen(false);
+    setTeacherLayerLocks({ base: false, annotation: false });
     historyRef.current.states = [];
     historyRef.current.index = -1;
     historyRef.current.applying = false;
@@ -1762,6 +1838,7 @@ const NoteEditorModal = React.forwardRef<NoteEditorHandle, Props>(
     const shouldDrawForPointer = (pointerType: string) => {
       if (!allowEditNow()) return false;
       const st = latestStateRef.current;
+      if (st.mode === 'teacher' && st.annotationMode && st.teacherLayerLocks?.annotation) return false;
       if (pointerType === 'pen') return true; // Pencil always writes (even in select tool)
       if (pointerType === 'touch') return (st.tool === 'pen' || st.tool === 'eraser') && st.writeInput === 'touch';
       return false;
@@ -2099,6 +2176,14 @@ const NoteEditorModal = React.forwardRef<NoteEditorHandle, Props>(
       const { h: pageH } = pageSizeRef.current;
       (obj as any).lpediaPageIndex = getPageIndexFromY(Number((obj as any).top) || 0, pageH, docRef.current.pages.length);
       markNewObjectLayer(obj);
+      if (latestStateRef.current.mode === 'teacher') {
+        const layer = String((obj as any).lpediaLayer || '');
+        if (layer === 'annotation' && latestStateRef.current.teacherLayerLocks?.annotation) {
+          canvas.remove(obj);
+          canvas.requestRenderAll();
+          return;
+        }
+      }
       applyPermissionsToObjects(canvas);
       setLayersVersion((v) => v + 1);
       const isPath = String((obj as any).type || '') === 'path';
@@ -2317,7 +2402,8 @@ const NoteEditorModal = React.forwardRef<NoteEditorHandle, Props>(
       return;
     }
 
-    if (allowEdit && (tool === 'pen' || tool === 'eraser')) {
+    const allowDraw = allowEdit && (tool === 'pen' || tool === 'eraser') && !(mode === 'teacher' && teacherLayerLocks.annotation);
+    if (allowDraw) {
       canvas.isDrawingMode = true;
       const brush = new fabric.PencilBrush(canvas);
       brush.width = tool === 'eraser' ? eraserStateRef.current.width : penStateRef.current.width;
@@ -2328,7 +2414,7 @@ const NoteEditorModal = React.forwardRef<NoteEditorHandle, Props>(
     }
     canvas.requestRenderAll();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [annotationMode, annotationsVisible, tool, canEdit, submittedAt, resubmitOpen, penColor, penWidth, eraserWidth]);
+  }, [annotationMode, annotationsVisible, tool, canEdit, submittedAt, resubmitOpen, penColor, penWidth, eraserWidth, teacherLayerLocks.base, teacherLayerLocks.annotation]);
 
   useEffect(() => {
     if (!open) return;
@@ -2853,13 +2939,13 @@ const NoteEditorModal = React.forwardRef<NoteEditorHandle, Props>(
               </div>
             )}
 
-            {(mode === 'template' || mode === 'draft') && (
+            {(mode === 'template' || mode === 'draft' || mode === 'teacher') && (
               <button
                 type="button"
                 onClick={toggleLockSelected}
                 className="px-3 py-2 rounded-2xl border-4 border-brand-brown bg-white text-brand-brown font-black shadow-comic hover:bg-gray-50 flex items-center gap-2"
-                disabled={loading || !canTemplateEdit}
-                title="鎖定/解鎖選取物件（學生不能更改鎖定物件）"
+                disabled={loading || !(((mode === 'template' || mode === 'draft') && canTemplateEdit) || (mode === 'teacher' && annotationMode && canAnnotate))}
+                title={mode === 'teacher' ? '鎖定/解鎖選取物件（批改模式可用）' : '鎖定/解鎖選取物件（學生不能更改鎖定物件）'}
               >
                 <Lock className="w-4 h-4" />
                 鎖定
@@ -2949,7 +3035,11 @@ const NoteEditorModal = React.forwardRef<NoteEditorHandle, Props>(
                   type="button"
                   onClick={() => {
                     if (!canAnnotate) return;
-                    setAnnotationMode((v) => !v);
+                    setAnnotationMode((v) => {
+                      const next = !v;
+                      if (next) setTeacherLayerLocks({ base: true, annotation: false });
+                      return next;
+                    });
                   }}
                   className="px-3 py-2 rounded-2xl border-4 border-brand-brown bg-white text-brand-brown font-black shadow-comic hover:bg-gray-50 flex items-center gap-2"
                   disabled={loading || !canAnnotate}
@@ -2958,6 +3048,34 @@ const NoteEditorModal = React.forwardRef<NoteEditorHandle, Props>(
                   <Lock className="w-4 h-4" />
                   {annotationMode ? '退出批改' : '批改模式'}
                 </button>
+                {annotationMode && (
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => setTeacherLayerLocks((cur) => ({ ...cur, base: !cur.base }))}
+                      className={`px-3 py-2 rounded-2xl border-4 border-brand-brown font-black shadow-comic hover:bg-gray-50 flex items-center gap-2 ${
+                        teacherLayerLocks.base ? 'bg-brand-brown text-white' : 'bg-white text-brand-brown'
+                      }`}
+                      disabled={loading || !canAnnotate}
+                      title="鎖定/解鎖學生內容層（避免誤改學生筆記）"
+                    >
+                      <Lock className="w-4 h-4" />
+                      {teacherLayerLocks.base ? '已鎖內容' : '鎖內容'}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setTeacherLayerLocks((cur) => ({ ...cur, annotation: !cur.annotation }))}
+                      className={`px-3 py-2 rounded-2xl border-4 border-brand-brown font-black shadow-comic hover:bg-gray-50 flex items-center gap-2 ${
+                        teacherLayerLocks.annotation ? 'bg-brand-brown text-white' : 'bg-white text-brand-brown'
+                      }`}
+                      disabled={loading || !canAnnotate}
+                      title="鎖定/解鎖批改層（避免誤改批註）"
+                    >
+                      <Lock className="w-4 h-4" />
+                      {teacherLayerLocks.annotation ? '已鎖批改' : '鎖批改'}
+                    </button>
+                  </>
+                )}
                 <button
                   type="button"
                   onClick={() => {
@@ -3086,8 +3204,17 @@ const NoteEditorModal = React.forwardRef<NoteEditorHandle, Props>(
                 ) : (
                   <div className="space-y-2">
                     {layerItems.map((it) => {
+                      const canToggleLock =
+                        ((mode === 'template' || mode === 'draft') && canTemplateEdit) ||
+                        (mode === 'teacher' && annotationMode && canAnnotate);
+                      const layerLocked =
+                        mode === 'teacher'
+                          ? (it.layer === 'annotation' ? teacherLayerLocks.annotation : teacherLayerLocks.base)
+                          : false;
                       const canReorder =
                         canEditOnCanvas &&
+                        !layerLocked &&
+                        !it.locked &&
                         !(mode === 'teacher' && it.layer !== 'annotation') &&
                         !(mode === 'student' && (it.locked || !!submittedAt));
                       return (
@@ -3114,6 +3241,25 @@ const NoteEditorModal = React.forwardRef<NoteEditorHandle, Props>(
                               </div>
                             </div>
                             <div className="flex items-center gap-1">
+                              <button
+                                type="button"
+                                className={`p-1 rounded-lg border-2 border-brand-brown hover:bg-gray-100 disabled:opacity-40 ${it.locked ? 'bg-gray-100' : ''}`}
+                                title={it.locked ? '解鎖' : '鎖定'}
+                                disabled={!canToggleLock}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  const canvas = fabricRef.current;
+                                  if (!canvas) return;
+                                  (it.obj as any).lpediaLocked = !Boolean((it.obj as any).lpediaLocked);
+                                  applyPermissionsToObjects(canvas);
+                                  canvas.requestRenderAll();
+                                  setLayersVersion((v) => v + 1);
+                                  if (mode === 'teacher') commitHistoryFromCanvas();
+                                  else void scheduleAutoSave();
+                                }}
+                              >
+                                <Lock className="w-4 h-4" />
+                              </button>
                               <button
                                 type="button"
                                 className="p-1 rounded-lg border-2 border-brand-brown hover:bg-gray-100 disabled:opacity-40"
