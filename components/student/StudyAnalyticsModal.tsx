@@ -253,7 +253,7 @@ export const StudyAnalyticsModal: React.FC<StudyAnalyticsModalProps> = ({
 
   if (!isOpen) return null;
 
-  const getMasteryLevelText = (level: 'weak' | 'average' | 'strong') => {
+	  const getMasteryLevelText = (level: 'weak' | 'average' | 'strong') => {
     switch (level) {
       case 'weak': return '需加強';
       case 'average': return '良好';
@@ -268,6 +268,12 @@ export const StudyAnalyticsModal: React.FC<StudyAnalyticsModalProps> = ({
       case 'average': return <Clock className="w-5 h-5 text-yellow-500" />;
       case 'strong': return <CheckCircle className="w-5 h-5 text-green-500" />;
     }
+	  };
+
+  const truncateText = (text: string, max = 60) => {
+    const s = String(text || '').trim();
+    if (s.length <= max) return s;
+    return `${s.slice(0, max)}…`;
   };
 
   const renderOverviewTab = () => (
@@ -300,6 +306,21 @@ export const StudyAnalyticsModal: React.FC<StudyAnalyticsModalProps> = ({
         </div>
       </div>
 
+      {/* 洞見摘要（全體/個人都可用） */}
+      {analytics?.insights?.summary?.length ? (
+        <div className="bg-white rounded-2xl p-5 border-2 border-gray-200">
+          <div className="flex items-center gap-2 mb-3">
+            <Brain className="w-5 h-5 text-brand-brown" />
+            <div className="text-lg font-black text-brand-brown">洞見摘要</div>
+          </div>
+          <ul className="space-y-2">
+            {analytics.insights.summary.slice(0, 6).map((t, i) => (
+              <li key={i} className="text-sm font-bold text-gray-700">• {t}</li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
+
       {/* 優勢與弱項 */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         {/* 優勢知識點 */}
@@ -308,11 +329,21 @@ export const StudyAnalyticsModal: React.FC<StudyAnalyticsModalProps> = ({
             <CheckCircle className="w-6 h-6 text-green-600" />
             <h3 className="text-lg font-bold text-green-800">優勢知識點</h3>
           </div>
-          {analytics?.strengths.length ? (
+          {(analytics?.insights?.strengths?.length || analytics?.strengths.length) ? (
             <div className="space-y-2">
-              {analytics.strengths.slice(0, 5).map((topic, index) => (
+              {(analytics?.insights?.strengths?.length
+                ? analytics.insights.strengths
+                : analytics?.strengths?.slice(0, 5).map((t) => ({ topic: t, accuracy: null, totalQuestions: null }))
+              )?.slice(0, 5).map((row: any, index: number) => (
                 <div key={index} className="bg-white rounded-lg p-3 border border-green-200">
-                  <div className="font-medium text-green-800">{topic}</div>
+                  <div className="font-medium text-green-800" title={String(row.topic || '')}>
+                    {truncateText(String(row.topic || ''), 60)}
+                  </div>
+                  {(typeof row.accuracy === 'number' && typeof row.totalQuestions === 'number') ? (
+                    <div className="text-xs text-green-700 font-bold mt-1">
+                      正確率 {formatUtils.formatAccuracy(row.accuracy)} ・ 題數 {row.totalQuestions}
+                    </div>
+                  ) : null}
                 </div>
               ))}
             </div>
@@ -327,11 +358,30 @@ export const StudyAnalyticsModal: React.FC<StudyAnalyticsModalProps> = ({
             <AlertCircle className="w-6 h-6 text-red-600" />
             <h3 className="text-lg font-bold text-red-800">待加強知識點</h3>
           </div>
-          {analytics?.weaknesses.length ? (
+          {(analytics?.insights?.weaknesses?.length || analytics?.weaknesses.length) ? (
             <div className="space-y-2">
-              {analytics.weaknesses.slice(0, 5).map((topic, index) => (
+              {(analytics?.insights?.weaknesses?.length
+                ? analytics.insights.weaknesses
+                : analytics?.weaknesses?.slice(0, 5).map((t) => ({ topic: t, accuracy: null, totalQuestions: null, weakQuestions: [] }))
+              )?.slice(0, 5).map((row: any, index: number) => (
                 <div key={index} className="bg-white rounded-lg p-3 border border-red-200">
-                  <div className="font-medium text-red-800">{topic}</div>
+                  <div className="font-medium text-red-800" title={String(row.topic || '')}>
+                    {truncateText(String(row.topic || ''), 60)}
+                  </div>
+                  {(typeof row.accuracy === 'number' && typeof row.totalQuestions === 'number') ? (
+                    <div className="text-xs text-red-700 font-bold mt-1">
+                      正確率 {formatUtils.formatAccuracy(row.accuracy)} ・ 題數 {row.totalQuestions}
+                    </div>
+                  ) : null}
+                  {Array.isArray(row.weakQuestions) && row.weakQuestions.length > 0 ? (
+                    <div className="mt-2 space-y-1">
+                      {row.weakQuestions.slice(0, 2).map((q: any, i: number) => (
+                        <div key={i} className="text-xs text-gray-700 font-bold">
+                          易錯題：{String(q?.question || '')}（錯誤率 {formatUtils.formatAccuracy(Number(q?.wrongRate || 0))}）
+                        </div>
+                      ))}
+                    </div>
+                  ) : null}
                 </div>
               ))}
             </div>
@@ -340,6 +390,22 @@ export const StudyAnalyticsModal: React.FC<StudyAnalyticsModalProps> = ({
           )}
         </div>
       </div>
+
+      {analytics?.insights?.polarizedTopics?.length ? (
+        <div className="bg-white rounded-2xl p-5 border-2 border-gray-200">
+          <div className="flex items-center gap-2 mb-3">
+            <BarChart3 className="w-5 h-5 text-brand-brown" />
+            <div className="text-lg font-black text-brand-brown">差異最大（適合分組教學）</div>
+          </div>
+          <div className="space-y-2">
+            {analytics.insights.polarizedTopics.slice(0, 4).map((t, i) => (
+              <div key={i} className="text-sm font-bold text-gray-700" title={String(t.topic || '')}>
+                {truncateText(String(t.topic || ''), 60)}：{formatUtils.formatAccuracy(Number(t.minAccuracy || 0))}～{formatUtils.formatAccuracy(Number(t.maxAccuracy || 0))}（{Number(t.studentCount || 0)} 人）
+              </div>
+            ))}
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 
@@ -351,7 +417,9 @@ export const StudyAnalyticsModal: React.FC<StudyAnalyticsModalProps> = ({
             <div className="flex items-center justify-between mb-4">
               <div className="flex items-center gap-3">
                 {getMasteryIcon(mastery.masteryLevel)}
-                <h3 className="text-lg font-bold text-brand-brown">{mastery.topic}</h3>
+                <h3 className="text-lg font-bold text-brand-brown" title={String(mastery.topic || '')}>
+                  {truncateText(String(mastery.topic || ''), 60)}
+                </h3>
               </div>
               <span className={`px-3 py-1 rounded-full text-sm font-medium ${formatUtils.getMasteryColor(mastery.masteryLevel)}`}>
                 {getMasteryLevelText(mastery.masteryLevel)}

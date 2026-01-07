@@ -109,6 +109,31 @@ export interface StudyAnalytics {
   suggestedTopics: string[]; // 建议练习的知识点
   estimatedStudyTime: number; // 建议学习时间(小时)
 
+  // 後端結構化洞見（可選）
+  insights?: {
+    summary?: string[];
+    strengths?: Array<{
+      topic: string;
+      accuracy: number;
+      totalQuestions: number;
+      averageTime?: number;
+    }>;
+    weaknesses?: Array<{
+      topic: string;
+      accuracy: number;
+      totalQuestions: number;
+      averageTime?: number;
+      weakQuestions?: Array<{ question: string; wrongRate: number; total: number }>;
+    }>;
+    polarizedTopics?: Array<{
+      topic: string;
+      studentCount: number;
+      std: number;
+      minAccuracy: number;
+      maxAccuracy: number;
+    }>;
+  } | null;
+
   // 溫習筆記（AI 生成）
   revisionNotes?: {
     title?: string;
