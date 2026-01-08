@@ -126,6 +126,13 @@ type FabricDocSnapshot = {
   pages: any[]; // Fabric canvas JSON
 };
 
+type LocalNoteDraft = {
+  savedAt?: string;
+  snapshot?: any;
+  lastGoodAt?: string;
+  lastGoodSnapshot?: any;
+};
+
 const isFabricDocSnapshot = (snap: any): snap is FabricDocSnapshot =>
   snap && snap.format === 'fabric-v1' && snap.version === 1 && Array.isArray(snap.pages);
 
@@ -578,6 +585,7 @@ const NoteEditorModal = React.forwardRef<NoteEditorHandle, Props>(
   const suppressSaveRef = useRef(false);
   const saveTimerRef = useRef<number | null>(null);
   const templateSaveTimerRef = useRef<number | null>(null);
+  const localDraftRef = useRef<LocalNoteDraft | null>(null);
   const docRef = useRef<FabricDocSnapshot>(emptyDoc());
   const annotationDocRef = useRef<FabricDocSnapshot | null>(null);
   const pendingImgAbortRef = useRef<AbortController | null>(null);
@@ -955,10 +963,22 @@ const NoteEditorModal = React.forwardRef<NoteEditorHandle, Props>(
       try {
         saveCanvasToDoc();
         const doc = { ...docRef.current, currentPage: docRef.current.currentPage };
-        await idbSet(buildLocalKey(nid, viewerId), { savedAt: new Date().toISOString(), snapshot: doc });
+        const nowIso = new Date().toISOString();
+        const isBlank = isBlankDocSnapshot(doc);
+        const prev = localDraftRef.current && typeof localDraftRef.current === 'object' ? localDraftRef.current : {};
+        const nextLocal: LocalNoteDraft = {
+          ...prev,
+          savedAt: nowIso,
+          snapshot: doc,
+          ...(isBlank ? {} : { lastGoodAt: nowIso, lastGoodSnapshot: doc })
+        };
+        localDraftRef.current = nextLocal;
+        await idbSet(buildLocalKey(nid, viewerId), nextLocal);
 
         if (!navigator.onLine) return;
         if (submittedAt && !resubmitOpen) return;
+        // Auto-save should never overwrite server content with a blank snapshot (usually due to load failure on unstable networks).
+        if (isBlank) return;
         await authService.saveMyNoteDraft(nid, doc);
       } catch {
         // keep silent (offline / network)
@@ -1559,6 +1579,7 @@ const NoteEditorModal = React.forwardRef<NoteEditorHandle, Props>(
         server = null;
       }
       const local = (await idbGet(buildLocalKey(nid, viewerId)).catch(() => null)) as any;
+      localDraftRef.current = local && typeof local === 'object' ? (local as LocalNoteDraft) : null;
       const safeJsonParse = (v: any) => {
         if (typeof v !== 'string') return v;
         try { return JSON.parse(v); } catch { return v; }
@@ -1568,16 +1589,33 @@ const NoteEditorModal = React.forwardRef<NoteEditorHandle, Props>(
       const serverAnn = serverAnnRaw && typeof serverAnnRaw === 'object' ? serverAnnRaw : null;
       const serverResubmitOpen = !!serverAnn?.meta?.resubmitOpen;
       const localSnap = local?.snapshot;
+      const localGood = local?.lastGoodSnapshot;
+      const localEffective = (() => {
+        if (localSnap && !isBlankDocSnapshot(normalizeDoc(localSnap))) return localSnap;
+        if (localGood && !isBlankDocSnapshot(normalizeDoc(localGood))) return localGood;
+        return localSnap;
+      })();
       const localSavedAt = Date.parse(String(local?.savedAt || ''));
+      const localGoodAt = Date.parse(String(local?.lastGoodAt || local?.savedAt || ''));
+      const localEffectiveAt = (() => {
+        if (localSnap && !isBlankDocSnapshot(normalizeDoc(localSnap))) return localSavedAt;
+        if (localGood && !isBlankDocSnapshot(normalizeDoc(localGood))) return localGoodAt;
+        return localSavedAt;
+      })();
       const serverUpdatedAt = Date.parse(String(server?.submission?.updatedAt || ''));
       let chosen = serverSnap;
-      if (localSnap && !serverSnap) chosen = localSnap;
-      else if (localSnap && serverSnap) {
-        if (isBlankDocSnapshot(localSnap) && !isBlankDocSnapshot(serverSnap)) {
+      if (localEffective && !serverSnap) chosen = localEffective;
+      else if (localEffective && serverSnap) {
+        const localBlank = isBlankDocSnapshot(normalizeDoc(localEffective));
+        const serverBlank = isBlankDocSnapshot(normalizeDoc(serverSnap));
+        if (localBlank && !serverBlank) {
           chosen = serverSnap;
         } else
-        if (Number.isFinite(localSavedAt) && Number.isFinite(serverUpdatedAt)) {
-          chosen = localSavedAt >= serverUpdatedAt ? localSnap : serverSnap;
+        if (!localBlank && serverBlank) {
+          chosen = localEffective;
+        } else
+        if (Number.isFinite(localEffectiveAt) && Number.isFinite(serverUpdatedAt)) {
+          chosen = localEffectiveAt >= serverUpdatedAt ? localEffective : serverSnap;
         } else {
           chosen = serverSnap;
         }
