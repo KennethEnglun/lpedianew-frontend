@@ -774,13 +774,26 @@ class AuthService {
   }
 
   // 學生提交回應
-  async submitStudentResponse(assignmentId: string, content: string): Promise<{ message: string, response: any }> {
+  async submitStudentResponse(
+    assignmentId: string,
+    content: string,
+    opts?: { parentResponseId?: string | null }
+  ): Promise<{ message: string; response: any }> {
     const response = await fetch(`${this.API_BASE}/assignments/${assignmentId}/responses`, {
       method: 'POST',
       headers: this.getAuthHeaders(),
-      body: JSON.stringify({ content })
+      body: JSON.stringify({ content, ...(opts?.parentResponseId ? { parentResponseId: opts.parentResponseId } : null) })
     });
 
+    return this.handleResponse(response);
+  }
+
+  // 討論串回應讚好（每人每回應只可按一次）
+  async likeDiscussionResponse(responseId: string): Promise<{ liked: boolean; likes: number; alreadyLiked?: boolean }> {
+    const response = await fetch(`${this.API_BASE}/assignments/responses/${encodeURIComponent(responseId)}/like`, {
+      method: 'POST',
+      headers: this.getAuthHeaders()
+    });
     return this.handleResponse(response);
   }
 
