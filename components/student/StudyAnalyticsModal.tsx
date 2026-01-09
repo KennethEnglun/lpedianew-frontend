@@ -23,9 +23,11 @@ import {
   CheckCircle,
   AlertCircle
 } from 'lucide-react';
-import type { StudyAnalytics, TopicMastery } from '../../types/study';
+import type { StudyAnalytics, StudyScope, TopicMastery } from '../../types/study';
 import { formatUtils } from '../../utils/studyUtils';
 import { StudyProgressChart } from './StudyProgressChart';
+import StudyPracticeModal from './StudyPracticeModal';
+import { useAuth } from '../../contexts/AuthContext';
 
 interface StudyAnalyticsModalProps {
   isOpen: boolean;
@@ -42,11 +44,98 @@ export const StudyAnalyticsModal: React.FC<StudyAnalyticsModalProps> = ({
   onLoadAnalytics,
   onRegenerateAnalytics
 }) => {
+  const { user } = useAuth();
   const [loading, setLoading] = useState(false);
   const [activeTab, setActiveTab] = useState<'overview' | 'topics' | 'trends' | 'recommendations' | 'notes'>('overview');
   const hasAutoRegeneratedRef = useRef(false);
   const [autoRegenerateFailed, setAutoRegenerateFailed] = useState(false);
   const [mindMapFullscreen, setMindMapFullscreen] = useState(false);
+  const [practiceOpen, setPracticeOpen] = useState(false);
+  const [practiceInitialScope, setPracticeInitialScope] = useState<Partial<StudyScope> | null>(null);
+
+  const inferDifficultyFromClass = (className?: string | null): StudyScope['difficulty'] => {
+    const s = String(className || '').trim();
+    const direct = s.match(/小[一二三四五六]/)?.[0] as StudyScope['difficulty'] | undefined;
+    if (direct) return direct;
+    const digit = s.match(/[1-6]/)?.[0];
+    switch (digit) {
+      case '1': return '小一';
+      case '2': return '小二';
+      case '3': return '小三';
+      case '4': return '小四';
+      case '5': return '小五';
+      case '6': return '小六';
+      default: return '小三';
+    }
+  };
+
+  const getWeaknessTopics = (data: StudyAnalytics | null): string[] => {
+    if (!data) return [];
+    const topicsFromInsights = Array.isArray(data.insights?.weaknesses)
+      ? data.insights!.weaknesses!.map((w: any) => String(w?.topic || '').trim()).filter(Boolean)
+      : [];
+    const topicsFromList = Array.isArray(data.weaknesses)
+      ? data.weaknesses.map((t) => String(t || '').trim()).filter(Boolean)
+      : [];
+    const topicsFromMasteries = Array.isArray(data.topicMasteries)
+      ? data.topicMasteries
+        .filter((m) => m && m.masteryLevel === 'weak')
+        .sort((a, b) => (a.accuracy ?? 0) - (b.accuracy ?? 0))
+        .map((m) => String(m.topic || '').trim())
+        .filter(Boolean)
+      : [];
+    const topicsFromSuggested = Array.isArray(data.suggestedTopics)
+      ? data.suggestedTopics.map((t) => String(t || '').trim()).filter(Boolean)
+      : [];
+
+    const merged = [...topicsFromInsights, ...topicsFromList, ...topicsFromMasteries, ...topicsFromSuggested];
+    const seen = new Set<string>();
+    const deduped: string[] = [];
+    for (const t of merged) {
+      const key = t.trim();
+      if (!key || seen.has(key)) continue;
+      seen.add(key);
+      deduped.push(key);
+    }
+    return deduped;
+  };
+
+  const buildWeaknessPracticeContent = (topics: string[]) => {
+    const maxTopics = 12;
+    const maxTopicLen = 140;
+    const header = '我需要加強以下知識點，請集中出題練習（每題4選1，題目要貼近知識點，並提供詳盡解釋）：';
+    const lines = topics
+      .slice(0, maxTopics)
+      .map((t) => {
+        const s = String(t || '').trim();
+        if (!s) return '';
+        return `- ${s.length > maxTopicLen ? `${s.slice(0, maxTopicLen)}…` : s}`;
+      })
+      .filter(Boolean);
+    const content = [header, ...lines].join('\n').trim();
+    return content.length > 1900 ? `${content.slice(0, 1900)}…` : content;
+  };
+
+  const canExportToSelfStudy = Boolean(
+    user?.role === 'student' &&
+    analytics?.studentId &&
+    String(user?.id || '') &&
+    String(analytics.studentId) === String(user.id)
+  );
+
+  const handleExportWeaknessesToSelfStudy = () => {
+    const topics = getWeaknessTopics(analytics);
+    if (!topics.length) return;
+    const customContent = buildWeaknessPracticeContent(topics);
+    setPracticeInitialScope({
+      contentSource: 'custom',
+      customContent,
+      difficulty: inferDifficultyFromClass((user as any)?.profile?.class),
+      questionCount: 10,
+      topics: []
+    });
+    setPracticeOpen(true);
+  };
 
   const handleLoadAnalytics = async () => {
     if (!onLoadAnalytics) return;
@@ -80,6 +169,8 @@ export const StudyAnalyticsModal: React.FC<StudyAnalyticsModalProps> = ({
       hasAutoRegeneratedRef.current = false;
       setAutoRegenerateFailed(false);
       setMindMapFullscreen(false);
+      setPracticeOpen(false);
+      setPracticeInitialScope(null);
       return;
     }
     if (analytics) return;
@@ -330,7 +421,7 @@ export const StudyAnalyticsModal: React.FC<StudyAnalyticsModalProps> = ({
       ) : null}
 
       {/* 優勢與弱項 */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+	      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         {/* 優勢知識點 */}
         <div className="bg-green-50 rounded-2xl p-6 border-2 border-green-200">
           <div className="flex items-center gap-2 mb-4">
@@ -364,14 +455,28 @@ export const StudyAnalyticsModal: React.FC<StudyAnalyticsModalProps> = ({
           )}
         </div>
 
-        {/* 待加強知識點 */}
-        <div className="bg-red-50 rounded-2xl p-6 border-2 border-red-200">
-          <div className="flex items-center gap-2 mb-4">
-            <AlertCircle className="w-6 h-6 text-red-600" />
-            <h3 className="text-lg font-bold text-red-800">待加強知識點</h3>
-          </div>
-          {(analytics?.insights?.weaknesses?.length || analytics?.weaknesses.length) ? (
-            <div className="space-y-2">
+	        {/* 待加強知識點 */}
+	        <div className="bg-red-50 rounded-2xl p-6 border-2 border-red-200">
+	          <div className="flex items-center justify-between gap-3 mb-4">
+	            <div className="flex items-center gap-2">
+	              <AlertCircle className="w-6 h-6 text-red-600" />
+	              <h3 className="text-lg font-bold text-red-800">待加強知識點</h3>
+	            </div>
+	            {canExportToSelfStudy ? (
+	              <button
+	                type="button"
+	                onClick={handleExportWeaknessesToSelfStudy}
+	                className="px-3 py-1.5 rounded-xl bg-white border-2 border-red-300 text-red-700 font-black text-sm hover:bg-red-100 shadow-comic active:translate-y-0.5 active:shadow-none inline-flex items-center gap-2"
+	                disabled={getWeaknessTopics(analytics).length === 0}
+	                title="把需加強的知識點帶到自學天地，立即生成練習"
+	              >
+	                <BookOpen className="w-4 h-4" />
+	                去練習
+	              </button>
+	            ) : null}
+	          </div>
+	          {(analytics?.insights?.weaknesses?.length || analytics?.weaknesses.length) ? (
+	            <div className="space-y-2">
               {(analytics?.insights?.weaknesses?.length
                 ? analytics.insights.weaknesses
                 : analytics?.weaknesses?.slice(0, 5).map((t) => ({ topic: t, accuracy: null, totalQuestions: null, weakQuestions: [] }))
@@ -403,9 +508,9 @@ export const StudyAnalyticsModal: React.FC<StudyAnalyticsModalProps> = ({
             </div>
           ) : (
             <p className="text-red-600">表現良好，無明顯弱項</p>
-          )}
-        </div>
-      </div>
+	          )}
+	        </div>
+	      </div>
 
       {analytics?.insights?.polarizedTopics?.length ? (
         <div className="bg-white rounded-2xl p-5 border-2 border-gray-200">
@@ -1021,6 +1126,14 @@ export const StudyAnalyticsModal: React.FC<StudyAnalyticsModalProps> = ({
           </div>
         )}
       </div>
+      <StudyPracticeModal
+        open={practiceOpen}
+        initialScope={practiceInitialScope || undefined}
+        onClose={() => {
+          setPracticeOpen(false);
+          setPracticeInitialScope(null);
+        }}
+      />
     </div>,
     document.body
   );
