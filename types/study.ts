@@ -75,6 +75,11 @@ export interface TopicMastery {
   totalQuestions: number;    // 该知识点总题数
   correctAnswers: number;    // 正确回答数
   accuracy: number;          // 正确率
+  // （可選）以「學生」為單位的統計（例如問答比賽每題一知識點）
+  studentsTotal?: number;
+  studentsCorrect?: number;
+  studentsWrong?: number;
+  wrongRate?: number;
   averageTime: number;       // 平均答题时间
   lastPracticed: string;     // 最后练习时间
   masteryLevel: 'weak' | 'average' | 'strong';  // 掌握程度

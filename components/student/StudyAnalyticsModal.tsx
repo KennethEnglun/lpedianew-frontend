@@ -197,7 +197,15 @@ export const StudyAnalyticsModal: React.FC<StudyAnalyticsModalProps> = ({
     lines.push('四、知識點掌握（詳細）');
     if (Array.isArray(analytics.topicMasteries) && analytics.topicMasteries.length > 0) {
       analytics.topicMasteries.forEach((tm) => {
-        lines.push(`- ${tm.topic}：${percent(tm.accuracy)}（${tm.correctAnswers}/${tm.totalQuestions}）｜掌握：${masteryLabel(tm.masteryLevel)}｜平均用時：${formatUtils.formatDuration(Math.round(tm.averageTime || 0))}`);
+        const wrongRate = typeof (tm as any).wrongRate === 'number' ? Number((tm as any).wrongRate) : null;
+        const studentsTotal = typeof (tm as any).studentsTotal === 'number' ? Number((tm as any).studentsTotal) : null;
+        const studentsCorrect = typeof (tm as any).studentsCorrect === 'number' ? Number((tm as any).studentsCorrect) : null;
+        const studentsWrong = typeof (tm as any).studentsWrong === 'number' ? Number((tm as any).studentsWrong) : null;
+        const studentPart = studentsTotal !== null
+          ? `｜學生：答對/答錯 ${studentsCorrect || 0}/${studentsWrong || 0}（${studentsTotal} 人）`
+          : '';
+        const wrongPart = wrongRate !== null ? `｜錯誤率：${percent(wrongRate)}` : '';
+        lines.push(`- ${tm.topic}：${percent(tm.accuracy)}${wrongPart}（${tm.correctAnswers}/${tm.totalQuestions}）${studentPart}｜掌握：${masteryLabel(tm.masteryLevel)}｜平均用時：${formatUtils.formatDuration(Math.round(tm.averageTime || 0))}`);
       });
     } else {
       lines.push('（暫無）');
@@ -341,7 +349,11 @@ export const StudyAnalyticsModal: React.FC<StudyAnalyticsModalProps> = ({
                   </div>
                   {(typeof row.accuracy === 'number' && typeof row.totalQuestions === 'number') ? (
                     <div className="text-xs text-green-700 font-bold mt-1">
-                      正確率 {formatUtils.formatAccuracy(row.accuracy)} ・ 題數 {row.totalQuestions}
+                      正確率 {formatUtils.formatAccuracy(row.accuracy)}
+                      {typeof row.wrongRate === 'number' ? ` ・ 錯誤率 ${formatUtils.formatAccuracy(row.wrongRate)}` : ''}
+                      {typeof row.studentsTotal === 'number'
+                        ? ` ・ 答對/答錯 ${Number(row.studentsCorrect || 0)}/${Number(row.studentsWrong || 0)}（${row.studentsTotal} 人）`
+                        : ` ・ 題數 ${row.totalQuestions}`}
                     </div>
                   ) : null}
                 </div>
@@ -370,7 +382,11 @@ export const StudyAnalyticsModal: React.FC<StudyAnalyticsModalProps> = ({
                   </div>
                   {(typeof row.accuracy === 'number' && typeof row.totalQuestions === 'number') ? (
                     <div className="text-xs text-red-700 font-bold mt-1">
-                      正確率 {formatUtils.formatAccuracy(row.accuracy)} ・ 題數 {row.totalQuestions}
+                      正確率 {formatUtils.formatAccuracy(row.accuracy)}
+                      {typeof row.wrongRate === 'number' ? ` ・ 錯誤率 ${formatUtils.formatAccuracy(row.wrongRate)}` : ''}
+                      {typeof row.studentsTotal === 'number'
+                        ? ` ・ 答對/答錯 ${Number(row.studentsCorrect || 0)}/${Number(row.studentsWrong || 0)}（${row.studentsTotal} 人）`
+                        : ` ・ 題數 ${row.totalQuestions}`}
                     </div>
                   ) : null}
                   {Array.isArray(row.weakQuestions) && row.weakQuestions.length > 0 ? (
@@ -434,6 +450,14 @@ export const StudyAnalyticsModal: React.FC<StudyAnalyticsModalProps> = ({
               <div>
                 <div className="text-gray-500">正確率</div>
                 <div className="font-bold text-brand-brown">{formatUtils.formatAccuracy(mastery.accuracy)}</div>
+                {typeof (mastery as any).wrongRate === 'number' ? (
+                  <div className="text-xs font-bold text-gray-600">錯誤率 {formatUtils.formatAccuracy(Number((mastery as any).wrongRate || 0))}</div>
+                ) : null}
+                {typeof (mastery as any).studentsTotal === 'number' ? (
+                  <div className="text-xs font-bold text-gray-600">
+                    答對/答錯 {Number((mastery as any).studentsCorrect || 0)}/{Number((mastery as any).studentsWrong || 0)}（{Number((mastery as any).studentsTotal || 0)} 人）
+                  </div>
+                ) : null}
               </div>
               <div>
                 <div className="text-gray-500">平均用時</div>
